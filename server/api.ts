@@ -1,0 +1,1148 @@
+import * as yup from 'yup';
+import { sendNotificationEmail } from './email.js';
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { getDb } from "./db.js";
+
+const router = Router();
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET environment variable is missing and is required in production.");
+} else if (!process.env.JWT_SECRET) {
+  console.warn("WARNING: JWT_SECRET environment variable is missing. Using dynamic fallback secret. Existing tokens will be invalidated on server restart.");
+}
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+
+const getAuthUser = (req: any) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      return jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+
+export const requireAuth = (req: any, res: any, next: any) => {
+  const user = getAuthUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  req.user = user;
+  next();
+};
+
+const handleFormApprovalEffect = (fId: string, data: any) => {
+  // Sync F-INV-RM-001 or MAT to materials table
+  if (
+    (fId === "F-INV-RM-001" || fId === "F-INV-MAT") &&
+    data
+  ) {
+    getDb().run(
+      `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(code) DO UPDATE SET
+         name = excluded.name,
+         name_en = excluded.name_en,
+         category = excluded.category,
+         description = excluded.description,
+         unit = excluded.unit,
+         warehouse_id = excluded.warehouse_id`,
+      [
+        data.code,
+        data.name,
+        data.name_en || null,
+        data.category || "مادة خام",
+        data.description || "",
+        data.unit,
+        data.warehouse_id || null,
+        data.balance || 0,
+      ],
+    );
+  }
+
+  // Sync F-INV-WH to warehouses table
+  if (fId === "F-INV-WH" && data) {
+    getDb().run(
+      `INSERT INTO warehouses (code, name, type, parent_id, description) VALUES (?, ?, ?, ?, ?)`,
+      [
+        data.code,
+        data.name,
+        data.type,
+        data.parent_id || null,
+        data.description || "",
+      ],
+    );
+  }
+
+  // 1. PIN (Purchase Invoice) - Add to balance
+  console.log("Processing form approval", fId, JSON.stringify(data).substring(0,100));
+  if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
+    data.items.forEach((item: any) => {
+      if (item.materialCode && item.quantity) {
+        getDb().run(
+          `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+          [parseFloat(item.quantity) || 0, item.materialCode]
+        );
+      }
+    });
+  }
+
+  // 2. RMT (Material Receive/Issue) - Add or Subtract
+  if (fId === "F-INV-RMT-001" && Array.isArray(data.items)) {
+    const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
+    data.items.forEach((item: any) => {
+      if (item.materialCode && item.quantity) {
+        getDb().run(
+          `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+          [(parseFloat(item.quantity) || 0) * qtyMultiplier, item.materialCode]
+        );
+      }
+    });
+  }
+
+  // 3. F-FP-002 (Finished Product Storage) - Add to balance
+  if (fId === "F-FP-002" && data.batchNumber && data.quantityStored) {
+    const qty = parseFloat(data.quantityStored) || 0;
+    if (qty > 0) {
+      getDb().all(
+        "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
+        [],
+        (err, prdRows: any[]) => {
+          if (!err && prdRows) {
+            for (const prdRow of prdRows) {
+              try {
+                const prdData = JSON.parse(prdRow.data_json || "{}");
+                if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
+                  getDb().run(
+                    `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+                    [qty, prdData.itemNumber]
+                  );
+                  break;
+                }
+              } catch (e) {
+                // ignore json parse error
+              }
+            }
+          }
+        }
+      );
+    }
+  }
+
+  // Sync F-HR-002 to employees table
+  if (fId === "F-HR-002") {
+    getDb().run(
+      `INSERT OR REPLACE INTO employees (employee_number, full_name_ar, full_name_en, department, job_title, join_date, status) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        data.employeeNumber,
+        data.fullNameAr,
+        data.fullNameEn,
+        data.department,
+        data.jobTitle,
+        data.joinDate,
+        "active",
+      ],
+    );
+  }
+};
+
+// Login
+router.post("/login", (req, res) => {
+  const { userId, password } = req.body;
+  if (!userId || !password) {
+    return res.status(400).json({ error: "User ID and password are required" });
+  }
+
+  getDb().get(
+    "SELECT * FROM users WHERE user_id = ?",
+    [userId],
+    async (err, user: any) => {
+      if (err) {
+        return res.status(500).json({ error: "Database error" });
+      }
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const isValid = await bcrypt.compare(password, user.password_hash);
+      if (!isValid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      const token = jwt.sign(
+        { 
+          id: user.id, 
+          level: user.level, 
+          department: user.department,
+          permissions: user.permissions ? JSON.parse(user.permissions) : {}
+        },
+        JWT_SECRET,
+        { expiresIn: "24h" },
+      );
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          userId: user.user_id,
+          name: user.name,
+          level: user.level,
+          department: user.department,
+          permissions: user.permissions ? JSON.parse(user.permissions) : {}
+        },
+      });
+    },
+  );
+});
+
+// App Info
+router.get("/company", (req, res) => {
+  getDb().get(
+    "SELECT * FROM company_info ORDER BY id DESC LIMIT 1",
+    [],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(row || {});
+    },
+  );
+});
+
+// System Admin: Manage Users
+router.get("/audit", requireAuth, (req, res) => {
+  getDb().all(
+    "SELECT * FROM audit_log ORDER BY id DESC LIMIT 500",
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+router.get("/users", requireAuth, (req, res) => {
+  getDb().all(
+    "SELECT id, user_id, name, department, level, status, permissions FROM users ORDER BY level ASC",
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+router.post("/users", requireAuth, async (req, res) => {
+  const { userId, name, department, level, password, permissions } = req.body;
+  try {
+    const hash = await bcrypt.hash(password || "123456", 10);
+    const perms = permissions ? JSON.stringify(permissions) : '{}';
+    getDb().run(
+      "INSERT INTO users (user_id, name, department, level, password_hash, status, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [userId, name, department, level, hash, "active", perms],
+      function (err) {
+        if (err)
+          return res.status(500).json({ error: "Failed to create user" });
+        res.status(201).json({ id: this.lastID });
+      },
+    );
+  } catch (err) {
+    res.status(500).json({ error: "Failed to hash password" });
+  }
+});
+
+router.put("/users/:id", requireAuth, async (req, res) => {
+  const { name, department, level, password, permissions } = req.body;
+  const perms = permissions ? JSON.stringify(permissions) : null;
+  if (password) {
+    const hash = await bcrypt.hash(password, 10);
+    getDb().run(
+      "UPDATE users SET name=?, department=?, level=?, password_hash=?, permissions=COALESCE(?, permissions) WHERE id=?",
+      [name, department, level, hash, perms, req.params.id],
+      (err) => {
+        if (err) return res.status(500).json({ error: "Update failed" });
+        res.json({ success: true });
+      },
+    );
+  } else {
+    getDb().run(
+      "UPDATE users SET name=?, department=?, level=?, permissions=COALESCE(?, permissions) WHERE id=?",
+      [name, department, level, perms, req.params.id],
+      (err) => {
+        if (err) return res.status(500).json({ error: "Update failed" });
+        res.json({ success: true });
+      },
+    );
+  }
+});
+
+router.delete("/users/:id", requireAuth, (req, res) => {
+  getDb().run("DELETE FROM users WHERE id=?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: "Delete failed" });
+    res.json({ success: true });
+  });
+});
+
+// HR: Get Employees
+router.get("/employees", requireAuth, (req, res) => {
+  getDb().all("SELECT * FROM employees ORDER BY id DESC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(rows || []);
+  });
+});
+
+// INV: Get Warehouses
+router.get("/warehouses", requireAuth, (req, res) => {
+  getDb().all("SELECT * FROM warehouses ORDER BY code ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(rows || []);
+  });
+});
+
+// INV: Create Warehouse
+router.post("/warehouses", requireAuth, (req, res) => {
+  const { code, name, type, parent_id, description } = req.body;
+  getDb().run(
+    `INSERT INTO warehouses (code, name, type, parent_id, description) VALUES (?, ?, ?, ?, ?)`,
+    [code, name, type, parent_id, description],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id: this.lastID });
+    },
+  );
+});
+
+// INV: Update Warehouse
+router.put("/warehouses/:id", requireAuth, (req, res) => {
+  const { code, name, type, parent_id, description } = req.body;
+  getDb().run(
+    `UPDATE warehouses SET code=?, name=?, type=?, parent_id=?, description=? WHERE id=?`,
+    [code, name, type, parent_id, description, req.params.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    },
+  );
+});
+
+// INV: Delete Warehouse
+router.delete("/warehouses/:id", requireAuth, (req, res) => {
+  getDb().run(
+    `DELETE FROM warehouses WHERE id=?`,
+    [req.params.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    },
+  );
+});
+
+
+const txnSchema = yup.object({
+  transaction_id: yup.string().required(),
+  type: yup.string().oneOf(['RECEIVE', 'ISSUE', 'RETURN']).required(),
+  material_code: yup.string().required(),
+  quantity: yup.number().positive().required()
+});
+// INV: Record Inventory Transaction
+router.post("/inventory/transactions", requireAuth, async (req, res) => {
+  try {
+    await txnSchema.validate(req.body);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const { transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id } = req.body;
+  getDb().run(
+    `INSERT INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      
+      // Update material balance
+      if (type === 'RECEIVE') {
+        getDb().run(`UPDATE materials SET balance = balance + ? WHERE code = ?`, [quantity, material_code]);
+      } else if (type === 'ISSUE') {
+        getDb().run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [quantity, material_code]);
+      }
+      
+      res.json({ success: true, id: this.lastID });
+    },
+  );
+});
+
+// INV: Get Inventory Transactions
+router.get("/inventory/transactions", requireAuth, (req, res) => {
+  getDb().all("SELECT * FROM inventory_transactions ORDER BY created_at DESC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(rows || []);
+  });
+});
+
+// INV: Get Materials
+router.get("/materials", requireAuth, (req, res) => {
+  getDb().all("SELECT * FROM materials ORDER BY code ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(rows || []);
+  });
+});
+
+
+const materialSchema = yup.object({
+  code: yup.string().required(),
+  name: yup.string().required(),
+  category: yup.string().required(),
+  balance: yup.number().min(0)
+});
+// INV: Create Material
+router.post("/materials", requireAuth, async (req, res) => {
+  
+  try {
+    await materialSchema.validate(req.body);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+  const { code, name, name_en, category, description, unit, warehouse_id, balance } =
+    req.body;
+  getDb().run(
+    `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [code, name, name_en, category, description, unit, warehouse_id, balance],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id: this.lastID });
+    },
+  );
+});
+
+// INV: Delete Material
+router.delete("/materials/:id", requireAuth, (req, res) => {
+  getDb().run(
+    `DELETE FROM materials WHERE id=?`,
+    [req.params.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    },
+  );
+});
+
+// INV: Update Material
+router.put("/materials/:id", requireAuth, (req, res) => {
+  const { code, name, name_en, category, description, unit, warehouse_id, balance } = req.body;
+  getDb().run(
+    `UPDATE materials SET code=?, name=?, name_en=?, category=?, description=?, unit=?, warehouse_id=?, balance=? WHERE id=?`,
+    [code, name, name_en, category, description, unit, warehouse_id, balance, req.params.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true });
+    },
+  );
+});
+
+// INV: Search Material by Code
+router.get("/materials/search/:code", requireAuth, (req, res) => {
+  const codeSearch = `%${req.params.code}%`;
+  getDb().all(
+    "SELECT * FROM materials WHERE code LIKE ? OR name LIKE ?",
+    [codeSearch, codeSearch],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+// INV: Get Products (From materials table)
+router.get("/products", (req, res) => {
+  getDb().all(
+    "SELECT * FROM materials WHERE category = 'منتج نهائي' OR category = 'Finished Product' ORDER BY code ASC",
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+// INV: Get Suppliers
+router.get("/suppliers", requireAuth, (req, res) => {
+  getDb().all("SELECT * FROM suppliers ORDER BY code ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(rows || []);
+  });
+});
+
+// INV: Create Supplier
+router.post("/suppliers", requireAuth, (req, res) => {
+  const { code, name, name_en, contact_person, phone, email, address } = req.body;
+  getDb().run(
+    `INSERT INTO suppliers (code, name, name_en, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [code, name, name_en, contact_person, phone, email, address],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id: this.lastID });
+    },
+  );
+});
+
+// INV: Search Supplier
+router.get("/suppliers/search/:code", requireAuth, (req, res) => {
+  const query = `%${req.params.code}%`;
+  getDb().all(
+    "SELECT * FROM suppliers WHERE code LIKE ? OR name LIKE ?",
+    [query, query],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+// INV: Get Customers
+router.get("/customers", requireAuth, (req, res) => {
+  getDb().all("SELECT * FROM customers ORDER BY code ASC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(rows || []);
+  });
+});
+
+// INV: Create Customer
+router.post("/customers", requireAuth, (req, res) => {
+  const { code, name, name_en, contact_person, phone, email, address } = req.body;
+  getDb().run(
+    `INSERT INTO customers (code, name, name_en, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [code, name, name_en, contact_person, phone, email, address],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ success: true, id: this.lastID });
+    },
+  );
+});
+
+// INV: Search Customer
+router.get("/customers/search/:code", requireAuth, (req, res) => {
+  const query = `%${req.params.code}%`;
+  getDb().all(
+    "SELECT * FROM customers WHERE code LIKE ? OR name LIKE ?",
+    [query, query],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+// Get All Forms
+router.get("/forms-test", (req, res) => {
+  res.json({ message: "It works!" });
+});
+
+router.get("/forms", (req, res) => {
+  const user: any = getAuthUser(req);
+  let query = "SELECT * FROM forms_records ORDER BY id DESC";
+  let params: any[] = [];
+
+  if (user && user.level) {
+    if (user.level === 4) {
+      query =
+        "SELECT * FROM forms_records WHERE (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+      params = [user.id];
+    } else if (user.level === 3 || user.level === 2) {
+      if (user.department !== "ALL") {
+        query =
+          "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+        params = [user.department];
+      }
+    }
+  }
+
+  getDb().all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    const mappedRows = rows.map((r: any) => ({
+      ...r,
+      data: JSON.parse(r.data_json || "{}"),
+    }));
+    res.json(mappedRows);
+  });
+});
+
+// Create Form Record
+router.post("/forms", (req, res) => {
+  let { recordId, formId, department, creatorId, status, data } = req.body;
+  const timestamp = new Date().toISOString();
+
+  const user: any = getAuthUser(req);
+  if (user && user.level && user.level >= 2 && user.department !== "ALL") {
+    if (department !== user.department) {
+      return res.status(403).json({ error: "Unauthorized department" });
+    }
+  }
+
+  // Enforce status based on user level
+  if (user && user.level) {
+    if (user.level === 3 && status === "approved") {
+      status = "pending_approval";
+    } else if (
+      user.level >= 4 &&
+      (status === "approved" || status === "pending_approval")
+    ) {
+      status = "pending_review";
+    }
+  }
+
+  getDb().run(
+    `INSERT INTO forms_records (record_id, form_id, department, creator_id, created_at, status, data_json) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      recordId,
+      formId,
+      department,
+      creatorId,
+      timestamp,
+      status,
+      JSON.stringify(data),
+    ],
+    function (err) {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to create record" });
+      }
+      const newRecordId = this.lastID;
+
+      // Add audit log
+      getDb().run(
+        `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          creatorId,
+          "CREATE",
+          formId,
+          recordId,
+          timestamp,
+          "Created new form record",
+        ],
+      );
+
+      if (status === "approved") {
+        handleFormApprovalEffect(formId, data);
+      }
+
+      res.status(201).json({ id: newRecordId, recordId });
+    },
+  );
+});
+
+// Update Form Record
+router.put("/forms/record/:recordId", (req, res) => {
+  const { recordId } = req.params;
+  let { status, data, userId, notes } = req.body;
+  const timestamp = new Date().toISOString();
+
+  const user: any = getAuthUser(req);
+  // Enforce status based on user level
+  if (user && user.level) {
+    if (user.level === 3 && status === "approved") {
+      status = "pending_approval";
+    } else if (
+      user.level >= 4 &&
+      (status === "approved" || status === "pending_approval")
+    ) {
+      status = "pending_review";
+    }
+  }
+
+  // First let's get existing to avoid wiping
+  getDb().get(
+    "SELECT * FROM forms_records WHERE record_id = ?",
+    [recordId],
+    (err, row: any) => {
+      if (err || !row)
+        return res.status(404).json({ error: "Record not found" });
+
+      if (user && user.level) {
+        if (user.level === 4) {
+          if (row.creator_id !== user.id) {
+             return res.status(403).json({ error: "Only the creator can edit this form" });
+          }
+          if (row.status === "approved" || row.status === "rejected") {
+             return res.status(403).json({ error: "Cannot edit an approved or rejected form" });
+          }
+        } else if (user.level === 2 || user.level === 3) {
+          if (row.department !== user.department && user.department !== "ALL") {
+             return res.status(403).json({ error: "Unauthorized department" });
+          }
+          if (row.status === "approved" || row.status === "rejected") {
+             return res.status(403).json({ error: "Cannot edit an approved or rejected form" });
+          }
+        }
+      }
+
+      let finalDataJson = row.data_json;
+      if (data !== undefined) {
+        finalDataJson = JSON.stringify(data);
+      }
+
+      getDb().run(
+        `UPDATE forms_records SET status = ?, data_json = ? WHERE record_id = ?`,
+        [status, finalDataJson, recordId],
+        function (errUpdate) {
+          if (errUpdate) {
+            console.error(errUpdate);
+            return res.status(500).json({ error: "Failed to update record" });
+          }
+
+          // Add audit log
+          const fId = row.form_id || req.body.formId || (data ? data.formId : "") || "";
+          let details = `Updated form record status to ${status}`;
+          if (notes) details += ` | Notes: ${notes}`;
+
+          getDb().run(
+            `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, ?, ?, ?, ?, ?)`,
+            [userId || 1, "UPDATE", fId, recordId, timestamp, details],
+          );
+
+          if (status === "approved" || status === "rejected") { sendNotificationEmail("admin@qform.local", "Form Status Update", `Form ${recordId} is now ${status}`); }
+          if (status === "approved" && row.status !== "approved") {
+            handleFormApprovalEffect(fId, JSON.parse(finalDataJson || "{}"));
+          }
+
+          res.json({ success: true, recordId });
+        },
+      );
+    },
+  );
+});
+
+// Get Single Form Record
+router.get("/forms/record/:recordId", (req, res) => {
+  const { recordId } = req.params;
+  getDb().get(
+    "SELECT * FROM forms_records WHERE record_id = ?",
+    [recordId],
+    (err, row: any) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json({ ...row, data: JSON.parse(row.data_json || "{}") });
+    },
+  );
+});
+
+// Get Dashboard Notifications
+router.get("/notifications/dashboard", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  getDb().all("SELECT * FROM forms_records ORDER BY id DESC", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    const records = rows.map((r: any) => ({
+      ...r,
+      data: JSON.parse(r.data_json || "{}"),
+    }));
+
+    const notifications: { id: string;
+      message: string;
+      type: "info" | "warning" | "success" | "error";
+      link?: string;
+      date: string;
+    }[] = [];
+
+    const formsByFormId = (formId: string, status?: string) => records.filter(r => r.form_id === formId && (!status || r.status === status));
+
+    // Inventory (INV)
+    if (user.department === "INV" || user.department === "ALL" || user.level === 1) {
+      // 1. Purchase Requisitions needing Material Receipt (PIN)
+      const approvedPRQs = formsByFormId("F-INV-PRQ-001", "approved");
+      const pinForms = formsByFormId("F-INV-PIN-001");
+      
+      approvedPRQs.forEach(prq => {
+        const isReceived = pinForms.some(pin => pin.data?.referenceDocument === prq.record_id || pin.data?.poNumber === prq.record_id);
+        if (!isReceived) {
+          notifications.push({
+            id: `prq-missing-pin-${prq.record_id}`,
+            message: `طلب شراء مواد رقم ${prq.record_id} معتمد وبانتظار استلام المواد (فاتورة استلام).`,
+            type: "warning",
+            link: "/inv",
+            date: prq.created_at
+          });
+        }
+      });
+
+      // 2. Finished Product Releases needing Storage in Warehouse (FP-002)
+      const approvedReleases = formsByFormId("F-FP-001", "approved");
+      const fpStored = formsByFormId("F-FP-002");
+      approvedReleases.forEach(rel => {
+        const isStored = fpStored.some(stg => stg.data?.batchNumber === rel.data?.batchNumber || stg.data?.reference === rel.record_id);
+        if (!isStored) {
+          notifications.push({
+            id: `fp-not-stored-${rel.record_id}`,
+            message: `تم الإفراج عن تشغيلة ${rel.data?.batchNumber || ''} بالنموذج ${rel.record_id} بانتظار أمر تخزينه في المستودع.`,
+            type: "info",
+            link: "/inv",
+            date: rel.created_at
+          });
+        }
+      });
+
+      // 3. Production Orders needing Material Issue (RMT)
+      const approvedOrders = formsByFormId("F-PRD-001", "approved");
+      const rmtIssues = formsByFormId("F-INV-RMT-001").filter(r => r.data?.transactionType === "Issue");
+      approvedOrders.forEach(order => {
+        const isIssued = rmtIssues.some(rmt => rmt.data?.referenceDocument === order.record_id);
+        if (!isIssued) {
+          notifications.push({
+            id: `prd-missing-rmt-${order.record_id}`,
+            message: `أمر إنتاج رقم ${order.record_id} معتمد بانتظار صرف المواد الخام والتعبئة الخاصة به من المستودع.`,
+            type: "warning",
+            link: "/inv",
+            date: order.created_at
+          });
+        }
+      });
+
+      // 4. Lab Material Requests (R&D) needing Material Issue (RMT)
+      const labRequests = formsByFormId("F-LAB-007").filter(r => r.status && r.status !== "draft");
+      labRequests.forEach(req => {
+        const isIssued = rmtIssues.some(rmt => rmt.data?.referenceDocument === req.record_id);
+        if (!isIssued) {
+           notifications.push({
+            id: `lab-missing-rmt-${req.record_id}`,
+            message: `المختبر يطلب مواد للبحث العينة/التركيبة رقم ${req.record_id}، يجب إصدار سند صرف للمختبر.`,
+            type: "warning",
+            link: "/inv",
+            date: req.created_at
+           });
+        }
+      });
+      
+      const pendingPINs = formsByFormId("F-INV-PIN-001", "pending");
+      if (pendingPINs.length > 0 && user.level <= 2) {
+        notifications.push({
+          id: `pin-pending`,
+          message: `لديك ${pendingPINs.length} فاتورة شراء (فحص الدخول المعياري) بانتظار المراجعة والاعتماد.`,
+          type: "info",
+          link: "/inv",
+          date: new Date().toISOString()
+        });
+      }
+    }
+
+    // Production (PRD)
+    if (user.department === "PRD" || user.department === "ALL" || user.level === 1) {
+      const approvedOrders = formsByFormId("F-PRD-001", "approved");
+      const completedBMRs = formsByFormId("F-PRD-002");
+      approvedOrders.forEach(order => {
+         const hasBmr = completedBMRs.some(bmr => bmr.data?.productionOrderId === order.record_id || bmr.data?.reference === order.record_id);
+         if (!hasBmr) {
+            notifications.push({
+              id: `prd-order-pending-${order.record_id}`,
+              message: `أمر إنتاج رقم ${order.record_id} معتمد ولم يتم فتح سجل التشغيلة الخاص به.`,
+              type: "warning",
+              link: "/prd",
+              date: order.created_at
+            });
+         }
+      });
+      
+      const pendingOrders = formsByFormId("F-PRD-001", "pending");
+      if (pendingOrders.length > 0 && user.level <= 2) {
+         notifications.push({
+           id: `prd-orders-pending`,
+           message: `تنبيه للإدارة: يوجد ${pendingOrders.length} أوامر إنتاج بانتظار الاعتماد.`,
+           type: "info",
+           link: "/prd",
+           date: new Date().toISOString()
+         });
+      }
+    }
+
+    // Quality (QM)
+    if (user.department === "QM" || user.department === "ALL" || user.level === 1) {
+      const submittedBMRs = [...formsByFormId("F-PRD-002", "pending"), ...formsByFormId("F-PRD-002", "submitted")];
+      if (submittedBMRs.length > 0) {
+        notifications.push({
+          id: `qm-bmrs`,
+          message: `يوجد ${submittedBMRs.length} سجلات تصنيع وتشغيل (BMR) جاهزة بانتظار المراجعة من قسم الجودة.`,
+          type: "warning",
+          link: "/qm",
+          date: new Date().toISOString()
+        });
+      }
+
+      // Complaints, Deviations, NCRs needing CAPA
+      const issues = [
+        ...formsByFormId("F-CMP-001"),
+        ...formsByFormId("F-DEV-001"),
+        ...formsByFormId("F-QM-005"),
+      ];
+      const capaForms = formsByFormId("F-QM-006");
+      
+      issues.forEach(issue => {
+        // Find if a CAPA references this issue
+        const hasCapa = capaForms.some(capa => capa.data?.referenceDocument === issue.record_id || capa.data?.sourceDocument === issue.record_id || capa.data?.sourceDocumentNo === issue.record_id);
+        if (!hasCapa && issue.status !== "draft") {
+          notifications.push({
+            id: `qm-missing-capa-${issue.record_id}`,
+            message: `سجل (${issue.record_id}) يحتاج إلى فتح نموذج إجراء تصحيحي ووقائي (CAPA).`,
+            type: "error",
+            link: "/qm",
+            date: issue.created_at
+          });
+        }
+      });
+    }
+
+    // Laboratory (LAB)
+    if (user.department === "LAB" || user.department === "ALL" || user.level === 1) {
+       const incomingMaterials = formsByFormId("F-INV-PIN-001", "approved");
+       const analysisForms = formsByFormId("F-LAB-001");
+
+       incomingMaterials.forEach(pin => {
+         const hasAnalysis = analysisForms.some(lab => lab.data?.referenceDocument === pin.record_id || lab.data?.invoiceNo === pin.record_id);
+         if (!hasAnalysis) {
+            notifications.push({
+              id: `lab-pin-${pin.record_id}`,
+              message: `مواد مدخلة جديد على الفاتورة ${pin.record_id} بانتظار إنشاء نموذج سحب عينات وفحص مخبري.`,
+              type: "info",
+              link: "/lab",
+              date: pin.created_at
+            });
+         }
+       });
+    }
+
+    // Training (TRN)
+    if (user.department === "TRN" || user.department === "ALL" || user.level === 1) {
+       const newEmployees = formsByFormId("F-HR-002").filter(r => r.status === "approved");
+       const trainingPlans = formsByFormId("F-TRN-002");
+       
+       newEmployees.forEach(emp => {
+         // Check if a training plan exists for this employee 
+         // Assuming the employee name or ID is linked. We'll use referenceDocument or employee ID
+         const hasPlan = trainingPlans.some(plan => 
+           plan.data?.employeeId === emp.record_id || 
+           plan.data?.employeeName === emp.data?.employeeName ||
+           plan.data?.referenceDocument === emp.record_id
+         );
+         if (!hasPlan) {
+            notifications.push({
+              id: `trn-missing-plan-${emp.record_id}`,
+              message: `الموظف الجديد (${emp.data?.fullNameAr || emp.record_id}) يحتاج إلى خطة تدريب وإدراج في السجلات.`,
+              type: "info",
+              link: "/trn",
+              date: emp.created_at
+            });
+         }
+       });
+    }
+
+    // Any department: their own drafts
+    const myDrafts = records.filter(r => r.status === "draft" && r.creator_id === user.id);
+    const getDeptLink = (dept: string) => {
+      if (dept === "ALL") return "/";
+      if (dept === "QA" || dept === "QC" || dept === "ENG") return "/qm";
+      if (dept === "R&D") return "/lab";
+      return `/${dept.toLowerCase()}`;
+    };
+
+    if (myDrafts.length > 0) {
+      notifications.push({
+          id: `my-drafts`,
+          message: `لديك ${myDrafts.length} مسودات غير مكتملة خاصة بك. يرجى إكمالها للمحافظة على سير العمل.`,
+          type: "info",
+          link: getDeptLink(user.department),
+          date: new Date().toISOString()
+      });
+    }
+
+    notifications.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    res.json(notifications);
+  });
+});
+
+// Get Forms by Department
+router.get("/forms/dept/:department", (req, res) => {
+  const { department } = req.params;
+  const user: any = getAuthUser(req);
+
+  let query =
+    "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+  let params: any[] = [department];
+
+  if (user && user.level) {
+    if (user.level === 4) {
+      query =
+        "SELECT * FROM forms_records WHERE department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+      params = [department, user.id];
+    } else if (user.level === 3 || user.level === 2) {
+      // Can see all in department, but only if they are in this department
+      if (user.department !== "ALL" && user.department !== department) {
+        return res.json([]); // Empty if unauthorized
+      }
+    }
+  }
+
+  getDb().all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    const mappedRows = rows.map((r: any) => ({
+      ...r,
+      data: JSON.parse(r.data_json || "{}"),
+    }));
+    res.json(mappedRows);
+  });
+});
+
+// Backward compatibility or catch all
+router.get("/forms/:department", (req, res) => {
+  const { department } = req.params;
+  const user: any = getAuthUser(req);
+
+  let query =
+    "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+  let params: any[] = [department];
+
+  if (user && user.level) {
+    if (user.level === 4) {
+      query =
+        "SELECT * FROM forms_records WHERE department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+      params = [department, user.id];
+    } else if (user.level === 3 || user.level === 2) {
+      if (user.department !== "ALL" && user.department !== department) {
+        return res.json([]);
+      }
+    }
+  }
+
+  getDb().all(query, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+
+    const mappedRows = rows.map((r: any) => ({
+      ...r,
+      data: JSON.parse(r.data_json || "{}"),
+    }));
+    res.json(mappedRows);
+  });
+});
+
+// Dashboard Stats (General Manager / Quick View)
+router.get("/stats", (req, res) => {
+  getDb().all(
+    `SELECT department, COUNT(*) as count, 
+            SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) as approved_count 
+            FROM forms_records GROUP BY department`,
+    [],
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows || []);
+    },
+  );
+});
+
+// -- REPORTS ENDPOINTS --
+const hasReportAccess = (user: any, dept: string, reportId: string) => {
+  if (!user) return false;
+  if (Number(user.level) === 1 || user.department === "ALL") return true;
+  if (user.permissions && user.permissions[reportId]) return true;
+  if (user.department === dept && (!user.permissions || Object.keys(user.permissions).length === 0)) return true;
+  return false;
+};
+
+router.get("/reports/inv/transactions", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!hasReportAccess(user, "INV", "REP-INV-TRN")) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE department = 'INV' AND status = 'approved' AND form_id IN ('F-INV-RM-001', 'F-INV-PIN-001', 'F-INV-RMT-001', 'F-FP-002', 'F-FP-003', 'F-FP-004', 'F-FP-005') ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+router.get("/reports/inv/supplier-evaluations", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!hasReportAccess(user, "INV", "REP-INV-SUP")) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE form_id = 'F-QM-003' AND status = 'approved' ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+router.get("/reports/inv/shipments", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!hasReportAccess(user, "INV", "REP-INV-SHP")) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE form_id = 'F-FP-003' AND status = 'approved' ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+router.get("/reports/inv/returns-disposals", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!hasReportAccess(user, "INV", "REP-INV-RET")) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE form_id IN ('F-FP-004', 'F-FP-005') AND status = 'approved' ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+router.get("/reports/prd/all", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!user) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE department = 'PRD' AND status = 'approved' ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+router.get("/reports/qm/all", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!user) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE department = 'QM' AND status = 'approved' ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+router.get("/reports/all", (req, res) => {
+  const user: any = getAuthUser(req);
+  if (!user) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+  const query = `SELECT * FROM forms_records WHERE status = 'approved' ORDER BY created_at DESC`;
+  getDb().all(query, [], (err, rows) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+    res.json(
+      rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
+    );
+  });
+});
+
+export default router;
