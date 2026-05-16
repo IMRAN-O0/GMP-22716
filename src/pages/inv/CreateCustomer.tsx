@@ -1,11 +1,40 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function CreateCustomer() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const [customers, setCustomers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/customers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      .then((r) => r.json())
+      .then((data) => setCustomers(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  }, []);
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف العميل "${name}"؟`)) return;
+    try {
+      const res = await fetch(`/api/customers/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (res.ok) {
+        setCustomers((prev) => prev.filter((c) => c.id !== id));
+        alert("تم حذف العميل بنجاح");
+      } else {
+        const err = await res.json().catch(() => ({ error: "خطأ غير معروف" }));
+        alert("فشل الحذف: " + err.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("حدث خطأ في الاتصال");
+    }
+  };
 
   const [formData, setFormData] = useState({
     code: "",
@@ -60,8 +89,10 @@ export default function CreateCustomer() {
         body: JSON.stringify(formData),
       });
       if (res.ok) {
+        const saved = await res.json();
+        setCustomers((prev) => [...prev, { ...formData, id: saved.id }]);
         alert("تم تسجيل العميل بنجاح");
-        navigate("/inv");
+        setFormData({ code: "", name: "", name_en: "", contact_person: "", phone: "", email: "", address: "" });
       } else {
         const err = await res.json();
         alert("حدث خطأ: " + err.error);
@@ -95,9 +126,7 @@ export default function CreateCustomer() {
               required
               placeholder="مثال: CUS-001"
               value={formData.code}
-              onChange={(e) =>
-                setFormData({ ...formData, code: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 font-mono"
             />
           </div>
@@ -110,23 +139,19 @@ export default function CreateCustomer() {
               required
               placeholder="مثال: شركة العميل الذهبي"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
             />
           </div>
           <div>
-             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
               الاسم باللغة الإنجليزية
             </label>
             <input
               type="text"
               placeholder="Example: Golden Customer Co."
               value={formData.name_en}
-              onChange={(e) =>
-                setFormData({ ...formData, name_en: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 text-left"
               dir="ltr"
             />
@@ -139,38 +164,32 @@ export default function CreateCustomer() {
               type="text"
               placeholder="مثال: أحمد محمد"
               value={formData.contact_person}
-              onChange={(e) =>
-                setFormData({ ...formData, contact_person: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
             />
           </div>
           <div>
-             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
               رقم الهاتف
             </label>
             <input
               type="text"
               placeholder="مثال: +966..."
               value={formData.phone}
-              onChange={(e) =>
-                setFormData({ ...formData, phone: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 text-left"
               dir="ltr"
             />
           </div>
           <div>
-             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
               البريد الإلكتروني
             </label>
             <input
               type="email"
               placeholder="مثال: contact@domain.com"
               value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 text-left"
               dir="ltr"
             />
@@ -182,43 +201,34 @@ export default function CreateCustomer() {
             <textarea
               rows={2}
               value={formData.address}
-              onChange={(e) =>
-                setFormData({ ...formData, address: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
             ></textarea>
           </div>
         </div>
 
-                <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
+        <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
           <button
             type="button"
-            
             onClick={(e) => handleSubmit(e, "draft")}
             className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
           >
             حفظ كمسودة
           </button>
-          
+
           {user?.level <= 2 ? (
             <button
               type="button"
-              
               onClick={(e) => handleSubmit(e, "approved")}
               className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
             >
+              <CheckCircle className="w-4 h-4 ml-2" />
               حفظ واعتماد
             </button>
           ) : (
             <button
               type="button"
-              
-              onClick={(e) =>
-                handleSubmit(
-                  e,
-                  user?.level === 3 ? "pending_approval" : "pending_review"
-                )
-              }
+              onClick={(e) => handleSubmit(e, user?.level === 3 ? "pending_approval" : "pending_review")}
               className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
             >
               إرسال للمراجعة
@@ -228,13 +238,9 @@ export default function CreateCustomer() {
           <div className="flex-1"></div>
           <button
             type="button"
-            
             onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-              } else {
-                navigate("/");
-              }
+              if (window.history.length > 1) navigate(-1);
+              else navigate("/");
             }}
             className="text-slate-500 hover:text-slate-700 font-semibold text-[14px]"
           >
@@ -242,6 +248,46 @@ export default function CreateCustomer() {
           </button>
         </div>
       </form>
+
+      {/* Existing Customers List */}
+      {customers.length > 0 && (
+        <div className="border-t border-slate-200 px-8 py-6">
+          <h3 className="text-[15px] font-bold text-slate-700 mb-3">العملاء المسجلون</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-[13px]">
+                  <th className="p-3 border-b font-semibold">الكود</th>
+                  <th className="p-3 border-b font-semibold">الاسم</th>
+                  <th className="p-3 border-b font-semibold">الهاتف</th>
+                  {user?.level <= 2 && <th className="p-3 border-b font-semibold text-center w-20">حذف</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((c) => (
+                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-3 font-mono text-sky-700 font-bold">{c.code}</td>
+                    <td className="p-3 text-slate-800">{c.name}</td>
+                    <td className="p-3 text-slate-500">{c.phone || "—"}</td>
+                    {user?.level <= 2 && (
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(c.id, c.name)}
+                          className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                          title="حذف العميل"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

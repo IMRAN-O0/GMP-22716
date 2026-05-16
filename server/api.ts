@@ -607,6 +607,14 @@ router.post("/suppliers", requireAuth, (req, res) => {
   );
 });
 
+// INV: Delete Supplier
+router.delete("/suppliers/:id", requireAuth, (req, res) => {
+  getDb().run(`DELETE FROM suppliers WHERE id=?`, [req.params.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
 // INV: Search Supplier
 router.get("/suppliers/search/:code", requireAuth, (req, res) => {
   const query = `%${req.params.code}%`;
@@ -639,6 +647,14 @@ router.post("/customers", requireAuth, (req, res) => {
       res.json({ success: true, id: this.lastID });
     },
   );
+});
+
+// INV: Delete Customer
+router.delete("/customers/:id", requireAuth, (req, res) => {
+  getDb().run(`DELETE FROM customers WHERE id=?`, [req.params.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
 });
 
 // INV: Search Customer

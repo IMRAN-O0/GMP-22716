@@ -499,18 +499,13 @@ export default function FormPRQ001() {
             )}
             <button
               type="button"
-              onClick={(e) => handleSubmit(e, "draft")}
-              disabled={loading}
+              onClick={() => {
+                if (window.history.length > 1) navigate(-1);
+                else navigate("/inv");
+              }}
               className="flex-1 bg-white text-slate-700 font-bold py-3 px-6 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors flex items-center justify-center"
             >
-              {user?.level <= 2 ? (
-                <>
-                  <Save className="w-5 h-5 ml-2" />
-                  حفظ كمسودة
-                </>
-              ) : (
-                "إرسال للمراجعة / الاعتماد"
-              )}
+              إغلاق والعودة
             </button>
           </div>
         </form>
