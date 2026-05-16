@@ -326,6 +326,32 @@ router.get("/company", (req, res) => {
   );
 });
 
+router.put("/company", requireAuth, (req, res) => {
+  const { name_ar, name_en, logo_url, address, phone, email, license_number } = req.body;
+  getDb().get("SELECT id FROM company_info ORDER BY id DESC LIMIT 1", [], (err, row: any) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (row) {
+      getDb().run(
+        "UPDATE company_info SET name_ar=?, name_en=?, logo_url=?, address=?, phone=?, email=?, license_number=? WHERE id=?",
+        [name_ar, name_en, logo_url, address, phone, email, license_number, row.id],
+        function(e) {
+          if (e) return res.status(500).json({ error: e.message });
+          res.json({ success: true });
+        }
+      );
+    } else {
+      getDb().run(
+        "INSERT INTO company_info (name_ar, name_en, logo_url, address, phone, email, license_number) VALUES (?,?,?,?,?,?,?)",
+        [name_ar, name_en, logo_url, address, phone, email, license_number],
+        function(e) {
+          if (e) return res.status(500).json({ error: e.message });
+          res.json({ success: true, id: this.lastID });
+        }
+      );
+    }
+  });
+});
+
 // System Admin: Manage Users
 router.get("/audit", requireAuth, (req, res) => {
   getDb().all(
