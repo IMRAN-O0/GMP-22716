@@ -33,6 +33,7 @@ export default function FormCMP001() {
   }, []);
 
   const [loading, setLoading] = useState(false);
+  const [savedRecordId, setSavedRecordId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     complaintId: generateSerialNumber("CMP", Math.floor(Math.random() * 10000)),
     complaintDate: new Date().toISOString().split("T")[0],
@@ -77,11 +78,14 @@ export default function FormCMP001() {
       });
       if (!res.ok) throw new Error("Submission failed");
       const saved = await res.json();
+      setSavedRecordId(saved.recordId || saved.record_id);
       alert(
         `تم حفظ سجل الشكوى بنجاح (${status === "draft" ? "مسودة" : "معتمد"}): ` +
           saved.record_id,
       );
-      navigate("/qm");
+      if (!formData.capaRequired) {
+        navigate("/qm");
+      }
     } catch (err) {
       console.error(err);
       alert("فشل حفظ النموذج");
@@ -374,6 +378,22 @@ export default function FormCMP001() {
             </div>
           </div>
         </div>
+
+        {savedRecordId && formData.capaRequired && (
+          <div className="p-4 bg-fuchsia-50 border border-fuchsia-200 rounded-xl flex items-center justify-between gap-4">
+            <div>
+              <p className="font-bold text-fuchsia-900">تم حفظ الشكوى بنجاح</p>
+              <p className="text-sm text-fuchsia-700">سيتم إنشاء نموذج CAPA تلقائياً في قسم الجودة. يمكنك أيضاً فتحه الآن وتعبئته يدوياً.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/qm/qm-006?fromCmp=${savedRecordId}`)}
+              className="flex-shrink-0 px-4 py-2 bg-fuchsia-600 text-white rounded-lg font-bold hover:bg-fuchsia-700 text-sm"
+            >
+              فتح نموذج CAPA ←
+            </button>
+          </div>
+        )}
 
                 <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
           <button

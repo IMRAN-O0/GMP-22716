@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, CheckCircle } from "lucide-react";
+import { Save, CheckCircle, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function CreateWarehouse() {
@@ -107,6 +107,26 @@ export default function CreateWarehouse() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف المستودع "${name}"؟`)) return;
+    try {
+      const res = await fetch(`/api/warehouses/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (res.ok) {
+        setWarehouses((prev) => prev.filter((w) => w.id !== id));
+        alert("تم حذف المستودع بنجاح");
+      } else {
+        const err = await res.json().catch(() => ({ error: "خطأ غير معروف" }));
+        alert("فشل الحذف: " + err.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("حدث خطأ في الاتصال");
     }
   };
 
@@ -285,6 +305,46 @@ export default function CreateWarehouse() {
           </button>
         </div>
       </form>
+
+      {/* Existing Warehouses List */}
+      {warehouses.length > 0 && (
+        <div className="mt-6 border-t border-slate-200 pt-6 px-8 pb-8">
+          <h3 className="text-[15px] font-bold text-slate-700 mb-3">المستودعات المسجلة</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-[13px]">
+                  <th className="p-3 border-b font-semibold">الكود</th>
+                  <th className="p-3 border-b font-semibold">الاسم</th>
+                  <th className="p-3 border-b font-semibold">النوع</th>
+                  {user?.level === 1 && <th className="p-3 border-b font-semibold text-center w-20">حذف</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {warehouses.map((w) => (
+                  <tr key={w.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-3 font-mono text-sky-700 font-bold">{w.code}</td>
+                    <td className="p-3 text-slate-800">{w.name}</td>
+                    <td className="p-3 text-slate-500">{w.type === "MAIN" ? "رئيسي" : "فرعي"}</td>
+                    {user?.level === 1 && (
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(w.id, w.name)}
+                          className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                          title="حذف المستودع"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

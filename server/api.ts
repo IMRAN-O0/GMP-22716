@@ -7,6 +7,19 @@ import crypto from "crypto";
 import { getDb } from "./db.js";
 
 const router = Router();
+
+const matchesReference = (formData: any, targetId: string): boolean => {
+  if (!formData || !targetId) return false;
+  return (
+    formData.referenceDocument === targetId ||
+    formData.poNumber === targetId ||
+    formData.reference === targetId ||
+    formData.sourceDocumentNo === targetId ||
+    formData.productionOrderNo === targetId ||
+    formData.productionOrderId === targetId
+  );
+};
+
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET environment variable is missing and is required in production.");
 } else if (!process.env.JWT_SECRET) {
@@ -41,7 +54,7 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     data
   ) {
     getDb().run(
-      `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance) 
+      `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(code) DO UPDATE SET
          name = excluded.name,
@@ -77,33 +90,43 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     );
   }
 
-  // 1. PIN (Purchase Invoice) - Add to balance
+  // 1. PIN (Purchase Invoice) - Add to balance (wrapped in transaction)
   console.log("Processing form approval", fId, JSON.stringify(data).substring(0,100));
   if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
-    data.items.forEach((item: any) => {
-      if (item.materialCode && item.quantity) {
-        getDb().run(
-          `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-          [parseFloat(item.quantity) || 0, item.materialCode]
-        );
-      }
+    const db = getDb();
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+      data.items.forEach((item: any) => {
+        if (item.materialCode && item.quantity) {
+          db.run(
+            `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+            [parseFloat(item.quantity) || 0, item.materialCode]
+          );
+        }
+      });
+      db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
     });
   }
 
-  // 2. RMT (Material Receive/Issue) - Add or Subtract
+  // 2. RMT (Material Receive/Issue) - Add or Subtract (wrapped in transaction)
   if (fId === "F-INV-RMT-001" && Array.isArray(data.items)) {
     const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
-    data.items.forEach((item: any) => {
-      if (item.materialCode && item.quantity) {
-        getDb().run(
-          `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-          [(parseFloat(item.quantity) || 0) * qtyMultiplier, item.materialCode]
-        );
-      }
+    const db = getDb();
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+      data.items.forEach((item: any) => {
+        if (item.materialCode && item.quantity) {
+          db.run(
+            `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+            [(parseFloat(item.quantity) || 0) * qtyMultiplier, item.materialCode]
+          );
+        }
+      });
+      db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
     });
   }
 
-  // 3. F-FP-002 (Finished Product Storage) - Add to balance
+  // 3. F-FP-002 (Finished Product Storage) - Add to balance (wrapped in transaction inside callback)
   if (fId === "F-FP-002" && data.batchNumber && data.quantityStored) {
     const qty = parseFloat(data.quantityStored) || 0;
     if (qty > 0) {
@@ -116,10 +139,15 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
               try {
                 const prdData = JSON.parse(prdRow.data_json || "{}");
                 if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
-                  getDb().run(
-                    `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-                    [qty, prdData.itemNumber]
-                  );
+                  const db = getDb();
+                  db.serialize(() => {
+                    db.run("BEGIN TRANSACTION");
+                    db.run(
+                      `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+                      [qty, prdData.itemNumber]
+                    );
+                    db.run("COMMIT", (commitErr) => { if (commitErr) db.run("ROLLBACK"); });
+                  });
                   break;
                 }
               } catch (e) {
@@ -132,10 +160,98 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     }
   }
 
+  // 4. F-PRD-002 (Batch Manufacturing Record) - Deduct raw materials from inventory
+  if (fId === "F-PRD-002" && data.productionOrderNo) {
+    getDb().get(
+      "SELECT data_json FROM forms_records WHERE record_id = ? AND form_id = 'F-PRD-001'",
+      [data.productionOrderNo],
+      (err, row: any) => {
+        if (err || !row) return;
+        try {
+          const prdData = JSON.parse(row.data_json || "{}");
+          const rawMaterials = prdData.rawMaterials || [];
+          const db = getDb();
+          db.serialize(() => {
+            db.run("BEGIN TRANSACTION");
+            rawMaterials.forEach((mat: any) => {
+              if (mat.materialCode && mat.quantity) {
+                const qty = parseFloat(mat.quantity) || 0;
+                if (qty > 0) {
+                  db.run(
+                    `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`,
+                    [qty, mat.materialCode]
+                  );
+                  const txnId = `PRD-${Date.now()}-${mat.materialCode}`;
+                  db.run(
+                    `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, reference_record_id, status) VALUES (?, 'ISSUE', ?, ?, ?, ?, ?, 'confirmed')`,
+                    [txnId, mat.materialCode, qty, mat.unit || '', data.batchNumber || '', data.productionOrderNo]
+                  );
+                }
+              }
+            });
+            db.run("COMMIT");
+          });
+        } catch (e) {
+          console.error("PRD002 material deduction error:", e);
+        }
+      }
+    );
+  }
+
+  // Auto-create CAPA for DEV-001 when capaRequired is true
+  if (fId === "F-DEV-001" && data.capaRequired === true) {
+    const capaId = `CAPA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const capaData = {
+      capaId,
+      sourceFormId: "F-DEV-001",
+      sourceDocumentNo: data.productionOrderNo || "",
+      referenceDocument: capaId,
+      issueDate: new Date().toISOString().split("T")[0],
+      description: `تصعيد تلقائي من تقرير انحراف: ${data.description || ""}`,
+      rootCause: "",
+      correctiveAction: "",
+      preventiveAction: "",
+      targetDate: "",
+      responsiblePerson: "",
+      status: "Open",
+      autoCreated: true,
+    };
+    getDb().run(
+      `INSERT INTO forms_records (record_id, form_id, department, creator_id, created_at, status, data_json) VALUES (?, 'F-QM-006', 'QM', 1, ?, 'pending_review', ?)`,
+      [capaId, new Date().toISOString(), JSON.stringify(capaData)],
+      (err) => { if (err) console.error("Auto CAPA creation failed:", err); }
+    );
+  }
+
+  // Auto-create CAPA for CMP-001 when capaRequired is true
+  if (fId === "F-CMP-001" && data.capaRequired === true) {
+    const capaId = `CAPA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const capaData = {
+      capaId,
+      sourceFormId: "F-CMP-001",
+      sourceDocumentNo: data.complaintId || "",
+      referenceDocument: capaId,
+      issueDate: new Date().toISOString().split("T")[0],
+      description: `تصعيد تلقائي من شكوى عميل: ${data.complaintDetails || ""}`,
+      rootCause: data.rootCause || "",
+      correctiveAction: data.correctiveAction || "",
+      preventiveAction: "",
+      targetDate: "",
+      responsiblePerson: "",
+      status: "Open",
+      autoCreated: true,
+    };
+    getDb().run(
+      `INSERT INTO forms_records (record_id, form_id, department, creator_id, created_at, status, data_json) VALUES (?, 'F-QM-006', 'QM', 1, ?, 'pending_review', ?)`,
+      [capaId, new Date().toISOString(), JSON.stringify(capaData)],
+      (err) => { if (err) console.error("Auto CAPA creation failed:", err); }
+    );
+  }
+
   // Sync F-HR-002 to employees table
   if (fId === "F-HR-002") {
     getDb().run(
-      `INSERT OR REPLACE INTO employees (employee_number, full_name_ar, full_name_en, department, job_title, join_date, status) 
+      `INSERT OR REPLACE INTO employees (employee_number, full_name_ar, full_name_en, department, job_title, join_date, status)
                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         data.employeeNumber,
@@ -354,22 +470,27 @@ router.post("/inventory/transactions", requireAuth, async (req, res) => {
   }
 
   const { transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id } = req.body;
-  getDb().run(
-    `INSERT INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
-      
-      // Update material balance
-      if (type === 'RECEIVE') {
-        getDb().run(`UPDATE materials SET balance = balance + ? WHERE code = ?`, [quantity, material_code]);
-      } else if (type === 'ISSUE') {
-        getDb().run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [quantity, material_code]);
+  const db = getDb();
+  db.serialize(() => {
+    db.run("BEGIN TRANSACTION");
+    db.run(
+      `INSERT INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, status, reference_record_id],
+    );
+    // Update material balance
+    if (type === 'RECEIVE') {
+      db.run(`UPDATE materials SET balance = balance + ? WHERE code = ?`, [quantity, material_code]);
+    } else if (type === 'ISSUE') {
+      db.run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [quantity, material_code]);
+    }
+    db.run("COMMIT", function (err) {
+      if (err) {
+        db.run("ROLLBACK");
+        return res.status(500).json({ error: err.message });
       }
-      
-      res.json({ success: true, id: this.lastID });
-    },
-  );
+      res.json({ success: true });
+    });
+  });
 });
 
 // INV: Get Inventory Transactions
@@ -486,6 +607,14 @@ router.post("/suppliers", requireAuth, (req, res) => {
   );
 });
 
+// INV: Delete Supplier
+router.delete("/suppliers/:id", requireAuth, (req, res) => {
+  getDb().run(`DELETE FROM suppliers WHERE id=?`, [req.params.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
+});
+
 // INV: Search Supplier
 router.get("/suppliers/search/:code", requireAuth, (req, res) => {
   const query = `%${req.params.code}%`;
@@ -518,6 +647,14 @@ router.post("/customers", requireAuth, (req, res) => {
       res.json({ success: true, id: this.lastID });
     },
   );
+});
+
+// INV: Delete Customer
+router.delete("/customers/:id", requireAuth, (req, res) => {
+  getDb().run(`DELETE FROM customers WHERE id=?`, [req.params.id], function (err) {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json({ success: true });
+  });
 });
 
 // INV: Search Customer
@@ -755,7 +892,7 @@ router.get("/notifications/dashboard", (req, res) => {
       const pinForms = formsByFormId("F-INV-PIN-001");
       
       approvedPRQs.forEach(prq => {
-        const isReceived = pinForms.some(pin => pin.data?.referenceDocument === prq.record_id || pin.data?.poNumber === prq.record_id);
+        const isReceived = pinForms.some(pin => matchesReference(pin.data, prq.record_id));
         if (!isReceived) {
           notifications.push({
             id: `prq-missing-pin-${prq.record_id}`,
@@ -787,7 +924,7 @@ router.get("/notifications/dashboard", (req, res) => {
       const approvedOrders = formsByFormId("F-PRD-001", "approved");
       const rmtIssues = formsByFormId("F-INV-RMT-001").filter(r => r.data?.transactionType === "Issue");
       approvedOrders.forEach(order => {
-        const isIssued = rmtIssues.some(rmt => rmt.data?.referenceDocument === order.record_id);
+        const isIssued = rmtIssues.some(rmt => matchesReference(rmt.data, order.record_id));
         if (!isIssued) {
           notifications.push({
             id: `prd-missing-rmt-${order.record_id}`,
@@ -802,7 +939,7 @@ router.get("/notifications/dashboard", (req, res) => {
       // 4. Lab Material Requests (R&D) needing Material Issue (RMT)
       const labRequests = formsByFormId("F-LAB-007").filter(r => r.status && r.status !== "draft");
       labRequests.forEach(req => {
-        const isIssued = rmtIssues.some(rmt => rmt.data?.referenceDocument === req.record_id);
+        const isIssued = rmtIssues.some(rmt => matchesReference(rmt.data, req.record_id));
         if (!isIssued) {
            notifications.push({
             id: `lab-missing-rmt-${req.record_id}`,
@@ -831,7 +968,7 @@ router.get("/notifications/dashboard", (req, res) => {
       const approvedOrders = formsByFormId("F-PRD-001", "approved");
       const completedBMRs = formsByFormId("F-PRD-002");
       approvedOrders.forEach(order => {
-         const hasBmr = completedBMRs.some(bmr => bmr.data?.productionOrderId === order.record_id || bmr.data?.reference === order.record_id);
+         const hasBmr = completedBMRs.some(bmr => matchesReference(bmr.data, order.record_id));
          if (!hasBmr) {
             notifications.push({
               id: `prd-order-pending-${order.record_id}`,
@@ -878,7 +1015,7 @@ router.get("/notifications/dashboard", (req, res) => {
       
       issues.forEach(issue => {
         // Find if a CAPA references this issue
-        const hasCapa = capaForms.some(capa => capa.data?.referenceDocument === issue.record_id || capa.data?.sourceDocument === issue.record_id || capa.data?.sourceDocumentNo === issue.record_id);
+        const hasCapa = capaForms.some(capa => matchesReference(capa.data, issue.record_id) || capa.data?.sourceDocument === issue.record_id);
         if (!hasCapa && issue.status !== "draft") {
           notifications.push({
             id: `qm-missing-capa-${issue.record_id}`,
@@ -897,7 +1034,7 @@ router.get("/notifications/dashboard", (req, res) => {
        const analysisForms = formsByFormId("F-LAB-001");
 
        incomingMaterials.forEach(pin => {
-         const hasAnalysis = analysisForms.some(lab => lab.data?.referenceDocument === pin.record_id || lab.data?.invoiceNo === pin.record_id);
+         const hasAnalysis = analysisForms.some(lab => matchesReference(lab.data, pin.record_id) || lab.data?.invoiceNo === pin.record_id);
          if (!hasAnalysis) {
             notifications.push({
               id: `lab-pin-${pin.record_id}`,
@@ -918,10 +1055,10 @@ router.get("/notifications/dashboard", (req, res) => {
        newEmployees.forEach(emp => {
          // Check if a training plan exists for this employee 
          // Assuming the employee name or ID is linked. We'll use referenceDocument or employee ID
-         const hasPlan = trainingPlans.some(plan => 
-           plan.data?.employeeId === emp.record_id || 
+         const hasPlan = trainingPlans.some(plan =>
+           plan.data?.employeeId === emp.record_id ||
            plan.data?.employeeName === emp.data?.employeeName ||
-           plan.data?.referenceDocument === emp.record_id
+           matchesReference(plan.data, emp.record_id)
          );
          if (!hasPlan) {
             notifications.push({

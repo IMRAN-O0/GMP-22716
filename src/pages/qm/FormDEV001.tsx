@@ -8,9 +8,13 @@ export default function FormDEV001() {
   const navigate = useNavigate();
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
 
+  const [savedRecordId, setSavedRecordId] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     issueDate: new Date().toISOString().split("T")[0],
     productionOrderNo: "",
+    batchNumber: "",
+    productionStage: "",
     deviationClassification: "Minor", // Minor, Major, Critical
     deviationType: "Process", // Process, Equipment, Material, Documentation, Environment
     description: "",
@@ -31,6 +35,17 @@ export default function FormDEV001() {
         setProductionOrders(orders);
       })
       .catch(console.error);
+
+    // Read URL params for pre-filling from PRD004
+    const params = new URLSearchParams(window.location.search);
+    const fromBatch = params.get('fromBatch');
+    const fromStage = params.get('fromStage');
+    if (fromBatch) {
+      setFormData(prev => ({ ...prev, batchNumber: fromBatch }));
+    }
+    if (fromStage) {
+      setFormData(prev => ({ ...prev, productionStage: fromStage }));
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
@@ -60,10 +75,13 @@ export default function FormDEV001() {
       });
       if (!res.ok) throw new Error("Submission failed");
       const saved = await res.json();
+      setSavedRecordId(saved.recordId || saved.record_id);
       alert(
         "تم حفظ نموذج تقرير الانحراف (F-DEV-001) بنجاح: " + saved.record_id,
       );
-      navigate("/qm");
+      if (!formData.capaRequired) {
+        navigate("/qm");
+      }
     } catch (err) {
       console.error(err);
       alert("فشل حفظ النموذج");
@@ -294,10 +312,26 @@ export default function FormDEV001() {
           </div>
         </div>
 
+        {savedRecordId && formData.capaRequired && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4">
+            <div>
+              <p className="font-bold text-amber-900">تم حفظ تقرير الانحراف بنجاح</p>
+              <p className="text-sm text-amber-700">لقد حددت أن هذا الانحراف يستدعي CAPA — سيتم إنشاؤه تلقائياً في قسم الجودة، أو يمكنك فتح نموذج CAPA الآن وتعبئته يدوياً.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/qm/qm-006?fromDev=${savedRecordId}`)}
+              className="flex-shrink-0 px-4 py-2 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 text-sm"
+            >
+              فتح نموذج CAPA ←
+            </button>
+          </div>
+        )}
+
                 <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
           <button
             type="button"
-            
+
             onClick={(e) => handleSubmit(e, "draft")}
             className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
           >

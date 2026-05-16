@@ -1,85 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function FormQM005() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [materials, setMaterials] = useState<any[]>([]);
-  const [productionOrders, setProductionOrders] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
+    ncrId: `NCR-${Date.now()}`,
     issueDate: new Date().toISOString().split("T")[0],
-    ncrSource: "Production", // Incoming, Production, Customer Complaint
-    materialOrProductCode: "",
-    productionOrderNo: "",
+    department: "Production",
+    productName: "",
     batchNumber: "",
-    quantityAffected: "",
-    descriptionOfNonConformance: "",
-    immediateActionTaken: "",
+    nonConformityType: "Product",
+    severity: "Minor",
+    description: "",
+    immediateAction: "",
+    disposition: "Quarantine",
+    capaRequired: false,
     reportedBy: user?.name || "",
-    investigationRequired: false,
   });
 
   useEffect(() => {
-    // Fetch materials/products for dropdowns
     fetch("/api/materials")
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
 
-    // Fetch PRD forms for linking
-    fetch("/api/forms/dept/PRD")
-      .then((r) => r.json())
-      .then((data) => {
-        const orders = data.filter(
-          (f: any) => f.form_id === "F-PRD-001" && f.status === "approved",
-        );
-        setProductionOrders(orders);
-      })
-      .catch(console.error);
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
-    e.preventDefault();
-    try {
-      const editIdPatch = new URLSearchParams(window.location.search).get(
-        "edit",
-      );
-      const fetchUrl = editIdPatch
-        ? `/api/forms/record/${editIdPatch}`
-        : "/api/forms";
-      const fetchMethod = editIdPatch ? "PUT" : "POST";
-      const res = await fetch(fetchUrl, {
-        method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify({
-          recordId: `QM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          formId: "F-QM-005",
-          department: "QM",
-          creatorId: user?.id,
-          status: status,
-          data: formData,
-        }),
-      });
-      if (!res.ok) throw new Error("Submission failed");
-      const saved = await res.json();
-      alert("تم حفظ نموذج F-QM-005 بنجاح: " + saved.record_id);
-      navigate("/qm");
-    } catch (err) {
-      console.error(err);
-      alert("فشل حفظ النموذج");
-    }
-  };
-
-  // --- INJECTED BY PATCH ---
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const editId = params.get("edit");
+    const editId = new URLSearchParams(window.location.search).get("edit");
     if (editId) {
       fetch(`/api/forms/record/${editId}`)
         .then((r) => r.json())
@@ -91,17 +41,58 @@ export default function FormQM005() {
         .catch(console.error);
     }
   }, []);
-  // -------------------------
+
+  const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
+    e.preventDefault();
+    try {
+      const editIdPatch = new URLSearchParams(window.location.search).get("edit");
+      const fetchUrl = editIdPatch
+        ? `/api/forms/record/${editIdPatch}`
+        : "/api/forms";
+      const fetchMethod = editIdPatch ? "PUT" : "POST";
+      const res = await fetch(fetchUrl, {
+        method: fetchMethod,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({
+          recordId: formData.ncrId,
+          formId: "F-QM-005",
+          department: "QM",
+          creatorId: user?.id,
+          status: status,
+          data: formData,
+        }),
+      });
+      if (!res.ok) throw new Error("Submission failed");
+      const saved = await res.json();
+      alert(
+        `تم حفظ تقرير عدم المطابقة (NCR) بنجاح (${status === "draft" ? "مسودة" : "معتمد"}): ` +
+          saved.record_id,
+      );
+      navigate("/qm");
+    } catch (err) {
+      console.error(err);
+      alert("فشل حفظ النموذج");
+    }
+  };
+
+  const severityColors: Record<string, string> = {
+    Minor: "bg-amber-50 border-amber-200 text-amber-800",
+    Major: "bg-orange-50 border-orange-200 text-orange-800",
+    Critical: "bg-red-50 border-red-200 text-red-800",
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center gap-3 mb-6 bg-white p-4 rounded-xl border border-indigo-200 shadow-sm border-r-4 border-r-indigo-500">
-        <div className="p-3 bg-indigo-50 rounded-lg text-indigo-600">
+      <div className="flex items-center gap-3 mb-6 bg-white p-4 rounded-xl border border-red-200 shadow-sm border-r-4 border-r-red-600">
+        <div className="p-3 bg-red-50 rounded-lg text-red-600">
           <AlertTriangle className="w-8 h-8" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-slate-800">
-            تقرير حالة عدم مطابقة (NCR)
+            تقرير عدم المطابقة (NCR)
           </h1>
           <p className="text-slate-500">
             النموذج: F-QM-005 | قسم الجودة - ISO 22716
@@ -109,25 +100,58 @@ export default function FormQM005() {
         </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
-      >
-        <div className="p-6 space-y-8">
+      <form className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="p-6 space-y-6">
+          {/* Row 1: NCR ID + Issue Date */}
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                تاريخ التقرير
+                رقم NCR (تلقائي)
+              </label>
+              <input
+                type="text"
+                readOnly
+                className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 font-mono text-sm"
+                value={formData.ncrId}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                تاريخ الإصدار <span className="text-red-500">*</span>
               </label>
               <input
                 type="date"
                 required
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
                 value={formData.issueDate}
                 onChange={(e) =>
                   setFormData({ ...formData, issueDate: e.target.value })
                 }
               />
+            </div>
+          </div>
+
+          {/* Row 2: Department + Reported By */}
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                القسم الذي رصد عدم المطابقة <span className="text-red-500">*</span>
+              </label>
+              <select
+                required
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
+                value={formData.department}
+                onChange={(e) =>
+                  setFormData({ ...formData, department: e.target.value })
+                }
+              >
+                <option value="Production">الإنتاج (Production)</option>
+                <option value="Quality">الجودة (QC/QA)</option>
+                <option value="Inventory">المخازن (Inventory)</option>
+                <option value="Maintenance">الصيانة (Maintenance)</option>
+                <option value="Lab">المختبر (Lab)</option>
+                <option value="Customer">عميل (Customer)</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -142,91 +166,36 @@ export default function FormQM005() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+          {/* Row 3: Product Name + Batch Number */}
+          <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                مصدر الجودة المعيبة
-              </label>
-              <select
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg"
-                value={formData.ncrSource}
-                onChange={(e) =>
-                  setFormData({ ...formData, ncrSource: e.target.value })
-                }
-              >
-                <option value="Incoming">
-                  فحص المواد الواردة (Incoming Inspection)
-                </option>
-                <option value="Production">أثناء الإنتاج (In-Process)</option>
-                <option value="Finished">
-                  فحص المنتج النهائي (Finished Product)
-                </option>
-                <option value="Customer Complaint">
-                  شكوى عميل (Customer Complaint)
-                </option>
-                <option value="Internal Audit">
-                  تدقيق داخلي (Internal Audit)
-                </option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                أمر الإنتاج المرتبط (اختياري)
-              </label>
-              <select
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg"
-                value={formData.productionOrderNo}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    productionOrderNo: e.target.value,
-                  })
-                }
-              >
-                <option value="">لا يوجد ارتباط بأمر إنتاج محدد --</option>
-                {productionOrders.map((order) => (
-                  <option
-                    key={order.record_id}
-                    value={order.data.ProductionOrderNo || order.record_id}
-                  >
-                    {order.data.ProductCode || order.data.ProductName} - (
-                    {order.record_id})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                رمز المادة/المنتج
-              </label>
-              <select
-                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg"
-                value={formData.materialOrProductCode}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    materialOrProductCode: e.target.value,
-                  })
-                }
-              >
-                <option value="">اختر المادة...</option>
-                {materials.map((m) => (
-                  <option key={m.code} value={m.code}>
-                    [{m.code}] {m.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                رقم التشغيلة (Batch/Lot No)
+                اسم المنتج / المادة <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-left font-mono"
+                required
+                list="materials-list-qm005"
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
+                placeholder="ابحث باسم أو كود المنتج..."
+                value={formData.productName}
+                onChange={(e) =>
+                  setFormData({ ...formData, productName: e.target.value })
+                }
+              />
+              <datalist id="materials-list-qm005">
+                {materials.map((m) => (
+                  <option key={m.code} value={`${m.code} - ${m.name}`} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                رقم التشغيلة / الدفعة (Batch No.)
+              </label>
+              <input
+                type="text"
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500 font-mono"
                 dir="ltr"
                 placeholder="BAT-..."
                 value={formData.batchNumber}
@@ -235,95 +204,132 @@ export default function FormQM005() {
                 }
               />
             </div>
+          </div>
+
+          {/* Row 4: Non-Conformity Type + Severity */}
+          <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                الكمية المتأثرة (Quantity Affected)
+                نوع عدم المطابقة <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                value={formData.quantityAffected}
+              <select
+                required
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
+                value={formData.nonConformityType}
                 onChange={(e) =>
-                  setFormData({ ...formData, quantityAffected: e.target.value })
+                  setFormData({ ...formData, nonConformityType: e.target.value })
                 }
-              />
+              >
+                <option value="Product">منتج (Product)</option>
+                <option value="Process">عملية (Process)</option>
+                <option value="Material">مادة خام (Material)</option>
+                <option value="Documentation">توثيق (Documentation)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                درجة الخطورة (Severity) <span className="text-red-500">*</span>
+              </label>
+              <select
+                required
+                className={`w-full px-4 py-2 border rounded-lg font-bold focus:ring-2 focus:ring-red-500 ${severityColors[formData.severity] || ""}`}
+                value={formData.severity}
+                onChange={(e) =>
+                  setFormData({ ...formData, severity: e.target.value })
+                }
+              >
+                <option value="Minor">طفيف (Minor)</option>
+                <option value="Major">رئيسي (Major)</option>
+                <option value="Critical">حرج (Critical)</option>
+              </select>
             </div>
           </div>
 
+          {/* Description */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              وصف حالة عدم المطابقة بدقة (Description of Non-Conformance)
+              وصف تفصيلي لعدم المطابقة <span className="text-red-500">*</span>
             </label>
             <textarea
               required
               rows={4}
-              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              placeholder="وصف تفصيلي للمشكلة وكيفية اكتشافها..."
-              value={formData.descriptionOfNonConformance}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
+              placeholder="وصف واضح ومحدد للمشكلة وكيفية اكتشافها..."
+              value={formData.description}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  descriptionOfNonConformance: e.target.value,
-                })
+                setFormData({ ...formData, description: e.target.value })
               }
             />
           </div>
 
+          {/* Immediate Action */}
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              الإجراء الفوري المتخذ (Immediate Action Taken)
+              الإجراء الفوري المتخذ (Immediate Action) <span className="text-red-500">*</span>
             </label>
             <textarea
               required
               rows={3}
-              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
-              placeholder="مثال: تم إيقاف الماكينة أو عزل المواد..."
-              value={formData.immediateActionTaken}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
+              placeholder="مثال: تم عزل الدفعة، إيقاف الإنتاج، إخطار المسؤول..."
+              value={formData.immediateAction}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  immediateActionTaken: e.target.value,
-                })
+                setFormData({ ...formData, immediateAction: e.target.value })
               }
             />
           </div>
 
-          <div className="flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+          {/* Disposition */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">
+              التصرف في المنتج / المادة (Disposition) <span className="text-red-500">*</span>
+            </label>
+            <select
+              required
+              className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500"
+              value={formData.disposition}
+              onChange={(e) =>
+                setFormData({ ...formData, disposition: e.target.value })
+              }
+            >
+              <option value="Use As Is">قبول واستخدام كما هو (Use As Is)</option>
+              <option value="Rework">إعادة معالجة (Rework)</option>
+              <option value="Reject">رفض وإتلاف (Reject)</option>
+              <option value="Quarantine">حجز للمراجعة (Quarantine)</option>
+            </select>
+          </div>
+
+          {/* CAPA Required */}
+          <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-lg">
             <input
               type="checkbox"
-              id="invReq"
-              className="w-5 h-5 text-indigo-600 rounded"
-              checked={formData.investigationRequired}
+              id="capaRequired"
+              className="w-5 h-5 text-orange-600 rounded"
+              checked={formData.capaRequired}
               onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  investigationRequired: e.target.checked,
-                })
+                setFormData({ ...formData, capaRequired: e.target.checked })
               }
             />
             <label
-              htmlFor="invReq"
-              className="font-semibold text-indigo-900 cursor-pointer"
+              htmlFor="capaRequired"
+              className="font-semibold text-orange-900 cursor-pointer"
             >
-              تصعيد الحالة لتتطلب تحقيق رسمي وإجراء CAPA (Corrective Action).
+              يتطلب إجراء CAPA (تصحيحي / وقائي) - Corrective &amp; Preventive Action Required
             </label>
           </div>
         </div>
 
-                <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
+        <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200 p-6">
           <button
             type="button"
-            
             onClick={(e) => handleSubmit(e, "draft")}
             className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
           >
             حفظ كمسودة
           </button>
-          
           {user?.level <= 2 ? (
             <button
               type="button"
-              
               onClick={(e) => handleSubmit(e, "approved")}
               className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
             >
@@ -332,11 +338,10 @@ export default function FormQM005() {
           ) : (
             <button
               type="button"
-              
               onClick={(e) =>
                 handleSubmit(
                   e,
-                  user?.level === 3 ? "pending_approval" : "pending_review"
+                  user?.level === 3 ? "pending_approval" : "pending_review",
                 )
               }
               className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
@@ -344,18 +349,10 @@ export default function FormQM005() {
               إرسال للمراجعة
             </button>
           )}
-
           <div className="flex-1"></div>
           <button
             type="button"
-            
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-              } else {
-                navigate("/");
-              }
-            }}
+            onClick={() => navigate(-1)}
             className="text-slate-500 hover:text-slate-700 font-semibold text-[14px]"
           >
             إغلاق والعودة

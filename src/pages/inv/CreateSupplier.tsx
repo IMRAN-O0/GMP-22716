@@ -1,11 +1,40 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function CreateSupplier() {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/suppliers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      .then((r) => r.json())
+      .then((data) => setSuppliers(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  }, []);
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!window.confirm(`هل أنت متأكد من حذف المورد "${name}"؟`)) return;
+    try {
+      const res = await fetch(`/api/suppliers/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (res.ok) {
+        setSuppliers((prev) => prev.filter((s) => s.id !== id));
+        alert("تم حذف المورد بنجاح");
+      } else {
+        const err = await res.json().catch(() => ({ error: "خطأ غير معروف" }));
+        alert("فشل الحذف: " + err.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("حدث خطأ في الاتصال");
+    }
+  };
 
   const [formData, setFormData] = useState({
     code: "",
@@ -228,7 +257,7 @@ export default function CreateSupplier() {
           <div className="flex-1"></div>
           <button
             type="button"
-            
+
             onClick={() => {
               if (window.history.length > 1) {
                 navigate(-1);
@@ -242,6 +271,46 @@ export default function CreateSupplier() {
           </button>
         </div>
       </form>
+
+      {/* Existing Suppliers List */}
+      {suppliers.length > 0 && (
+        <div className="border-t border-slate-200 px-8 py-6">
+          <h3 className="text-[15px] font-bold text-slate-700 mb-3">الموردون المسجلون</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500 text-[13px]">
+                  <th className="p-3 border-b font-semibold">الكود</th>
+                  <th className="p-3 border-b font-semibold">الاسم</th>
+                  <th className="p-3 border-b font-semibold">الهاتف</th>
+                  {user?.level <= 2 && <th className="p-3 border-b font-semibold text-center w-20">حذف</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {suppliers.map((s) => (
+                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="p-3 font-mono text-sky-700 font-bold">{s.code}</td>
+                    <td className="p-3 text-slate-800">{s.name}</td>
+                    <td className="p-3 text-slate-500">{s.phone || "—"}</td>
+                    {user?.level <= 2 && (
+                      <td className="p-3 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(s.id, s.name)}
+                          className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                          title="حذف المورد"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
