@@ -337,9 +337,14 @@ export default function FormPRD004() {
                               </span>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  alert("النموذج F-DEV-001 قيد التطوير")
-                                }
+                                onClick={() => {
+                                  const params = new URLSearchParams({
+                                    fromBatch: formData.batchNumber,
+                                    fromStage: formData.productionStage,
+                                    fromMonitoring: 'true'
+                                  });
+                                  navigate(`/qm/dev-001?${params.toString()}`);
+                                }}
                                 className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded shadow-sm hover:bg-red-700 transition"
                               >
                                 فتح F-DEV-001

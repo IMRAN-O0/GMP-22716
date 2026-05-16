@@ -11,6 +11,7 @@ export default function FormQM006() {
   const [formData, setFormData] = useState({
     capaDate: new Date().toISOString().split("T")[0],
     sourceDocumentNo: "", // Links to NCR or DEV
+    sourceFormId: "",
     identifyProblem: "",
     rootCauseAnalysisMethod: "5 Why", // 5 Why, Fishbone, RCA
     rootCauseAnalysis: "",
@@ -34,6 +35,17 @@ export default function FormQM006() {
         setNcrAndDevs(sources);
       })
       .catch(console.error);
+
+    // Read URL params for pre-filling from DEV001 or CMP001
+    const params = new URLSearchParams(window.location.search);
+    const fromDev = params.get('fromDev');
+    const fromCmp = params.get('fromCmp');
+    if (fromDev) {
+      setFormData(prev => ({ ...prev, sourceDocumentNo: fromDev, sourceFormId: 'F-DEV-001' }));
+    }
+    if (fromCmp) {
+      setFormData(prev => ({ ...prev, sourceDocumentNo: fromCmp, sourceFormId: 'F-CMP-001' }));
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
