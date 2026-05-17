@@ -701,6 +701,217 @@ router.get("/forms-test", (req, res) => {
   res.json({ message: "It works!" });
 });
 
+// Required fields per form — validated when status is not 'draft'
+const FORM_REQUIRED_FIELDS: Record<string, { field: string; label: string }[]> = {
+  "F-INV-PRQ-001": [
+    { field: "requestDate",   label: "تاريخ الطلب" },
+    { field: "supplierName",  label: "اسم المورد" },
+    { field: "warehouseId",   label: "المستودع المستلم" },
+    { field: "items",         label: "قائمة المواد المطلوبة" },
+  ],
+  "F-INV-PIN-001": [
+    { field: "invoiceDate",   label: "تاريخ الفاتورة" },
+    { field: "supplierName",  label: "اسم المورد" },
+    { field: "items",         label: "المواد المستلمة" },
+  ],
+  "F-INV-RM-001": [
+    { field: "code",          label: "كود المادة" },
+    { field: "name",          label: "اسم المادة" },
+    { field: "batchNumber",   label: "رقم الدفعة" },
+    { field: "expiryDate",    label: "تاريخ الانتهاء" },
+    { field: "unit",          label: "وحدة القياس" },
+  ],
+  "F-INV-RMT-001": [
+    { field: "transactionType", label: "نوع الحركة" },
+    { field: "items",           label: "المواد" },
+  ],
+  "F-INV-BOM": [
+    { field: "productCode",   label: "كود المنتج" },
+    { field: "version",       label: "الإصدار" },
+    { field: "materials",     label: "المواد الخام" },
+  ],
+  "F-FP-001": [
+    { field: "productionOrderNo", label: "رقم أمر الإنتاج" },
+    { field: "qcStatus",          label: "حالة الجودة" },
+    { field: "releaseDate",       label: "تاريخ الإفراج" },
+  ],
+  "F-FP-002": [
+    { field: "batchNumber",       label: "رقم الدفعة" },
+    { field: "quantityStored",    label: "الكمية المخزنة" },
+    { field: "storageDate",       label: "تاريخ التخزين" },
+  ],
+  "F-FP-003": [
+    { field: "customerName",      label: "اسم العميل" },
+    { field: "batchNumber",       label: "رقم الدفعة" },
+    { field: "shippedQuantity",   label: "الكمية المشحونة" },
+    { field: "shipmentDate",      label: "تاريخ الشحن" },
+  ],
+  "F-FP-004": [
+    { field: "customerName",      label: "اسم العميل" },
+    { field: "batchNumber",       label: "رقم الدفعة" },
+    { field: "returnedQuantity",  label: "الكمية المرتجعة" },
+    { field: "returnReason",      label: "سبب الإرجاع" },
+  ],
+  "F-FP-005": [
+    { field: "itemType",          label: "نوع المادة" },
+    { field: "quantity",          label: "الكمية" },
+    { field: "disposalDate",      label: "تاريخ الإتلاف" },
+    { field: "disposalMethod",    label: "طريقة الإتلاف" },
+  ],
+  "F-FP-006": [
+    { field: "batchNumber",       label: "رقم الدفعة" },
+    { field: "productCode",       label: "كود المنتج" },
+    { field: "sampleQuantity",    label: "كمية العينة" },
+    { field: "expiryDate",        label: "تاريخ الانتهاء" },
+  ],
+  "F-PRD-001": [
+    { field: "productName",           label: "اسم المنتج" },
+    { field: "requiredBatchSize",     label: "حجم الدفعة" },
+    { field: "plannedStartDate",      label: "تاريخ البدء المخطط" },
+    { field: "rawMaterials",          label: "المواد الخام" },
+  ],
+  "F-PRD-002": [
+    { field: "productionOrderNo",     label: "رقم أمر الإنتاج" },
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "actualStartDateTime",   label: "وقت بدء الإنتاج الفعلي" },
+    { field: "supervisorName",        label: "اسم المشرف" },
+  ],
+  "F-PRD-003": [
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "auditorName",           label: "اسم المدقق" },
+  ],
+  "F-PRD-004": [
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "productionStage",       label: "مرحلة الإنتاج" },
+    { field: "readings",              label: "القراءات" },
+  ],
+  "F-LAB-001": [
+    { field: "requestDate",           label: "تاريخ الطلب" },
+    { field: "sampleType",            label: "نوع العينة" },
+    { field: "itemCode",              label: "كود المادة" },
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "requiredTests",         label: "الاختبارات المطلوبة" },
+  ],
+  "F-LAB-002": [
+    { field: "itemName",              label: "اسم العينة" },
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "sampleQuantity",        label: "كمية العينة" },
+    { field: "conditionOnReceipt",    label: "حالة العينة عند الاستلام" },
+  ],
+  "F-LAB-003": [
+    { field: "sampleId",              label: "رقم العينة" },
+    { field: "testType",              label: "نوع الاختبار" },
+    { field: "results",               label: "النتائج" },
+    { field: "overallStatus",         label: "الحكم النهائي" },
+  ],
+  "F-LAB-004": [
+    { field: "testResultId",          label: "رقم نتيجة الاختبار" },
+    { field: "finalStatus",           label: "القرار النهائي" },
+    { field: "approvedBy",            label: "اعتمد بواسطة" },
+  ],
+  "F-LAB-005": [
+    { field: "itemCode",              label: "كود المادة" },
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "startDate",             label: "تاريخ البدء" },
+  ],
+  "F-LAB-006": [
+    { field: "equipmentName",         label: "اسم الجهاز" },
+    { field: "equipmentId",           label: "رقم الجهاز" },
+    { field: "nextCalibrationDate",   label: "تاريخ المعايرة القادمة" },
+  ],
+  "F-LAB-007": [
+    { field: "items",                 label: "المواد المطلوبة" },
+  ],
+  "F-QM-001": [
+    { field: "meetingDate",           label: "تاريخ الاجتماع" },
+    { field: "attendees",             label: "الحضور" },
+    { field: "decisionsAndActions",   label: "القرارات والإجراءات" },
+  ],
+  "F-QM-005": [
+    { field: "description",           label: "وصف عدم المطابقة" },
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "immediateAction",       label: "الإجراء الفوري" },
+  ],
+  "F-QM-006": [
+    { field: "description",           label: "وصف المشكلة" },
+    { field: "rootCause",             label: "السبب الجذري" },
+    { field: "correctiveAction",      label: "الإجراء التصحيحي" },
+    { field: "responsiblePerson",     label: "الشخص المسؤول" },
+    { field: "targetDate",            label: "التاريخ المستهدف" },
+  ],
+  "F-DEV-001": [
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "productionStage",       label: "مرحلة الإنتاج" },
+    { field: "description",           label: "وصف الانحراف" },
+    { field: "immediateAction",       label: "الإجراء الفوري" },
+  ],
+  "F-CMP-001": [
+    { field: "customerName",          label: "اسم العميل" },
+    { field: "productName",           label: "اسم المنتج" },
+    { field: "complaintDetails",      label: "تفاصيل الشكوى" },
+  ],
+  "F-RCL-001": [
+    { field: "productName",           label: "اسم المنتج" },
+    { field: "batchNumber",           label: "رقم الدفعة" },
+    { field: "reasonForRecall",       label: "سبب الاستدعاء" },
+    { field: "actionPlan",            label: "خطة العمل" },
+  ],
+  "F-HR-001": [
+    { field: "jobTitle",              label: "المسمى الوظيفي" },
+    { field: "requestingDept",        label: "القسم الطالب" },
+    { field: "dateNeeded",            label: "التاريخ المطلوب" },
+  ],
+  "F-HR-002": [
+    { field: "employeeNumber",        label: "رقم الموظف" },
+    { field: "fullNameAr",            label: "الاسم بالعربية" },
+    { field: "joiningDate",           label: "تاريخ الالتحاق" },
+  ],
+  "F-HR-003": [
+    { field: "employeeId",            label: "رقم الموظف" },
+    { field: "examDate",              label: "تاريخ الفحص" },
+  ],
+  "F-TRN-001": [
+    { field: "department",            label: "القسم" },
+    { field: "trainingCourses",       label: "الدورات التدريبية" },
+  ],
+  "F-TRN-002": [
+    { field: "trainingTitle",         label: "عنوان التدريب" },
+    { field: "trainingDate",          label: "تاريخ التدريب" },
+    { field: "trainerName",           label: "اسم المدرب" },
+    { field: "attendees",             label: "المشاركون" },
+  ],
+  "F-TRN-003": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "trainingTitle",         label: "عنوان التدريب" },
+    { field: "assessmentDate",        label: "تاريخ التقييم" },
+  ],
+  "F-TRN-004": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "certificateTitle",      label: "عنوان الشهادة" },
+    { field: "issueDate",             label: "تاريخ الإصدار" },
+    { field: "expiryDate",            label: "تاريخ الانتهاء" },
+  ],
+};
+
+const validateFormData = (formId: string, data: any): string[] => {
+  const errors: string[] = [];
+  const rules = FORM_REQUIRED_FIELDS[formId];
+  if (!rules || !data) return errors;
+
+  for (const rule of rules) {
+    const val = data[rule.field];
+    const isEmpty =
+      val === undefined ||
+      val === null ||
+      val === "" ||
+      (Array.isArray(val) && val.length === 0);
+    if (isEmpty) {
+      errors.push(rule.label);
+    }
+  }
+  return errors;
+};
+
 router.get("/forms", (req, res) => {
   const user: any = getAuthUser(req);
   let query = "SELECT * FROM forms_records ORDER BY id DESC";
@@ -751,6 +962,17 @@ router.post("/forms", (req, res) => {
       (status === "approved" || status === "pending_approval")
     ) {
       status = "pending_review";
+    }
+  }
+
+  // Validate required fields for non-draft submissions
+  if (status !== "draft") {
+    const missing = validateFormData(formId, data);
+    if (missing.length > 0) {
+      return res.status(400).json({
+        error: `الحقول التالية مطلوبة قبل الإرسال: ${missing.join("، ")}`,
+        missingFields: missing,
+      });
     }
   }
 
@@ -843,6 +1065,19 @@ router.put("/forms/record/:recordId", (req, res) => {
       let finalDataJson = row.data_json;
       if (data !== undefined) {
         finalDataJson = JSON.stringify(data);
+      }
+
+      // Validate required fields when moving out of draft
+      if (status !== "draft" && status !== "rejected" && status !== "returned") {
+        const formData = JSON.parse(finalDataJson || "{}");
+        const fIdToValidate = row.form_id || "";
+        const missing = validateFormData(fIdToValidate, formData);
+        if (missing.length > 0) {
+          return res.status(400).json({
+            error: `الحقول التالية مطلوبة قبل الإرسال: ${missing.join("، ")}`,
+            missingFields: missing,
+          });
+        }
       }
 
       getDb().run(

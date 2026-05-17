@@ -90,12 +90,16 @@ export default function FormComposition() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
+        return;
+      }
       alert("تم حفظ التركيبة بنجاح!");
       navigate("/inv");
     } catch (err) {
       console.error(err);
-      alert("حدث خطأ أثناء الحفظ");
+      alert("حدث خطأ في الاتصال");
     }
   };
 
