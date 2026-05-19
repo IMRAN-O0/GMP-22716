@@ -3,6 +3,8 @@ import { fileURLToPath } from 'url';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import cors from 'cors';
 import { initDb } from './server/db.js';
 import apiRouter from './server/api.js';
 import { setupAutomatedBackup } from './server/backup.js';
@@ -12,37 +14,71 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  app.set('trust proxy', 1 /* trust first proxy */);
-  const PORT = 3000;
+  app.set('trust proxy', 1);
+  const PORT = parseInt(process.env.PORT || '3000');
 
-  // Rate Limiting Middleware
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 200, // limit each IP to 200 requests per windowMs
-    message: { error: 'Too many requests from this IP, please try again after 15 minutes' },
+  // Security Headers (Helmet)
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        fontSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+
+  // CORS — only allow same origin (localhost in dev, server IP in prod)
+  const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, same-origin)
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
+
+  // General API rate limit
+  const generalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    message: { error: 'طلبات كثيرة جداً، حاول مرة أخرى بعد 15 دقيقة' },
+    standardHeaders: true,
+    legacyHeaders: false,
     validate: { xForwardedForHeader: false, forwardedHeader: false, default: true },
-    standardHeaders: true, 
-    legacyHeaders: false, 
-  });
-  
-  app.use('/api/', limiter);
-
-  app.use((req, res, next) => {
-    res.setHeader('X-Custom-Server', 'true');
-    next();
   });
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Strict rate limit on login — max 10 attempts per 15 min
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'محاولات تسجيل دخول كثيرة، حاول مرة أخرى بعد 15 دقيقة' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false, forwardedHeader: false, default: true },
+  });
 
-  // Initialize SQLite Database
+  app.use('/api/login', loginLimiter);
+  app.use('/api/', generalLimiter);
+
+  app.use(express.json({ limit: "20mb" }));
+  app.use(express.urlencoded({ limit: "20mb", extended: true }));
+
   await initDb();
   setupAutomatedBackup();
 
-  // API Routes
   app.use('/api', apiRouter);
 
-  // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -50,7 +86,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Production static serving
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {

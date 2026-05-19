@@ -91,7 +91,6 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
   }
 
   // 1. PIN (Purchase Invoice) - Add to balance (wrapped in transaction)
-  console.log("Processing form approval", fId, JSON.stringify(data).substring(0,100));
   if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
     const db = getDb();
     db.serialize(() => {
@@ -314,8 +313,8 @@ router.post("/login", (req, res) => {
   );
 });
 
-// App Info
-router.get("/company", (req, res) => {
+// App Info — requireAuth so only logged-in users can read company data
+router.get("/company", requireAuth, (req, res) => {
   getDb().get(
     "SELECT * FROM company_info ORDER BY id DESC LIMIT 1",
     [],
@@ -329,7 +328,7 @@ router.get("/company", (req, res) => {
 router.put("/company", requireAuth, (req, res) => {
   const { name_ar, name_en, logo_url, address, phone, email, license_number } = req.body;
   getDb().get("SELECT id FROM company_info ORDER BY id DESC LIMIT 1", [], (err, row: any) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     if (row) {
       getDb().run(
         "UPDATE company_info SET name_ar=?, name_en=?, logo_url=?, address=?, phone=?, email=?, license_number=? WHERE id=?",
@@ -364,7 +363,9 @@ router.get("/audit", requireAuth, (req, res) => {
   );
 });
 
-router.get("/users", requireAuth, (req, res) => {
+router.get("/users", requireAuth, (req: any, res) => {
+  const caller = req.user;
+  if (!caller || caller.level > 2) return res.status(403).json({ error: "غير مصرح" });
   getDb().all(
     "SELECT id, user_id, name, department, level, status, permissions FROM users ORDER BY level ASC",
     [],
@@ -375,10 +376,12 @@ router.get("/users", requireAuth, (req, res) => {
   );
 });
 
-router.post("/users", requireAuth, async (req, res) => {
+router.post("/users", requireAuth, async (req: any, res) => {
+  if (!req.user || req.user.level > 1) return res.status(403).json({ error: "غير مصرح" });
   const { userId, name, department, level, password, permissions } = req.body;
+  if (!password || password.length < 6) return res.status(400).json({ error: "كلمة المرور يجب أن تكون 6 أحرف على الأقل" });
   try {
-    const hash = await bcrypt.hash(password || "123456", 10);
+    const hash = await bcrypt.hash(password, 10);
     const perms = permissions ? JSON.stringify(permissions) : '{}';
     getDb().run(
       "INSERT INTO users (user_id, name, department, level, password_hash, status, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -449,7 +452,7 @@ router.post("/warehouses", requireAuth, (req, res) => {
     `INSERT INTO warehouses (code, name, type, parent_id, description) VALUES (?, ?, ?, ?, ?)`,
     [code, name, type, parent_id, description],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
     },
   );
@@ -462,7 +465,7 @@ router.put("/warehouses/:id", requireAuth, (req, res) => {
     `UPDATE warehouses SET code=?, name=?, type=?, parent_id=?, description=? WHERE id=?`,
     [code, name, type, parent_id, description, req.params.id],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
     },
   );
@@ -474,7 +477,7 @@ router.delete("/warehouses/:id", requireAuth, (req, res) => {
     `DELETE FROM warehouses WHERE id=?`,
     [req.params.id],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
     },
   );
@@ -556,7 +559,7 @@ router.post("/materials", requireAuth, async (req, res) => {
     `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [code, name, name_en, category, description, unit, warehouse_id, balance],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
     },
   );
@@ -568,7 +571,7 @@ router.delete("/materials/:id", requireAuth, (req, res) => {
     `DELETE FROM materials WHERE id=?`,
     [req.params.id],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
     },
   );
@@ -581,7 +584,7 @@ router.put("/materials/:id", requireAuth, (req, res) => {
     `UPDATE materials SET code=?, name=?, name_en=?, category=?, description=?, unit=?, warehouse_id=?, balance=? WHERE id=?`,
     [code, name, name_en, category, description, unit, warehouse_id, balance, req.params.id],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
     },
   );
@@ -601,7 +604,7 @@ router.get("/materials/search/:code", requireAuth, (req, res) => {
 });
 
 // INV: Get Products (From materials table)
-router.get("/products", (req, res) => {
+router.get("/products", requireAuth, (req, res) => {
   getDb().all(
     "SELECT * FROM materials WHERE category = 'منتج نهائي' OR category = 'Finished Product' ORDER BY code ASC",
     [],
@@ -627,7 +630,7 @@ router.post("/suppliers", requireAuth, (req, res) => {
     `INSERT INTO suppliers (code, name, name_en, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [code, name, name_en, contact_person, phone, email, address],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
     },
   );
@@ -636,7 +639,7 @@ router.post("/suppliers", requireAuth, (req, res) => {
 // INV: Delete Supplier
 router.delete("/suppliers/:id", requireAuth, (req, res) => {
   getDb().run(`DELETE FROM suppliers WHERE id=?`, [req.params.id], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
 });
@@ -669,7 +672,7 @@ router.post("/customers", requireAuth, (req, res) => {
     `INSERT INTO customers (code, name, name_en, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [code, name, name_en, contact_person, phone, email, address],
     function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
     },
   );
@@ -678,7 +681,7 @@ router.post("/customers", requireAuth, (req, res) => {
 // INV: Delete Customer
 router.delete("/customers/:id", requireAuth, (req, res) => {
   getDb().run(`DELETE FROM customers WHERE id=?`, [req.params.id], function (err) {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
 });
@@ -696,10 +699,6 @@ router.get("/customers/search/:code", requireAuth, (req, res) => {
   );
 });
 
-// Get All Forms
-router.get("/forms-test", (req, res) => {
-  res.json({ message: "It works!" });
-});
 
 // Required fields per form — validated when status is not 'draft'
 const FORM_REQUIRED_FIELDS: Record<string, { field: string; label: string }[]> = {
@@ -912,8 +911,8 @@ const validateFormData = (formId: string, data: any): string[] => {
   return errors;
 };
 
-router.get("/forms", (req, res) => {
-  const user: any = getAuthUser(req);
+router.get("/forms", requireAuth, (req: any, res) => {
+  const user: any = req.user;
   let query = "SELECT * FROM forms_records ORDER BY id DESC";
   let params: any[] = [];
 
@@ -942,9 +941,10 @@ router.get("/forms", (req, res) => {
 });
 
 // Create Form Record
-router.post("/forms", (req, res) => {
+router.post("/forms", requireAuth, (req: any, res) => {
   let { recordId, formId, department, creatorId, status, data } = req.body;
   const timestamp = new Date().toISOString();
+  creatorId = req.user.id; // always use authenticated user's id
 
   const user: any = getAuthUser(req);
   if (user && user.level && user.level >= 2 && user.department !== "ALL") {
@@ -1018,12 +1018,13 @@ router.post("/forms", (req, res) => {
 });
 
 // Update Form Record
-router.put("/forms/record/:recordId", (req, res) => {
+router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
   const { recordId } = req.params;
   let { status, data, userId, notes } = req.body;
   const timestamp = new Date().toISOString();
+  userId = req.user.id;
 
-  const user: any = getAuthUser(req);
+  const user: any = req.user;
   // Enforce status based on user level
   if (user && user.level) {
     if (user.level === 3 && status === "approved") {
@@ -1112,7 +1113,7 @@ router.put("/forms/record/:recordId", (req, res) => {
 });
 
 // Get Single Form Record
-router.get("/forms/record/:recordId", (req, res) => {
+router.get("/forms/record/:recordId", requireAuth, (req, res) => {
   const { recordId } = req.params;
   getDb().get(
     "SELECT * FROM forms_records WHERE record_id = ?",
@@ -1126,7 +1127,7 @@ router.get("/forms/record/:recordId", (req, res) => {
 });
 
 // Get Dashboard Notifications
-router.get("/notifications/dashboard", (req, res) => {
+router.get("/notifications/dashboard", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
@@ -1359,7 +1360,7 @@ router.get("/notifications/dashboard", (req, res) => {
 });
 
 // Get Forms by Department
-router.get("/forms/dept/:department", (req, res) => {
+router.get("/forms/dept/:department", requireAuth, (req, res) => {
   const { department } = req.params;
   const user: any = getAuthUser(req);
 
@@ -1391,7 +1392,7 @@ router.get("/forms/dept/:department", (req, res) => {
 });
 
 // Backward compatibility or catch all
-router.get("/forms/:department", (req, res) => {
+router.get("/forms/:department", requireAuth, (req, res) => {
   const { department } = req.params;
   const user: any = getAuthUser(req);
 
@@ -1423,7 +1424,7 @@ router.get("/forms/:department", (req, res) => {
 });
 
 // Dashboard Stats (General Manager / Quick View)
-router.get("/stats", (req, res) => {
+router.get("/stats", requireAuth, (req, res) => {
   getDb().all(
     `SELECT department, COUNT(*) as count, 
             SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) as approved_count 
@@ -1445,7 +1446,7 @@ const hasReportAccess = (user: any, dept: string, reportId: string) => {
   return false;
 };
 
-router.get("/reports/inv/transactions", (req, res) => {
+router.get("/reports/inv/transactions", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!hasReportAccess(user, "INV", "REP-INV-TRN")) {
     return res.status(403).json({ error: "Unauthorized" });
@@ -1459,7 +1460,7 @@ router.get("/reports/inv/transactions", (req, res) => {
   });
 });
 
-router.get("/reports/inv/supplier-evaluations", (req, res) => {
+router.get("/reports/inv/supplier-evaluations", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!hasReportAccess(user, "INV", "REP-INV-SUP")) {
     return res.status(403).json({ error: "Unauthorized" });
@@ -1473,7 +1474,7 @@ router.get("/reports/inv/supplier-evaluations", (req, res) => {
   });
 });
 
-router.get("/reports/inv/shipments", (req, res) => {
+router.get("/reports/inv/shipments", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!hasReportAccess(user, "INV", "REP-INV-SHP")) {
     return res.status(403).json({ error: "Unauthorized" });
@@ -1487,7 +1488,7 @@ router.get("/reports/inv/shipments", (req, res) => {
   });
 });
 
-router.get("/reports/inv/returns-disposals", (req, res) => {
+router.get("/reports/inv/returns-disposals", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!hasReportAccess(user, "INV", "REP-INV-RET")) {
     return res.status(403).json({ error: "Unauthorized" });
@@ -1501,7 +1502,7 @@ router.get("/reports/inv/returns-disposals", (req, res) => {
   });
 });
 
-router.get("/reports/prd/all", (req, res) => {
+router.get("/reports/prd/all", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) {
     return res.status(403).json({ error: "Unauthorized" });
@@ -1515,7 +1516,7 @@ router.get("/reports/prd/all", (req, res) => {
   });
 });
 
-router.get("/reports/qm/all", (req, res) => {
+router.get("/reports/qm/all", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) {
     return res.status(403).json({ error: "Unauthorized" });
@@ -1529,7 +1530,7 @@ router.get("/reports/qm/all", (req, res) => {
   });
 });
 
-router.get("/reports/all", (req, res) => {
+router.get("/reports/all", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) {
     return res.status(403).json({ error: "Unauthorized" });
