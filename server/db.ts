@@ -254,10 +254,7 @@ const seedInitialData = async () => {
      db.run(`INSERT INTO warehouses (code, name, type, parent_id) VALUES ('WH-RAW-LIQ', 'مواد خام سائلة', 'SUB', 1)`);
      db.run(`INSERT INTO warehouses (code, name, type, parent_id) VALUES ('WH-RAW-PKG', 'مواد تغليف وتعبئة', 'SUB', 1)`);
 
-     // Insert some dummy materials for testing
-     db.run(`INSERT INTO materials (code, name, description, unit, warehouse_id, balance) VALUES ('RM-001', 'كحول إيثيلي 70%', 'مادة سائلة قابلة للاشتعال', 'لتر', 5, 200)`);
-     db.run(`INSERT INTO materials (code, name, description, unit, warehouse_id, balance) VALUES ('RM-002', 'جلسرين طبي', 'سائل للترطيب', 'لتر', 5, 500)`);
-     db.run(`INSERT INTO materials (code, name, description, unit, warehouse_id, balance) VALUES ('PKG-001', 'عبوات بلاستيكية 100 مل', 'مادة تعبئة للمنتج', 'قطعة', 6, 10000)`);
+
    });
 
    console.log('Seed data inserted.');

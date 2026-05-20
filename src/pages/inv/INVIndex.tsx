@@ -246,53 +246,31 @@ export default function INVIndex() {
             <table className="w-full text-right border-collapse">
               <thead className="bg-white text-slate-500 text-[13px] font-semibold">
                 <tr>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    كود المادة
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    اسم ووصف المادة
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    موقع المستودع
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    الوحدة القياسية
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    الرصيد الفعلي
-                  </th>
+                  <th className="px-6 py-4 font-semibold border-b border-slate-100">كود المادة</th>
+                  <th className="px-6 py-4 font-semibold border-b border-slate-100">اسم ووصف المادة</th>
+                  <th className="px-6 py-4 font-semibold border-b border-slate-100">موقع المستودع</th>
+                  <th className="px-6 py-4 font-semibold border-b border-slate-100">الوحدة</th>
+                  <th className="px-6 py-4 font-semibold border-b border-slate-100">الرصيد</th>
+                  {user?.level <= 2 && <th className="px-6 py-4 font-semibold border-b border-slate-100 text-center w-16">حذف</th>}
                 </tr>
               </thead>
               <tbody className="text-[14px] text-slate-600">
                 {materials.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-8 text-center text-slate-400"
-                    >
+                    <td colSpan={user?.level <= 2 ? 6 : 5} className="px-6 py-8 text-center text-slate-400">
                       لا توجد مواد مسجلة حتى الآن
                     </td>
                   </tr>
                 ) : (
                   materials.map((m, i) => {
-                    const warehouse = warehouses.find(
-                      (w) => w.id === m.warehouse_id,
-                    );
+                    const warehouse = warehouses.find((w) => w.id === m.warehouse_id);
+                    const isLow = m.minBalance && m.balance <= m.minBalance;
                     return (
-                      <tr
-                        key={i}
-                        className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
-                      >
-                        <td className="px-6 py-4 font-mono font-bold text-sky-600">
-                          {m.code}
-                        </td>
+                      <tr key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                        <td className="px-6 py-4 font-mono font-bold text-sky-600">{m.code}</td>
                         <td className="px-6 py-4">
-                          <span className="font-bold text-slate-800 block">
-                            {m.name}
-                          </span>
-                          <span className="text-xs text-slate-400">
-                            {m.description}
-                          </span>
+                          <span className="font-bold text-slate-800 block">{m.name}</span>
+                          <span className="text-xs text-slate-400">{m.description}</span>
                         </td>
                         <td className="px-6 py-4">
                           <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[11px] font-bold">
@@ -300,9 +278,34 @@ export default function INVIndex() {
                           </span>
                         </td>
                         <td className="px-6 py-4">{m.unit}</td>
-                        <td className="px-6 py-4 font-bold text-slate-900">
+                        <td className={`px-6 py-4 font-bold ${isLow ? "text-red-600" : "text-slate-900"}`}>
                           {m.balance}
+                          {isLow && <span className="text-[10px] text-red-500 block">مخزون منخفض</span>}
                         </td>
+                        {user?.level <= 2 && (
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`هل أنت متأكد من حذف المادة "${m.name}"؟`)) return;
+                                const res = await fetch(`/api/materials/${m.id}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                                });
+                                if (res.ok) {
+                                  setMaterials((prev) => prev.filter((x) => x.id !== m.id));
+                                } else {
+                                  const err = await res.json().catch(() => ({ error: "خطأ" }));
+                                  alert("فشل الحذف: " + err.error);
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                              title="حذف المادة"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })

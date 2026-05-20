@@ -1112,6 +1112,30 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
   );
 });
 
+// Delete Form Record — admin (level 1) or dept manager (level 2) only
+router.delete("/forms/record/:recordId", requireAuth, (req: any, res) => {
+  const user = req.user;
+  if (!user || user.level > 2) return res.status(403).json({ error: "غير مصرح — المدير فقط" });
+
+  getDb().get("SELECT * FROM forms_records WHERE record_id = ?", [req.params.recordId], (err, row: any) => {
+    if (err || !row) return res.status(404).json({ error: "السجل غير موجود" });
+    if (row.status === "approved" && user.level > 1) {
+      return res.status(403).json({ error: "لا يمكن حذف نموذج معتمد إلا من قبل مدير النظام" });
+    }
+    if (user.level === 2 && row.department !== user.department && user.department !== "ALL") {
+      return res.status(403).json({ error: "غير مصرح — خارج نطاق قسمك" });
+    }
+    getDb().run("DELETE FROM forms_records WHERE record_id = ?", [req.params.recordId], function (e) {
+      if (e) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+      getDb().run(
+        `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, 'DELETE', ?, ?, ?, ?)`,
+        [user.id, row.form_id, req.params.recordId, new Date().toISOString(), `Deleted by level ${user.level}`]
+      );
+      res.json({ success: true });
+    });
+  });
+});
+
 // Get Single Form Record
 router.get("/forms/record/:recordId", requireAuth, (req, res) => {
   const { recordId } = req.params;
@@ -1423,17 +1447,45 @@ router.get("/forms/:department", requireAuth, (req, res) => {
   });
 });
 
-// Dashboard Stats (General Manager / Quick View)
-router.get("/stats", requireAuth, (req, res) => {
-  getDb().all(
-    `SELECT department, COUNT(*) as count, 
-            SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) as approved_count 
-            FROM forms_records GROUP BY department`,
+// Dashboard Stats — rich per-department breakdown
+router.get("/stats", requireAuth, (req: any, res) => {
+  const user = req.user;
+  const db = getDb();
+  db.all(
+    `SELECT department,
+            COUNT(*) as total,
+            SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END) as approved,
+            SUM(CASE WHEN status='pending_review' THEN 1 ELSE 0 END) as pending_review,
+            SUM(CASE WHEN status='pending_approval' THEN 1 ELSE 0 END) as pending_approval,
+            SUM(CASE WHEN status='draft' THEN 1 ELSE 0 END) as drafts,
+            SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) as rejected
+     FROM forms_records GROUP BY department`,
     [],
-    (err, rows) => {
-      if (err) return res.status(500).json({ error: "DB Error" });
-      res.json(rows || []);
-    },
+    (err, deptRows) => {
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+
+      // Pending items assigned to this user for action
+      db.all(
+        `SELECT record_id, form_id, department, status, created_at, data_json
+         FROM forms_records
+         WHERE status IN ('pending_review','pending_approval')
+         ORDER BY created_at DESC LIMIT 50`,
+        [],
+        (err2, pendingRows: any[]) => {
+          if (err2) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+
+          // Filter pending based on user scope
+          const pending = pendingRows
+            .filter((r: any) => {
+              if (user.level === 1 || user.department === "ALL") return true;
+              return r.department === user.department;
+            })
+            .map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") }));
+
+          res.json({ departments: deptRows || [], pending });
+        }
+      );
+    }
   );
 });
 

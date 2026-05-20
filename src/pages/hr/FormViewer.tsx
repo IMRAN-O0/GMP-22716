@@ -7,6 +7,7 @@ import {
   XCircle,
   Send,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
@@ -221,8 +222,25 @@ export default function FormViewer() {
 
   const todayHijri = new Date().toLocaleDateString("ar-SA-u-ca-islamic", { year: "numeric", month: "numeric", day: "numeric" });
 
+  // Determine print orientation based on form type
+  const landscapeForms = ["F-INV-PIN-001", "F-INV-PRQ-001", "F-PRD-002", "F-LAB-003", "F-PRD-004"];
+  const isLandscape = landscapeForms.includes(record.form_id);
+
   return (
     <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
+      <style>{`
+        @media print {
+          @page {
+            size: A4 ${isLandscape ? "landscape" : "portrait"};
+            margin: 15mm 12mm 15mm 12mm;
+          }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print\\:hidden { display: none !important; }
+          .print\\:border-none { border: none !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          .print\\:rounded-none { border-radius: 0 !important; }
+        }
+      `}</style>
       {/* Action Bar - hidden on print */}
       <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -277,6 +295,25 @@ export default function FormViewer() {
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-semibold text-[13px]">
             <Printer className="w-4 h-4" /> طباعة PDF
           </button>
+
+          {user?.level <= 2 && (
+            <button
+              onClick={async () => {
+                const confirmMsg = record.status === "approved"
+                  ? `تحذير: هذا النموذج معتمد. هل أنت متأكد من حذفه نهائياً؟`
+                  : `هل أنت متأكد من حذف النموذج "${record.record_id}"؟`;
+                if (!window.confirm(confirmMsg)) return;
+                const res = await fetch(`/api/forms/record/${recordId}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                });
+                if (res.ok) { alert("تم حذف النموذج بنجاح"); navigate(-1); }
+                else { const e = await res.json().catch(() => ({ error: "خطأ" })); alert("فشل الحذف: " + e.error); }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold text-[13px]">
+              <Trash2 className="w-4 h-4" /> حذف النموذج
+            </button>
+          )}
         </div>
       </div>
 
