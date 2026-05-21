@@ -532,7 +532,7 @@ router.get("/inventory/transactions", requireAuth, (req, res) => {
 
 // INV: Get Materials
 router.get("/materials", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM materials ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT *, min_balance as minBalance FROM materials ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -563,6 +563,56 @@ router.post("/materials", requireAuth, async (req, res) => {
       res.json({ success: true, id: this.lastID });
     },
   );
+});
+
+// INV: Bulk import materials from Excel (parsed client-side, sent as JSON array)
+router.post("/materials/bulk", requireAuth, async (req: any, res) => {
+  const user = req.user;
+  if (!user || user.level > 2) return res.status(403).json({ error: "غير مصرح" });
+
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0)
+    return res.status(400).json({ error: "لا توجد بيانات للاستيراد" });
+
+  const db = getDb();
+  const errors: string[] = [];
+  let inserted = 0;
+  let skipped = 0;
+
+  const insertNext = (i: number) => {
+    if (i >= rows.length) {
+      return res.json({ success: true, inserted, skipped, errors });
+    }
+    const r = rows[i];
+    if (!r.code || !r.name) {
+      errors.push(`الصف ${i + 2}: كود المادة والاسم مطلوبان`);
+      return insertNext(i + 1);
+    }
+    db.get("SELECT id FROM materials WHERE code = ?", [r.code], (err, existing) => {
+      if (existing) {
+        skipped++;
+        return insertNext(i + 1);
+      }
+      db.run(
+        `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          r.code, r.name, r.name_en || "", r.category || "مادة خام",
+          r.description || "", r.unit || "كجم",
+          r.warehouse_code || r.warehouse_id || "",
+          parseFloat(r.balance) || 0,
+          parseFloat(r.min_balance) || 0,
+        ],
+        function (e) {
+          if (e) errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`);
+          else inserted++;
+          insertNext(i + 1);
+        }
+      );
+    });
+  };
+
+  insertNext(0);
 });
 
 // INV: Delete Material

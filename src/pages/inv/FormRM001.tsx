@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
-import { Save, CheckCircle, Package } from "lucide-react";
+import { Save, CheckCircle, Package, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import * as XLSX from "xlsx";
 
 export default function FormRM001() {
   const navigate = useNavigate();
@@ -40,6 +41,14 @@ export default function FormRM001() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isEditingForm, setIsEditingForm] = useState(false);
   const [editFormRecordId, setEditFormRecordId] = useState<string | null>(null);
+
+  // Excel bulk import
+  const [activeTab, setActiveTab] = useState<"single" | "bulk">("single");
+  const [bulkRows, setBulkRows] = useState<any[]>([]);
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ inserted: number; skipped: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/warehouses")
@@ -160,6 +169,135 @@ export default function FormRM001() {
     setLoading(false);
   };
 
+  // ── Excel template download ──────────────────────────────────────────────
+  const downloadTemplate = () => {
+    const headers = [
+      "كود المادة*", "اسم المادة بالعربي*", "اسم المادة بالإنجليزي*",
+      "الفئة*", "الوحدة القياسية*", "كود المستودع*",
+      "الرصيد الافتتاحي", "الحد الأدنى للمخزون",
+      "الوصف", "الاسم العلمي", "بلد المنشأ", "اسم المورد",
+      "سعر الشراء", "الباركود",
+    ];
+    const keys = [
+      "code", "name", "name_en", "category", "unit", "warehouse_code",
+      "balance", "min_balance",
+      "description", "scientific_name", "country_of_origin", "supplier_name",
+      "purchase_price", "barcode",
+    ];
+    const example = [
+      "RM-001", "كحول إيثيلي 70%", "Ethanol 70%",
+      "مادة خام", "لتر", "WH-RAW",
+      "0", "50",
+      "مادة سائلة قابلة للاشتعال", "Ethanol", "السعودية", "مورد رقم 1",
+      "25.00", "",
+    ];
+    const notes = [
+      "الفئات المتاحة: مادة خام | مادة تغليف | منتج نهائي",
+      "الوحدات: كجم | جرام | لتر | مل | قطعة",
+      "كود المستودع: WH-RAW (مواد خام) | WH-FIN (منتج نهائي)",
+      "* الحقول الإلزامية", "", "", "", "", "", "", "", "", "", "",
+    ];
+
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Template
+    const ws = XLSX.utils.aoa_to_sheet([headers, keys, example]);
+    ws["!cols"] = headers.map(() => ({ wch: 22 }));
+
+    // Style header row (limited support in xlsx community edition)
+    XLSX.utils.book_append_sheet(wb, ws, "نموذج الاستيراد");
+
+    // Sheet 2: Instructions
+    const instructions = [
+      ["تعليمات ملء النموذج"],
+      [""],
+      ["1. الحقول المطلوبة (*):", "كود المادة، اسم المادة بالعربي، اسم المادة بالإنجليزي، الفئة، الوحدة القياسية، كود المستودع"],
+      ["2. الفئات المتاحة:", "مادة خام | مادة تغليف | منتج نهائي"],
+      ["3. الوحدات المتاحة:", "كجم | جرام | لتر | مل | قطعة"],
+      ["4. أكواد المستودعات:", "WH-RAW (مستودع المواد الخام) | WH-FIN (مستودع المنتج النهائي)"],
+      ["5. تاريخ الإنتاج وانتهاء الصلاحية:", "لا تُدرج هنا — تُسجّل عند استلام الشراء (فاتورة الشراء PIN)"],
+      ["6. رقم التشغيلة (Batch):", "لا تُدرج هنا — تُسجّل عند استلام الشراء (فاتورة الشراء PIN)"],
+      [""],
+      ["ملاحظة:", "إذا كان كود المادة موجوداً مسبقاً سيتم تخطي السطر (لن يُضاف مرتين)"],
+    ];
+    const wsInst = XLSX.utils.aoa_to_sheet(instructions);
+    wsInst["!cols"] = [{ wch: 35 }, { wch: 70 }];
+    XLSX.utils.book_append_sheet(wb, wsInst, "التعليمات");
+
+    XLSX.writeFile(wb, "نموذج_استيراد_المواد_الخام.xlsx");
+  };
+
+  // ── Parse uploaded Excel ──────────────────────────────────────────────────
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkErrors([]);
+    setBulkResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+        if (raw.length < 3) {
+          setBulkErrors(["الملف لا يحتوي على بيانات كافية. تأكد من استخدام النموذج المحدد."]);
+          return;
+        }
+
+        // Row 0 = Arabic headers, Row 1 = keys, Row 2+ = data
+        const keyRow: string[] = (raw[1] as string[]).map((k) => String(k).trim());
+        const dataRows = raw.slice(2).filter((row) => row.some((v) => v !== ""));
+
+        const errs: string[] = [];
+        const parsed = dataRows.map((row, idx) => {
+          const obj: Record<string, string> = {};
+          keyRow.forEach((k, ci) => { obj[k] = String(row[ci] ?? "").trim(); });
+          if (!obj.code) errs.push(`الصف ${idx + 3}: كود المادة مفقود`);
+          if (!obj.name) errs.push(`الصف ${idx + 3}: اسم المادة بالعربي مفقود`);
+          if (!obj.name_en) errs.push(`الصف ${idx + 3}: اسم المادة بالإنجليزي مفقود`);
+          if (!obj.unit) errs.push(`الصف ${idx + 3}: الوحدة القياسية مفقودة`);
+          if (!obj.warehouse_code) errs.push(`الصف ${idx + 3}: كود المستودع مفقود`);
+          return obj;
+        });
+
+        setBulkErrors(errs);
+        setBulkRows(parsed);
+      } catch {
+        setBulkErrors(["فشل في قراءة الملف. تأكد أنه ملف Excel صالح (.xlsx)"]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // ── Submit bulk import ────────────────────────────────────────────────────
+  const handleBulkImport = async () => {
+    if (bulkRows.length === 0) return;
+    setBulkImporting(true);
+    try {
+      const res = await fetch("/api/materials/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ rows: bulkRows }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBulkResult(data);
+        setBulkRows([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } else {
+        setBulkErrors([data.error || "فشل الاستيراد"]);
+      }
+    } catch {
+      setBulkErrors(["خطأ في الاتصال بالخادم"]);
+    }
+    setBulkImporting(false);
+  };
+
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -183,6 +321,178 @@ export default function FormRM001() {
           </div>
         </div>
 
+        {/* Tab selector */}
+        <div className="border-b border-slate-200 px-6 pt-2 flex gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("single")}
+            className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${activeTab === "single" ? "border-stone-700 text-stone-800 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          >
+            <Package className="w-4 h-4 inline ml-1" />
+            إضافة مادة واحدة
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("bulk")}
+            className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${activeTab === "bulk" ? "border-stone-700 text-stone-800 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+          >
+            <FileSpreadsheet className="w-4 h-4 inline ml-1" />
+            استيراد جماعي من Excel
+          </button>
+        </div>
+
+        {/* ── BULK IMPORT TAB ── */}
+        {activeTab === "bulk" && (
+          <div className="p-8 space-y-6">
+            {/* Step 1: Download template */}
+            <div className="bg-stone-50 rounded-xl border border-stone-200 p-5">
+              <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
+                <span className="w-6 h-6 bg-stone-700 text-white text-xs font-bold rounded-full flex items-center justify-center">1</span>
+                تحميل نموذج Excel
+              </h3>
+              <p className="text-sm text-slate-500 mb-4 mr-8">
+                حمّل النموذج الجاهز، أضف بيانات المواد، ثم ارفعه في الخطوة التالية.
+                <br />
+                <span className="text-amber-600 font-semibold">ملاحظة: رقم التشغيلة وتاريخ الانتهاء تُسجّل في فاتورة الشراء (PIN) عند الاستلام الفعلي.</span>
+              </p>
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-emerald-700 transition-colors text-sm"
+              >
+                <Download className="w-4 h-4" />
+                تحميل نموذج Excel الجاهز
+              </button>
+            </div>
+
+            {/* Step 2: Upload file */}
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+              <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
+                <span className="w-6 h-6 bg-stone-700 text-white text-xs font-bold rounded-full flex items-center justify-center">2</span>
+                رفع ملف Excel المعبأ
+              </h3>
+              <p className="text-sm text-slate-500 mb-4 mr-8">يجب استخدام النموذج المحمّل في الخطوة السابقة فقط.</p>
+              <label className="flex items-center gap-3 bg-white border-2 border-dashed border-slate-300 rounded-xl p-5 cursor-pointer hover:border-stone-400 transition-colors">
+                <Upload className="w-8 h-8 text-slate-400 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold text-slate-700 text-sm">انقر لاختيار ملف Excel</div>
+                  <div className="text-xs text-slate-400 mt-0.5">xlsx. فقط</div>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleExcelUpload}
+                />
+              </label>
+            </div>
+
+            {/* Errors */}
+            {bulkErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2 font-bold text-red-700 text-sm">
+                  <AlertCircle className="w-4 h-4" /> أخطاء في الملف
+                </div>
+                <ul className="space-y-1">
+                  {bulkErrors.map((e, i) => (
+                    <li key={i} className="text-xs text-red-600">{e}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Result */}
+            {bulkResult && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                <div className="flex items-center gap-2 font-bold text-emerald-700 text-sm mb-1">
+                  <CheckCircle2 className="w-4 h-4" /> تم الاستيراد بنجاح
+                </div>
+                <p className="text-sm text-emerald-700">
+                  تمت إضافة <strong>{bulkResult.inserted}</strong> مادة ·
+                  تم تخطي <strong>{bulkResult.skipped}</strong> (موجودة مسبقاً)
+                </p>
+                {bulkResult.errors.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {bulkResult.errors.map((e, i) => <li key={i} className="text-xs text-amber-600">{e}</li>)}
+                  </ul>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate("/inv")}
+                  className="mt-3 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700"
+                >
+                  العودة للمخزون
+                </button>
+              </div>
+            )}
+
+            {/* Step 3: Preview & import */}
+            {bulkRows.length > 0 && bulkErrors.length === 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+                  <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <span className="w-6 h-6 bg-stone-700 text-white text-xs font-bold rounded-full flex items-center justify-center">3</span>
+                    معاينة البيانات ({bulkRows.length} صف)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setBulkRows([]); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                    className="text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold">
+                      <tr>
+                        <th className="px-3 py-2 border-b">#</th>
+                        <th className="px-3 py-2 border-b">كود المادة</th>
+                        <th className="px-3 py-2 border-b">الاسم بالعربي</th>
+                        <th className="px-3 py-2 border-b">الاسم بالإنجليزي</th>
+                        <th className="px-3 py-2 border-b">الفئة</th>
+                        <th className="px-3 py-2 border-b">الوحدة</th>
+                        <th className="px-3 py-2 border-b">المستودع</th>
+                        <th className="px-3 py-2 border-b">الرصيد</th>
+                        <th className="px-3 py-2 border-b">الحد الأدنى</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {bulkRows.map((row, i) => (
+                        <tr key={i} className={!row.code || !row.name || !row.name_en ? "bg-red-50" : "hover:bg-slate-50"}>
+                          <td className="px-3 py-2 text-slate-400">{i + 1}</td>
+                          <td className="px-3 py-2 font-mono font-bold text-indigo-700">{row.code || <span className="text-red-500">مفقود</span>}</td>
+                          <td className="px-3 py-2 font-medium">{row.name || <span className="text-red-500">مفقود</span>}</td>
+                          <td className="px-3 py-2 text-slate-600">{row.name_en || <span className="text-red-500">مفقود</span>}</td>
+                          <td className="px-3 py-2">{row.category}</td>
+                          <td className="px-3 py-2">{row.unit}</td>
+                          <td className="px-3 py-2 font-mono">{row.warehouse_code}</td>
+                          <td className="px-3 py-2">{row.balance || "0"}</td>
+                          <td className="px-3 py-2">{row.min_balance || "0"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleBulkImport}
+                    disabled={bulkImporting}
+                    className="flex items-center gap-2 bg-stone-800 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-stone-900 transition-colors text-sm disabled:opacity-50"
+                  >
+                    <Upload className="w-4 h-4" />
+                    {bulkImporting ? "جاري الاستيراد..." : `استيراد ${bulkRows.length} مادة`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SINGLE ENTRY TAB ── */}
+        {activeTab === "single" && (
         <form className="p-8">
           {/* Section 1: Basic Material Info */}
           <h3 className="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center">
@@ -582,6 +892,7 @@ export default function FormRM001() {
             </button>
           </div>
         </form>
+        )} {/* end single tab */}
       </div>
 
       {showSearchModal && (
