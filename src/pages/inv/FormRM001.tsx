@@ -4,6 +4,7 @@ import { generateSerialNumber, formatMaterialCode, extractSupplierCode } from ".
 import { Save, CheckCircle, Package, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import * as XLSX from "xlsx";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormRM001() {
   const navigate = useNavigate();
@@ -49,6 +50,7 @@ export default function FormRM001() {
   const [bulkImporting, setBulkImporting] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ inserted: number; skipped: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
 
   useEffect(() => {
     const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
@@ -615,27 +617,15 @@ export default function FormRM001() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div>
-              <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-                اسم المورد <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                list="suppliers-list-rm"
+              <SearchField
+                label="اسم المورد"
                 required
-                placeholder="ابحث بكود أو اسم المورد..."
                 value={formData.supplierName}
-                onChange={(e) =>
-                  setFormData({ ...formData, supplierName: e.target.value })
-                }
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:border-stone-400 text-sm py-2"
+                onChange={(v) => setFormData({ ...formData, supplierName: v })}
+                onF3={() => setShowSupplierModal(true)}
+                placeholder="اكتب أو اضغط F3 للبحث…"
+                hint="F3 للبحث في قائمة الموردين"
               />
-              <datalist id="suppliers-list-rm">
-                {suppliers.map((s, i) => (
-                  <option key={i} value={s.name}>
-                    {s.code}
-                  </option>
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -1015,6 +1005,22 @@ export default function FormRM001() {
             </div>
           </div>
         </div>
+      )}
+
+      {showSupplierModal && (
+        <SearchModal
+          title="بحث عن مورد (F3)"
+          items={suppliers}
+          columns={[
+            { key: "code", label: "كود المورد", className: "font-mono w-28" },
+            { key: "name", label: "اسم المورد" },
+            { key: "phone", label: "الهاتف", className: "w-32" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بكود أو اسم المورد…"
+          onSelect={(s) => setFormData({ ...formData, supplierName: s.name })}
+          onClose={() => setShowSupplierModal(false)}
+        />
       )}
     </div>
   );

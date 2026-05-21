@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { generateSerialNumber } from "../../lib/utils";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormFP004() {
   const { user } = useAuth();
@@ -10,6 +11,7 @@ export default function FormFP004() {
 
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [formData, setFormData] = useState({
     returnId: generateSerialNumber("RET", Math.floor(Math.random() * 10000)),
     customerName: "",
@@ -58,7 +60,7 @@ export default function FormFP004() {
 
   // --- INJECTED BY PATCH ---
   React.useEffect(() => {
-    fetch("/api/customers")
+    fetch("/api/customers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setCustomers(Array.isArray(data) ? data : []);
@@ -101,27 +103,15 @@ export default function FormFP004() {
       <form className="p-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              العميل <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              list="customers-list-fp004"
+            <SearchField
+              label="العميل"
               required
-              placeholder="ابحث برمز أو اسم العميل..."
               value={formData.customerName}
-              onChange={(e) =>
-                setFormData({ ...formData, customerName: e.target.value })
-              }
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 text-sm py-2"
+              onChange={(v) => setFormData({ ...formData, customerName: v })}
+              onF3={() => setShowCustomerModal(true)}
+              placeholder="اكتب أو اضغط F3 للبحث…"
+              hint="F3 للبحث في قائمة العملاء"
             />
-            <datalist id="customers-list-fp004">
-              {customers.map((c, i) => (
-                <option key={i} value={c.name}>
-                  {c.code}
-                </option>
-              ))}
-            </datalist>
           </div>
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -248,6 +238,22 @@ export default function FormFP004() {
           </button>
         </div>
       </form>
+
+      {showCustomerModal && (
+        <SearchModal
+          title="بحث عن عميل (F3)"
+          items={customers}
+          columns={[
+            { key: "code", label: "كود العميل", className: "font-mono w-28" },
+            { key: "name", label: "اسم العميل" },
+            { key: "phone", label: "الهاتف", className: "w-32" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بكود أو اسم العميل…"
+          onSelect={(c) => setFormData({ ...formData, customerName: c.name })}
+          onClose={() => setShowCustomerModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -715,12 +715,27 @@ router.post("/suppliers", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Supplier
-router.delete("/suppliers/:id", requireAuth, (req, res) => {
+// INV: Delete Supplier (level ≤ 2 only)
+router.delete("/suppliers/:id", requireAuth, (req: any, res) => {
+  if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
   getDb().run(`DELETE FROM suppliers WHERE id=?`, [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
+});
+
+// INV: Update Supplier
+router.put("/suppliers/:id", requireAuth, (req: any, res) => {
+  if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
+  const { code, name, name_en, contact_person, phone, email, address } = req.body;
+  getDb().run(
+    `UPDATE suppliers SET code=?, name=?, name_en=?, contact_person=?, phone=?, email=?, address=? WHERE id=?`,
+    [code, name, name_en, contact_person, phone, email, address, req.params.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+      res.json({ success: true });
+    }
+  );
 });
 
 // INV: Search Supplier
@@ -757,12 +772,27 @@ router.post("/customers", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Customer
-router.delete("/customers/:id", requireAuth, (req, res) => {
+// INV: Delete Customer (level ≤ 2 only)
+router.delete("/customers/:id", requireAuth, (req: any, res) => {
+  if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
   getDb().run(`DELETE FROM customers WHERE id=?`, [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
+});
+
+// INV: Update Customer
+router.put("/customers/:id", requireAuth, (req: any, res) => {
+  if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
+  const { code, name, name_en, contact_person, phone, email, address } = req.body;
+  getDb().run(
+    `UPDATE customers SET code=?, name=?, name_en=?, contact_person=?, phone=?, email=?, address=? WHERE id=?`,
+    [code, name, name_en, contact_person, phone, email, address, req.params.id],
+    function (err) {
+      if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+      res.json({ success: true });
+    }
+  );
 });
 
 // INV: Search Customer
