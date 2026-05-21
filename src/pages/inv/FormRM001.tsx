@@ -96,6 +96,17 @@ export default function FormRM001() {
       setEditFormRecordId(existingForm.record_id);
       setIsEditingForm(true);
     } else {
+      // Auto-resolve supplier name: from material record OR from suppliers list via code suffix
+      let resolvedSupplier = material.supplier_name || material.supplierName || "";
+      if (!resolvedSupplier && material.code) {
+        const supCode = extractSupplierCode(material.code);
+        if (supCode) {
+          const matched = suppliers.find(
+            (s: any) => s.code === supCode || s.code?.endsWith(`-${supCode}`) || s.code?.endsWith(supCode)
+          );
+          if (matched) resolvedSupplier = matched.name;
+        }
+      }
       setFormData({
         ...formData,
         recordId: generateSerialNumber("RM", Math.floor(Math.random() * 10000)),
@@ -106,6 +117,7 @@ export default function FormRM001() {
         unit: material.unit || "كجم",
         warehouse_id: material.warehouse_id || "",
         balance: material.balance || 0,
+        supplierName: resolvedSupplier,
       });
       setIsEditingForm(false);
       setEditFormRecordId(null);
@@ -118,16 +130,22 @@ export default function FormRM001() {
     const formatted = formatMaterialCode(raw, true);
     const supplierCode = extractSupplierCode(formatted);
 
-    let newSupplierName = formData.supplierName;
-    if (supplierCode && suppliers.length > 0) {
-      // Match supplier whose code ends with the 2-digit suffix (e.g. "SUP-05" matches "05")
-      const matched = suppliers.find(
-        (s: any) =>
-          s.code === supplierCode ||
-          s.code?.endsWith(`-${supplierCode}`) ||
-          s.code?.endsWith(supplierCode)
-      );
-      if (matched) newSupplierName = matched.name;
+    let newSupplierName = "";
+    if (supplierCode) {
+      // 1. Check existing materials first (they have supplier_name stored)
+      const existingMaterial = materials.find((m: any) => m.code === formatted);
+      if (existingMaterial?.supplier_name) {
+        newSupplierName = existingMaterial.supplier_name;
+      } else {
+        // 2. Fall back to suppliers list matched by code suffix
+        const matched = suppliers.find(
+          (s: any) =>
+            s.code === supplierCode ||
+            s.code?.endsWith(`-${supplierCode}`) ||
+            s.code?.endsWith(supplierCode)
+        );
+        if (matched) newSupplierName = matched.name;
+      }
     }
 
     setFormData({ ...formData, code: formatted, supplierName: newSupplierName });
