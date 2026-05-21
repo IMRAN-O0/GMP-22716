@@ -579,40 +579,60 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
   let inserted = 0;
   let skipped = 0;
 
-  const insertNext = (i: number) => {
-    if (i >= rows.length) {
-      return res.json({ success: true, inserted, skipped, errors });
-    }
-    const r = rows[i];
-    if (!r.code || !r.name) {
-      errors.push(`الصف ${i + 2}: كود المادة والاسم مطلوبان`);
-      return insertNext(i + 1);
-    }
-    db.get("SELECT id FROM materials WHERE code = ?", [r.code], (err, existing) => {
-      if (existing) {
-        skipped++;
+  // Pre-load warehouse map: code → id
+  db.all("SELECT id, code FROM warehouses", [], (whErr, whRows: any[]) => {
+    if (whErr) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+
+    const warehouseMap: Record<string, number> = {};
+    (whRows || []).forEach((w) => { warehouseMap[w.code] = w.id; });
+
+    const insertNext = (i: number) => {
+      if (i >= rows.length) {
+        return res.json({ success: true, inserted, skipped, errors });
+      }
+      const r = rows[i];
+      if (!r.code || !r.name) {
+        errors.push(`الصف ${i + 2}: كود المادة والاسم مطلوبان`);
         return insertNext(i + 1);
       }
-      db.run(
-        `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          r.code, r.name, r.name_en || "", r.category || "مادة خام",
-          r.description || "", r.unit || "كجم",
-          r.warehouse_code || r.warehouse_id || "",
-          parseFloat(r.balance) || 0,
-          parseFloat(r.min_balance) || 0,
-        ],
-        function (e) {
-          if (e) errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`);
-          else inserted++;
-          insertNext(i + 1);
-        }
-      );
-    });
-  };
 
-  insertNext(0);
+      // Resolve warehouse: try exact code match, then partial match
+      const whCode = (r.warehouse_code || "").trim().toUpperCase();
+      let warehouseId: number | null =
+        warehouseMap[whCode] ??
+        warehouseMap[Object.keys(warehouseMap).find((k) => k.toUpperCase().includes(whCode) || whCode.includes(k.toUpperCase())) ?? ""] ??
+        null;
+
+      if (!warehouseId && whCode) {
+        errors.push(`الصف ${i + 2} (${r.code}): كود المستودع "${r.warehouse_code}" غير موجود — سيُضاف بدون مستودع`);
+      }
+
+      db.get("SELECT id FROM materials WHERE code = ?", [r.code], (_err, existing) => {
+        if (existing) {
+          skipped++;
+          return insertNext(i + 1);
+        }
+        db.run(
+          `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            r.code, r.name, r.name_en || "", r.category || "مادة خام",
+            r.description || "", r.unit || "كجم",
+            warehouseId || null,
+            parseFloat(r.balance) || 0,
+            parseFloat(r.min_balance) || 0,
+          ],
+          function (e) {
+            if (e) errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`);
+            else inserted++;
+            insertNext(i + 1);
+          }
+        );
+      });
+    };
+
+    insertNext(0);
+  });
 });
 
 // INV: Delete Material
