@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, extractSupplierCode } from "../../lib/utils";
 import { Save, CheckCircle, Package, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import * as XLSX from "xlsx";
@@ -114,6 +114,26 @@ export default function FormRM001() {
       setEditFormRecordId(null);
     }
     setShowSearchModal(false);
+  };
+
+  // Auto-fill supplier from last 2 digits of material code (XXXX-YY)
+  const handleCodeChange = (raw: string) => {
+    const formatted = formatMaterialCode(raw, true);
+    const supplierCode = extractSupplierCode(formatted);
+
+    let newSupplierName = formData.supplierName;
+    if (supplierCode && suppliers.length > 0) {
+      // Match supplier whose code ends with the 2-digit suffix (e.g. "SUP-05" matches "05")
+      const matched = suppliers.find(
+        (s: any) =>
+          s.code === supplierCode ||
+          s.code?.endsWith(`-${supplierCode}`) ||
+          s.code?.endsWith(supplierCode)
+      );
+      if (matched) newSupplierName = matched.name;
+    }
+
+    setFormData({ ...formData, code: formatted, supplierName: newSupplierName });
   };
 
   const handleFileUpload = (
@@ -262,8 +282,25 @@ export default function FormRM001() {
           return obj;
         });
 
+        // Auto-fill supplier_name from code suffix if not provided
+        const enriched = parsed.map((obj) => {
+          if (!obj.supplier_name && obj.code) {
+            const supCode = extractSupplierCode(obj.code);
+            if (supCode) {
+              const matched = suppliers.find(
+                (s: any) =>
+                  s.code === supCode ||
+                  s.code?.endsWith(`-${supCode}`) ||
+                  s.code?.endsWith(supCode)
+              );
+              if (matched) obj.supplier_name = matched.name;
+            }
+          }
+          return obj;
+        });
+
         setBulkErrors(errs);
-        setBulkRows(parsed);
+        setBulkRows(enriched);
       } catch {
         setBulkErrors(["فشل في قراءة الملف. تأكد أنه ملف Excel صالح (.xlsx)"]);
       }
@@ -454,6 +491,7 @@ export default function FormRM001() {
                         <th className="px-3 py-2 border-b">الفئة</th>
                         <th className="px-3 py-2 border-b">الوحدة</th>
                         <th className="px-3 py-2 border-b">المستودع</th>
+                        <th className="px-3 py-2 border-b">المورد</th>
                         <th className="px-3 py-2 border-b">الرصيد</th>
                         <th className="px-3 py-2 border-b">الحد الأدنى</th>
                       </tr>
@@ -468,6 +506,11 @@ export default function FormRM001() {
                           <td className="px-3 py-2">{row.category}</td>
                           <td className="px-3 py-2">{row.unit}</td>
                           <td className="px-3 py-2 font-mono">{row.warehouse_code}</td>
+                          <td className="px-3 py-2">
+                            {row.supplier_name
+                              ? <span className="text-emerald-700 font-semibold">{row.supplier_name}</span>
+                              : <span className="text-slate-400 text-[11px]">—</span>}
+                          </td>
                           <td className="px-3 py-2">{row.balance || "0"}</td>
                           <td className="px-3 py-2">{row.min_balance || "0"}</td>
                         </tr>
@@ -515,14 +558,18 @@ export default function FormRM001() {
                     setShowSearchModal(true);
                   }
                 }}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    code: formatMaterialCode(e.target.value, true),
-                  })
-                }
+                onChange={(e) => handleCodeChange(e.target.value)}
                 className="w-full border-slate-300 rounded-lg shadow-sm focus:border-stone-400 font-mono text-sm py-2"
               />
+              {formData.code && extractSupplierCode(formData.code) && (
+                <p className="text-[11px] mt-1 text-slate-400">
+                  رقم المورد:{" "}
+                  <span className="font-bold text-stone-600">{extractSupplierCode(formData.code)}</span>
+                  {formData.supplierName && (
+                    <> · تم التعرّف: <span className="text-emerald-600 font-bold">{formData.supplierName}</span></>
+                  )}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">

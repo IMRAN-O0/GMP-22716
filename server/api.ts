@@ -613,14 +613,15 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
           return insertNext(i + 1);
         }
         db.run(
-          `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance, supplier_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             r.code, r.name, r.name_en || "", r.category || "مادة خام",
             r.description || "", r.unit || "كجم",
             warehouseId || null,
             parseFloat(r.balance) || 0,
             parseFloat(r.min_balance) || 0,
+            r.supplier_name || "",
           ],
           function (e) {
             if (e) errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`);

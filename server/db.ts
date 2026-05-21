@@ -57,6 +57,11 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 4,
           name: "add_min_balance_to_materials",
           up: `ALTER TABLE materials ADD COLUMN min_balance REAL DEFAULT 0;`
+        },
+        {
+          version: 5,
+          name: "add_supplier_name_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN supplier_name TEXT DEFAULT '';`
         }
       ];
 
