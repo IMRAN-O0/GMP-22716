@@ -36,47 +36,36 @@ export default function FormPIN001() {
   const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/materials")
+    const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+    fetch("/api/materials", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setMaterials(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setMaterials(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    fetch("/api/warehouses")
+    fetch("/api/warehouses", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setWarehouses(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setWarehouses(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    fetch("/api/suppliers")
+    fetch("/api/suppliers", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setSuppliers(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setSuppliers(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    // Fetch approved PRQs
-    fetch("/api/forms")
+    fetch("/api/forms", { headers: h })
       .then((res) => res.json())
       .then((data: any[]) => {
-        const prqs = data.filter(
-          (f) => f.form_id === "F-INV-PRQ-001" && f.status === "approved",
-        );
+        const prqs = data.filter((f) => f.form_id === "F-INV-PRQ-001" && f.status === "approved");
         setPrqList(prqs);
       })
       .catch(console.error);
 
     const editId = new URLSearchParams(window.location.search).get("edit");
     if (editId) {
-      fetch(`/api/forms/record/${editId}`)
+      fetch(`/api/forms/record/${editId}`, { headers: h })
         .then((res) => res.json())
-        .then((data) => {
-          if (data && data.data) {
-            setFormData(data.data);
-          }
-        })
+        .then((data) => { if (data && data.data) setFormData(data.data); })
         .catch(console.error);
     }
   }, []);

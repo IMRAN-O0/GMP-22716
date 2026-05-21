@@ -51,32 +51,27 @@ export default function FormRM001() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/warehouses")
+    const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+    fetch("/api/warehouses", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setWarehouses(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setWarehouses(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    fetch("/api/suppliers")
+    fetch("/api/suppliers", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setSuppliers(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setSuppliers(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    fetch("/api/forms")
+    fetch("/api/forms", { headers: h })
       .then(r => r.json())
-      .then(data => {
-        setRmsForms(data.filter((f: any) => f.form_id === "F-INV-RM-001"));
-      })
+      .then(data => { setRmsForms(data.filter((f: any) => f.form_id === "F-INV-RM-001")); })
       .catch(console.error);
 
-    fetch("/api/materials")
+    // Load ALL materials (no category filter — user may use any type)
+    fetch("/api/materials", { headers: h })
       .then(r => r.json())
-      .then(data => {
-        setMaterials(data.filter((m: any) => m.category === 'مادة خام' || m.category === 'Raw Material' || (m.code && m.code.startsWith('RM'))));
-      })
+      .then(data => { setMaterials(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
     const editId = new URLSearchParams(window.location.search).get("edit");
@@ -977,7 +972,7 @@ export default function FormRM001() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {Array.from(new Map([...materials.filter((m: any) => 
-          m.category === "مادة خام" || m.category === "Raw Material" || m.code?.startsWith("RM")
+          true
         ).map((m: any) => [m.code, { ...m, isDraft: false }]), ...rmsForms.filter(f => f.data?.code).map(f => [f.data.code, { ...f.data, isDraft: true, record_id: f.record_id }])].filter(x => x[0])).values())
                     .filter(
                       (m: any) => 
@@ -1003,7 +998,7 @@ export default function FormRM001() {
                     </tr>
                   ))}
                   {Array.from(new Map([...materials.filter((m: any) => 
-          m.category === "مادة خام" || m.category === "Raw Material" || m.code?.startsWith("RM")
+          true
         ).map((m: any) => [m.code, m]), ...rmsForms.filter(f => f.data?.code).map(f => [f.data.code, f.data])].filter(x => x[0])).values()).filter(
                       (m: any) => 
                         (m.name || "").includes(searchTerm) || 

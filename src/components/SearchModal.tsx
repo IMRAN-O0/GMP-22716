@@ -133,6 +133,17 @@ interface SearchFieldProps {
 }
 
 export function SearchField({ label, value, onChange, onF3, placeholder, required, hint }: SearchFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Listen for F3 key when this input is focused OR anywhere on the page while focused
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "F3") {
+      e.preventDefault();
+      e.stopPropagation();
+      onF3();
+    }
+  };
+
   return (
     <div>
       <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -140,20 +151,22 @@ export function SearchField({ label, value, onChange, onF3, placeholder, require
       </label>
       <div className="flex gap-2">
         <input
+          ref={inputRef}
           type="text"
           required={required}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "F3") { e.preventDefault(); onF3(); } }}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="flex-1 border-slate-300 rounded-lg shadow-sm focus:border-sky-400 text-sm py-2 px-3"
         />
         <button
           type="button"
           onClick={onF3}
-          title="F3 — بحث"
-          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 transition-colors flex-shrink-0"
+          title="اضغط F3 من الكيبورد أو انقر هنا"
+          className="px-3 py-2 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg text-xs font-bold text-sky-700 transition-colors flex-shrink-0 flex items-center gap-1"
         >
+          <Search className="w-3 h-3" />
           F3
         </button>
       </div>
