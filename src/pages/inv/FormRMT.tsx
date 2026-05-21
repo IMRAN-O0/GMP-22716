@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormRMT() {
   const { user } = useAuth();
@@ -12,6 +13,8 @@ export default function FormRMT() {
   const [issueRequests, setIssueRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [sysDate] = useState(new Date().toLocaleDateString("ar-EG"));
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     transactionId: generateSerialNumber(
@@ -25,12 +28,12 @@ export default function FormRMT() {
   });
 
   useEffect(() => {
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
 
-    fetch("/api/forms")
+    fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setIssueRequests(
@@ -43,6 +46,12 @@ export default function FormRMT() {
       })
       .catch(console.error);
   }, []);
+
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newItems = [...formData.items];
+    newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name };
+    setFormData({ ...formData, items: newItems });
+  };
 
   const addItem = () => {
     setFormData({
@@ -311,21 +320,22 @@ export default function FormRMT() {
                       className="border-b border-slate-100 bg-white last:border-0"
                     >
                       <td className="p-2 border-r border-slate-100">
-                        <input
-                          type="text"
-                          list="materials-list-rmt"
-                          required
-                          placeholder="ابحث بكود أو اسم المادة..."
-                          value={item.materialCode}
-                          onChange={(e) =>
-                            updateItem(
-                              i,
-                              "materialCode",
-                              formatMaterialCode(e.target.value),
-                            )
-                          }
-                          className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            required
+                            placeholder="الكود…"
+                            value={item.materialCode}
+                            onChange={(e) => updateItem(i, "materialCode", formatMaterialCode(e.target.value))}
+                            className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
+                          />
+                          <button
+                            type="button"
+                            title="F3 — بحث عن مادة"
+                            onClick={() => { setEditingItemIdx(i); setShowMaterialModal(true); }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
+                          >F3</button>
+                        </div>
                       </td>
                       <td className="p-2 border-r border-slate-100">
                         <input
@@ -365,11 +375,6 @@ export default function FormRMT() {
                   ))}
                 </tbody>
               </table>
-              <datalist id="materials-list-rmt">
-                {materials.map((m: any) => (
-                  <option key={m.id} value={`${m.code} - ${m.name}`} />
-                ))}
-              </datalist>
             </div>
           </div>
 
@@ -459,6 +464,26 @@ export default function FormRMT() {
           </button>
         </div>
       </form>
+      {showMaterialModal && editingItemIdx !== null && (
+        <SearchModal
+          title="بحث عن مادة (F3)"
+          items={materials}
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+            { key: "balance", label: "الرصيد", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            selectMaterialForRow(editingItemIdx!, m);
+            setShowMaterialModal(false);
+            setEditingItemIdx(null);
+          }}
+          onClose={() => { setShowMaterialModal(false); setEditingItemIdx(null); }}
+        />
+      )}
     </div>
   );
 }

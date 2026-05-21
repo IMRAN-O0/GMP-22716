@@ -2,12 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, Users, Star } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormQM003() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [materials, setMaterials] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
 
   const [formData, setFormData] = useState({
     evaluationDate: new Date().toISOString().split("T")[0],
@@ -25,12 +27,12 @@ export default function FormQM003() {
 
   useEffect(() => {
     // Fetch materials to show what is supplied
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
 
-    fetch("/api/suppliers")
+    fetch("/api/suppliers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => setSuppliers(data))
       .catch(console.error);
@@ -166,24 +168,15 @@ export default function FormQM003() {
               <label className="block text-sm font-semibold text-slate-700 mb-2">
                 اسم المورد / الشركة
               </label>
-              <input
-                type="text"
-                list="suppliers-list-qm003"
+              <SearchField
+                label=""
                 required
-                placeholder="ابحث بكود أو اسم المورد..."
-                className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={formData.supplierName}
-                onChange={(e) =>
-                  setFormData({ ...formData, supplierName: e.target.value })
-                }
+                onChange={(v) => setFormData({ ...formData, supplierName: v })}
+                onF3={() => setShowSupplierModal(true)}
+                placeholder="اكتب أو اضغط F3 للبحث…"
+                hint="F3 للبحث في قائمة الموردين"
               />
-              <datalist id="suppliers-list-qm003">
-                {suppliers && suppliers.map((s, i) => (
-                  <option key={i} value={s.name}>
-                    {s.code}
-                  </option>
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
@@ -416,6 +409,24 @@ export default function FormQM003() {
           </button>
         </div>
       </form>
+      {showSupplierModal && (
+        <SearchModal
+          title="بحث عن مورد (F3)"
+          items={suppliers}
+          columns={[
+            { key: "code", label: "كود المورد", className: "font-mono w-28" },
+            { key: "name", label: "اسم المورد" },
+            { key: "phone", label: "الهاتف", className: "w-32" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بكود أو اسم المورد…"
+          onSelect={(s) => {
+            setFormData({ ...formData, supplierName: s.name, supplierContact: s.phone || s.email || "" });
+            setShowSupplierModal(false);
+          }}
+          onClose={() => setShowSupplierModal(false)}
+        />
+      )}
     </div>
   );
 }

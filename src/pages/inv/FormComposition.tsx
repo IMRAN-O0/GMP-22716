@@ -3,12 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatMaterialCode } from "../../lib/utils";
 import { Save, ArrowRight, PlusCircle, Trash2, Beaker } from "lucide-react";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormComposition() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [finalProducts, setFinalProducts] = useState<any[]>([]);
   const [rawMaterialsList, setRawMaterialsList] = useState<any[]>([]);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     compositionNo: `BOM-${Math.floor(Date.now() / 1000)}`,
@@ -26,7 +30,7 @@ export default function FormComposition() {
   });
 
   useEffect(() => {
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setFinalProducts(data.filter((m: any) => m.category === "منتج نهائي"));
@@ -57,6 +61,12 @@ export default function FormComposition() {
   const updateMaterial = (index: number, field: string, value: string) => {
     const newMaterials = [...formData.materials];
     newMaterials[index] = { ...newMaterials[index], [field]: value };
+    setFormData((prev) => ({ ...prev, materials: newMaterials }));
+  };
+
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newMaterials = [...formData.materials];
+    newMaterials[idx] = { ...newMaterials[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "%" };
     setFormData((prev) => ({ ...prev, materials: newMaterials }));
   };
 
@@ -168,30 +178,21 @@ export default function FormComposition() {
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
                 اسم المنتج <span className="text-red-500">*</span>
               </label>
-              <input
+              <SearchField
+                label=""
                 required
-                type="text"
-                list="final-products-list"
-                placeholder="ابحث باسم المنتج أو الكود..."
                 value={formData.productCode}
-                onChange={(e) => {
-                  const currentVal = e.target.value;
-                  const codeMatch = currentVal.match(/^([A-Za-z0-9-]+) - /);
-                  const code = codeMatch ? codeMatch[1] : currentVal;
-                  const found = finalProducts.find((p: any) => p.code === code);
-                  setFormData({
-                    ...formData,
-                    productCode: formatMaterialCode(code),
-                    productName: found ? found.name : "",
-                  });
+                onChange={(v) => {
+                  const found = finalProducts.find((p: any) => p.code === v);
+                  setFormData({ ...formData, productCode: v, productName: found ? found.name : "" });
                 }}
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2"
+                onF3={() => setShowProductModal(true)}
+                placeholder="اكتب أو اضغط F3 للبحث…"
+                hint="F3 للبحث في المنتجات النهائية"
               />
-              <datalist id="final-products-list">
-                {finalProducts.map((p: any) => (
-                  <option key={p.id} value={`${p.code} - ${p.name}`} />
-                ))}
-              </datalist>
+              {formData.productName && (
+                <p className="text-xs text-emerald-600 mt-1 font-semibold">{formData.productName}</p>
+              )}
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -267,39 +268,33 @@ export default function FormComposition() {
                   formData.materials.map((material, i) => (
                     <tr key={i} className="hover:bg-slate-50">
                       <td className="p-2 border-r border-slate-100">
-                        <input
-                          required
-                          type="text"
-                          list="raw-mat-list"
-                          placeholder="ابحث..."
-                          value={material.materialCode}
-                          onChange={(e) => {
-                            const currentVal = e.target.value;
-                            const codeMatch =
-                              currentVal.match(/^([A-Za-z0-9-]+) - /);
-                            const code = codeMatch ? codeMatch[1] : currentVal;
-                            const found = rawMaterialsList.find(
-                              (m) => m.code === code,
-                            );
-                            const newMaterials = [...formData.materials];
-                            newMaterials[i] = {
-                              ...newMaterials[i],
-                              materialCode: formatMaterialCode(code),
-                              materialName: found
-                                ? found.name
-                                : material.materialName,
-                              unit:
-                                found && found.unit
-                                  ? found.unit
-                                  : material.unit,
-                            };
-                            setFormData((prev) => ({
-                              ...prev,
-                              materials: newMaterials,
-                            }));
-                          }}
-                          className="w-full bg-transparent border border-slate-200 focus:ring-1 focus:ring-emerald-500 rounded-lg text-sm py-1.5 px-2"
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            required
+                            type="text"
+                            placeholder="الكود…"
+                            value={material.materialCode}
+                            onChange={(e) => {
+                              const code = e.target.value;
+                              const found = rawMaterialsList.find((m) => m.code === code);
+                              const newMaterials = [...formData.materials];
+                              newMaterials[i] = {
+                                ...newMaterials[i],
+                                materialCode: code,
+                                materialName: found ? found.name : material.materialName,
+                                unit: found && found.unit ? found.unit : material.unit,
+                              };
+                              setFormData((prev) => ({ ...prev, materials: newMaterials }));
+                            }}
+                            className="w-full bg-transparent border border-slate-200 focus:ring-1 focus:ring-emerald-500 rounded-lg text-sm py-1.5 px-2"
+                          />
+                          <button
+                            type="button"
+                            title="F3 — بحث عن مادة"
+                            onClick={() => { setEditingMatIdx(i); setShowMaterialModal(true); }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
+                          >F3</button>
+                        </div>
                       </td>
                       <td className="p-2 border-r border-slate-100">
                         <input
@@ -377,14 +372,6 @@ export default function FormComposition() {
                   </tfoot>
                 )}
             </table>
-            <datalist id="raw-mat-list">
-              {rawMaterialsList.map((invMat) => (
-                <option
-                  key={invMat.id}
-                  value={`${invMat.code} - ${invMat.name}`}
-                />
-              ))}
-            </datalist>
           </div>
         </div>
 
@@ -441,6 +428,43 @@ export default function FormComposition() {
           </button>
         </div>
       </form>
+      {showProductModal && (
+        <SearchModal
+          title="بحث عن منتج نهائي (F3)"
+          items={finalProducts}
+          columns={[
+            { key: "code", label: "كود المنتج", className: "font-mono w-28" },
+            { key: "name", label: "اسم المنتج" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(p) => {
+            setFormData({ ...formData, productCode: p.code, productName: p.name });
+            setShowProductModal(false);
+          }}
+          onClose={() => setShowProductModal(false)}
+        />
+      )}
+      {showMaterialModal && editingMatIdx !== null && (
+        <SearchModal
+          title="بحث عن مادة خام (F3)"
+          items={rawMaterialsList}
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            selectMaterialForRow(editingMatIdx!, m);
+            setShowMaterialModal(false);
+            setEditingMatIdx(null);
+          }}
+          onClose={() => { setShowMaterialModal(false); setEditingMatIdx(null); }}
+        />
+      )}
     </div>
   );
 }
