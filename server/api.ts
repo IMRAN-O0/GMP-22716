@@ -624,8 +624,16 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
             r.supplier_name || "",
           ],
           function (e) {
-            if (e) errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`);
-            else inserted++;
+            if (e) { errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`); return insertNext(i + 1); }
+            inserted++;
+            // Auto-create supplier in suppliers table if not exists
+            if (r.supplier_name) {
+              const supCode = (r.code || "").split("-")[1] || "";
+              db.run(
+                `INSERT OR IGNORE INTO suppliers (code, name) VALUES (?, ?)`,
+                [supCode || `SUP-${Date.now()}`, r.supplier_name]
+              );
+            }
             insertNext(i + 1);
           }
         );
