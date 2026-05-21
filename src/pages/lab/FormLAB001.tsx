@@ -215,12 +215,26 @@ export default function FormLAB001() {
                 <select
                   className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   value={formData.productionOrderNo}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      productionOrderNo: e.target.value,
-                    })
-                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setFormData({ ...formData, productionOrderNo: "" });
+                      return;
+                    }
+                    const order = productionOrders.find((o) => o.record_id === val);
+                    if (order) {
+                      const oData = JSON.parse(order.data_json);
+                      setFormData({
+                        ...formData,
+                        productionOrderNo: val,
+                        itemCode: oData.itemNumber || oData.productCode || formData.itemCode,
+                        itemName: oData.productName || formData.itemName,
+                        batchNumber: oData.batchNumber || formData.batchNumber,
+                      });
+                    } else {
+                      setFormData({ ...formData, productionOrderNo: val });
+                    }
+                  }}
                 >
                   <option value="">-- بدون أمر إنتاج --</option>
                   {productionOrders.map((o) => {
