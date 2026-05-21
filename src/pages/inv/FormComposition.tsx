@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { formatMaterialCode } from "../../lib/utils";
+import { formatMaterialCode, formatProductCode } from "../../lib/utils";
 import { Save, ArrowRight, PlusCircle, Trash2, Beaker } from "lucide-react";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
@@ -183,12 +183,13 @@ export default function FormComposition() {
                 required
                 value={formData.productCode}
                 onChange={(v) => {
-                  const found = finalProducts.find((p: any) => p.code === v);
-                  setFormData({ ...formData, productCode: v, productName: found ? found.name : "" });
+                  const formatted = formatProductCode(v);
+                  const found = finalProducts.find((p: any) => p.code === formatted);
+                  setFormData({ ...formData, productCode: formatted, productName: found ? found.name : "" });
                 }}
                 onF3={() => setShowProductModal(true)}
-                placeholder="اكتب أو اضغط F3 للبحث…"
-                hint="F3 للبحث في المنتجات النهائية"
+                placeholder="FD-0001 أو اضغط F3…"
+                hint="F3 للبحث في المنتجات النهائية (FD-XXXX)"
               />
               {formData.productName && (
                 <p className="text-xs text-emerald-600 mt-1 font-semibold">{formData.productName}</p>

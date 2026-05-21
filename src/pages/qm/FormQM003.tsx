@@ -216,12 +216,18 @@ export default function FormQM003() {
               المواد الموردة من هذا المورد (من قائمة المخزون)
             </label>
             <div className="max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-lg p-3 grid grid-cols-2 gap-2">
-              {materials.length === 0 ? (
+              {materials.filter((m: any) =>
+                m.category !== "منتج نهائي" && m.category !== "Finished Product" &&
+                (!formData.supplierName || m.supplier_name === formData.supplierName)
+              ).length === 0 ? (
                 <div className="text-sm text-slate-500 p-2">
-                  لا توجد مواد مسجلة في المخزون.
+                  لا توجد مواد مسجلة لهذا المورد.
                 </div>
               ) : (
-                materials.map((m) => (
+                materials.filter((m: any) =>
+                  m.category !== "منتج نهائي" && m.category !== "Finished Product" &&
+                  (!formData.supplierName || m.supplier_name === formData.supplierName)
+                ).map((m) => (
                   <label
                     key={m.code}
                     className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer p-1 hover:bg-slate-50 rounded"

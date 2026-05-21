@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, formatProductCode } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormPRD001() {
@@ -309,12 +309,13 @@ export default function FormPRD001() {
               required
               value={formData.itemNumber}
               onChange={(v) => {
-                const foundProduct = products.find((p: any) => p.code === v);
-                setFormData({ ...formData, itemNumber: v, productName: foundProduct ? foundProduct.name : formData.productName });
+                const formatted = formatProductCode(v);
+                const foundProduct = products.find((p: any) => p.code === formatted);
+                setFormData({ ...formData, itemNumber: formatted, productName: foundProduct ? foundProduct.name : formData.productName });
               }}
               onF3={() => setShowProductModal(true)}
-              placeholder="اكتب أو اضغط F3 للبحث…"
-              hint="F3 للبحث في المنتجات النهائية"
+              placeholder="FD-0001 أو اضغط F3…"
+              hint="F3 للبحث في المنتجات النهائية (FD-XXXX)"
             />
           </div>
           <div>

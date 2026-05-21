@@ -63,11 +63,11 @@ export default function INVIndex() {
         <div className="flex gap-2 flex-wrap justify-end">
           {hasPerm("F-INV-RM-001") && (
             <Link
-              to="/inv/create-material"
+              to="/inv/create-final-product"
               className="flex items-center px-4 py-2 bg-white text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[13px] transition-colors border border-slate-200 shadow-sm"
             >
               <PlusCircle className="w-4 h-4 ml-2 text-sky-500" />
-              إضافة / تعديل منتج نهائي
+              إضافة / تعديل منتج نهائي (FD)
             </Link>
           )}
           {hasPerm("F-INV-RM-001") && (

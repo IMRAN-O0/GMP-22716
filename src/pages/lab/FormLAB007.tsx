@@ -51,9 +51,11 @@ export default function FormLAB007() {
   });
 
   const selectMaterialForRow = (idx: number, m: any) => {
-    const newItems = [...formData.items];
-    newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "" };
-    setFormData({ ...formData, items: newItems });
+    setFormData(prev => {
+      const newItems = [...prev.items];
+      newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "" };
+      return { ...prev, items: newItems };
+    });
   };
 
   const updateItem = (index: number, field: string, value: string) => {

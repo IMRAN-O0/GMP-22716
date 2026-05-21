@@ -29,6 +29,7 @@ import CreateWarehouse from './pages/inv/CreateWarehouse';
 import CreateMaterial from './pages/inv/CreateMaterial';
 import CreateSupplier from './pages/inv/CreateSupplier';
 import CreateCustomer from './pages/inv/CreateCustomer';
+import CreateFinalProduct from './pages/inv/CreateFinalProduct';
 import FormRM001 from './pages/inv/FormRM001';
 import FormPRQ001 from './pages/inv/FormPRQ001';
 import FormPIN001 from './pages/inv/FormPIN001';
@@ -111,6 +112,7 @@ export default function App() {
             <Route path="inv/create-material" element={<CreateMaterial />} />
             <Route path="inv/create-supplier" element={<CreateSupplier />} />
             <Route path="inv/create-customer" element={<CreateCustomer />} />
+            <Route path="inv/create-final-product" element={<CreateFinalProduct />} />
             <Route path="inv/rm-001" element={<FormRM001 />} />
             <Route path="inv/prq-001" element={<FormPRQ001 />} />
             <Route path="inv/pin-001" element={<FormPIN001 />} />
