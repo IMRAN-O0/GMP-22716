@@ -592,10 +592,16 @@ export default function FormPIN001() {
         />
       )}
 
+      {/* Material search modal — filtered by selected supplier */}
       {showMaterialModal && editingItemIdx !== null && (
         <SearchModal
-          title="بحث عن مادة (F3)"
-          items={materials}
+          title={formData.supplierName ? `مواد المورد: ${formData.supplierName} (F3)` : "بحث عن مادة (F3)"}
+          items={formData.supplierName
+            ? materials.filter((m: any) =>
+                m.supplier_name === formData.supplierName ||
+                m.supplierName === formData.supplierName
+              )
+            : materials}
           columns={[
             { key: "code", label: "كود المادة", className: "font-mono w-28" },
             { key: "name", label: "اسم المادة" },
