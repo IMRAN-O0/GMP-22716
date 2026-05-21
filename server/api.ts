@@ -644,6 +644,15 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
   });
 });
 
+// INV: Delete ALL Materials (admin only)
+router.delete("/materials", requireAuth, (req: any, res) => {
+  if (!req.user || req.user.level > 1) return res.status(403).json({ error: "للمدير فقط" });
+  getDb().run(`DELETE FROM materials`, [], function (err) {
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+    res.json({ success: true, deleted: this.changes });
+  });
+});
+
 // INV: Delete Material
 router.delete("/materials/:id", requireAuth, (req, res) => {
   getDb().run(

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateSerialNumber, formatMaterialCode, extractSupplierCode } from "../../lib/utils";
-import { Save, CheckCircle, Package, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { Save, CheckCircle, Package, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import * as XLSX from "xlsx";
 import { SearchModal, SearchField } from "../../components/SearchModal";
@@ -306,6 +306,25 @@ export default function FormRM001() {
   };
 
   // ── Submit bulk import ────────────────────────────────────────────────────
+  const handleDeleteAllMaterials = async () => {
+    if (!window.confirm("تحذير: سيتم حذف جميع المواد من قاعدة البيانات نهائياً. هل أنت متأكد؟")) return;
+    try {
+      const res = await fetch("/api/materials", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`تم حذف ${data.deleted} مادة بنجاح.`);
+        setMaterials([]);
+      } else {
+        alert("فشل الحذف: " + (data.error || ""));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleBulkImport = async () => {
     if (bulkRows.length === 0) return;
     setBulkImporting(true);
@@ -389,14 +408,26 @@ export default function FormRM001() {
                 <br />
                 <span className="text-amber-600 font-semibold">ملاحظة: رقم التشغيلة وتاريخ الانتهاء تُسجّل في فاتورة الشراء (PIN) عند الاستلام الفعلي.</span>
               </p>
-              <button
-                type="button"
-                onClick={downloadTemplate}
-                className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-emerald-700 transition-colors text-sm"
-              >
-                <Download className="w-4 h-4" />
-                تحميل نموذج Excel الجاهز
-              </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-emerald-700 transition-colors text-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  تحميل نموذج Excel الجاهز
+                </button>
+                {user?.level === 1 && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllMaterials}
+                    className="flex items-center gap-2 bg-rose-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-rose-700 transition-colors text-sm"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    حذف كل المواد (إعادة ضبط)
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Step 2: Upload file */}
