@@ -141,6 +141,12 @@ export default function FormPIN001() {
     setFormData({ ...formData, items: newItems });
   };
 
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newItems = [...formData.items];
+    newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "" };
+    setFormData({ ...formData, items: newItems });
+  };
+
   const calculateSubtotal = () => {
     return formData.items.reduce(
       (sum, item) =>
@@ -611,10 +617,9 @@ export default function FormPIN001() {
           searchKeys={["code", "name"]}
           placeholder="ابحث بالكود أو الاسم…"
           onSelect={(m) => {
-            const idx = editingItemIdx!;
-            updateItem(idx, "materialCode", m.code);
-            updateItem(idx, "materialName", m.name);
-            updateItem(idx, "unit", m.unit || "");
+            selectMaterialForRow(editingItemIdx!, m);
+            setShowMaterialModal(false);
+            setEditingItemIdx(null);
           }}
           onClose={() => { setShowMaterialModal(false); setEditingItemIdx(null); }}
         />

@@ -111,6 +111,12 @@ export default function FormPRQ001() {
     setFormData({ ...formData, items: newItems });
   };
 
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newItems = [...formData.items];
+    newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "" };
+    setFormData({ ...formData, items: newItems });
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -526,10 +532,9 @@ export default function FormPRQ001() {
           searchKeys={["code", "name"]}
           placeholder="ابحث بالكود أو الاسم…"
           onSelect={(m) => {
-            const idx = editingItemIdx!;
-            updateItem(idx, "materialCode", m.code);
-            updateItem(idx, "materialName", m.name);
-            updateItem(idx, "unit", m.unit || "");
+            selectMaterialForRow(editingItemIdx!, m);
+            setShowMaterialModal(false);
+            setEditingItemIdx(null);
           }}
           onClose={() => { setShowMaterialModal(false); setEditingItemIdx(null); }}
         />
