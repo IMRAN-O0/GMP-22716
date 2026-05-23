@@ -284,7 +284,9 @@ export default function UsersManagement() {
               department: "HR",
               level: 4,
               password: "",
+              permissions: {},
             });
+            setStep(1);
             setShowModal(true);
           }}
           className="bg-indigo-600 text-white px-4 py-2 rounded-xl flex items-center justify-center font-semibold hover:bg-indigo-700 transition"
@@ -557,16 +559,16 @@ export default function UsersManagement() {
                                   className="flex items-center gap-3 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition border border-slate-50"
                                 >
                                   <div
-                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${formData.permissions[item.id] ? "bg-indigo-600" : "bg-slate-300"}`}
+                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${(formData.permissions || {})[item.id] ? "bg-indigo-600" : "bg-slate-300"}`}
                                   >
                                     <span
-                                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${formData.permissions[item.id] ? "-translate-x-4" : "-translate-x-1"}`}
+                                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${(formData.permissions || {})[item.id] ? "-translate-x-4" : "-translate-x-1"}`}
                                     />
                                   </div>
                                   <input
                                     type="checkbox"
                                     className="sr-only"
-                                    checked={!!formData.permissions[item.id]}
+                                    checked={!!(formData.permissions || {})[item.id]}
                                     onChange={() => togglePermission(item.id)}
                                   />
                                   <span className="text-[13px] font-semibold text-slate-700">
