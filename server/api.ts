@@ -735,6 +735,18 @@ router.put("/materials/:id", requireAuth, (req, res) => {
   );
 });
 
+// INV: Patch balance only (admin level 1)
+router.patch("/materials/:id/balance", requireAuth, (req: any, res) => {
+  const user = req.user;
+  if (!user || user.level > 1) return res.status(403).json({ error: "المدير فقط" });
+  const newBalance = parseFloat(req.body.balance);
+  if (isNaN(newBalance) || newBalance < 0) return res.status(400).json({ error: "قيمة رصيد غير صحيحة" });
+  getDb().run("UPDATE materials SET balance = ? WHERE id = ?", [newBalance, req.params.id], function (err) {
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+    res.json({ success: true, balance: newBalance });
+  });
+});
+
 // INV: Search Material by Code
 router.get("/materials/search/:code", requireAuth, (req, res) => {
   const codeSearch = `%${req.params.code}%`;

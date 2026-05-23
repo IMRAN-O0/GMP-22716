@@ -137,6 +137,37 @@ const FIELD_LABELS: Record<string, string> = {
   fullName: "الاسم الكامل",
   joiningDate: "تاريخ الالتحاق",
   contractType: "نوع العقد",
+  // FP-002 (Finished Product Storage)
+  storageId: "رقم سجل التخزين",
+  warehouseLocation: "موقع التخزين / المستودع",
+  quantityStored: "الكمية المخزنة",
+  storageDate: "تاريخ التخزين",
+  // FP-003 (Shipment)
+  shipmentId: "رقم الشحنة",
+  customerName: "اسم العميل / الوجهة",
+  destinationAddress: "العنوان التفصيلي",
+  shippedQuantity: "الكمية المشحونة",
+  shipmentDate: "تاريخ الشحن",
+  transporterName: "اسم الناقل / السائق",
+  vehiclePlate: "رقم المركبة",
+  // FP-004 (Return)
+  returnId: "رقم الإرجاع",
+  returnedQuantity: "الكمية المرتجعة",
+  returnDate: "تاريخ الإرجاع",
+  returnReason: "سبب الإرجاع",
+  condition: "حالة المنتج المرتجع",
+  actionTaken: "الإجراء المتخذ",
+  // FP-005 (Disposal)
+  disposalId: "رقم إذن الإتلاف",
+  batchOrCode: "رقم الدفعة / كود المنتج",
+  disposalDate: "تاريخ الإتلاف",
+  disposalReason: "سبب الإتلاف",
+  disposalMethod: "طريقة الإتلاف",
+  // RMT (Material Transfer / Issue / Receive)
+  transactionId: "رقم الحركة",
+  transactionType: "نوع الحركة",
+  fromWarehouseId: "من المستودع",
+  toWarehouseId: "إلى المستودع",
   // Misc
   reference: "المرجع",
   referenceDocument: "وثيقة المرجع",

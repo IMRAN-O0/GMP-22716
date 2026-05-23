@@ -23,6 +23,7 @@ export default function INVIndex() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [forms, setForms] = useState<any[]>([]);
   const [balanceSearch, setBalanceSearch] = useState("");
+  const [editingBalance, setEditingBalance] = useState<{ id: number; val: string } | null>(null);
 
   const hasPerm = (id: string) => {
     if (!user) return false;
@@ -31,21 +32,21 @@ export default function INVIndex() {
   };
 
   useEffect(() => {
-    fetch("/api/warehouses")
+    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+    fetch("/api/warehouses", { headers })
       .then((r) => r.json())
-      .then((data) => setWarehouses(data))
+      .then((data) => setWarehouses(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/materials")
+    fetch("/api/materials", { headers })
       .then((r) => r.json())
-      .then((data) => setMaterials(data))
+      .then((data) => setMaterials(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/forms/dept/INV")
+    fetch("/api/forms/dept/INV", { headers })
       .then((r) => r.json())
-      .then((data) => {
-        setForms(data);
-      })
+      .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 
@@ -284,7 +285,41 @@ export default function INVIndex() {
                         </td>
                         <td className="px-3 py-2 text-slate-500">{m.unit}</td>
                         <td className={`px-3 py-2 font-bold ${isLow ? "text-red-600" : "text-slate-900"}`}>
-                          {m.balance}
+                          {user?.level === 1 && editingBalance?.id === m.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number" step="0.01" min="0"
+                                value={editingBalance.val}
+                                autoFocus
+                                onChange={e => setEditingBalance({ id: m.id, val: e.target.value })}
+                                onKeyDown={async e => {
+                                  if (e.key === "Enter") {
+                                    const newBal = parseFloat(editingBalance.val);
+                                    if (isNaN(newBal) || newBal < 0) return;
+                                    await fetch(`/api/materials/${m.id}/balance`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+                                      body: JSON.stringify({ balance: newBal }),
+                                    });
+                                    setMaterials(prev => prev.map(x => x.id === m.id ? { ...x, balance: newBal } : x));
+                                    setEditingBalance(null);
+                                  } else if (e.key === "Escape") {
+                                    setEditingBalance(null);
+                                  }
+                                }}
+                                className="w-20 border border-amber-400 rounded px-1 py-0.5 text-[12px] font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                              />
+                              <span className="text-[10px] text-slate-400">Enter</span>
+                            </div>
+                          ) : (
+                            <span
+                              onClick={() => user?.level === 1 ? setEditingBalance({ id: m.id, val: String(m.balance ?? 0) }) : undefined}
+                              className={user?.level === 1 ? "cursor-pointer hover:bg-amber-50 hover:text-amber-700 px-1 rounded" : ""}
+                              title={user?.level === 1 ? "انقر لتعديل الرصيد" : ""}
+                            >
+                              {m.balance}
+                            </span>
+                          )}
                           {isLow && <span className="text-[10px] text-red-500 block">منخفض</span>}
                         </td>
                         {user?.level <= 2 && (
