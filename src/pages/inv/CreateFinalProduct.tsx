@@ -3,7 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Plus, Pencil, Trash2, X, CheckCircle } from "lucide-react";
 import { formatProductCode } from "../../lib/utils";
 
-const EMPTY = { code: "FD-", name: "", name_en: "", unit: "كجم", description: "", warehouse_id: "", balance: 0 };
+const EMPTY = { code: "FD-", name: "", name_en: "", unit: "قطعة", description: "", warehouse_id: "", balance: 0, package_size: "", package_size_unit: "جم" };
 
 export default function CreateFinalProduct() {
   const { user } = useAuth();
@@ -114,7 +114,7 @@ export default function CreateFinalProduct() {
                 {canEdit && (
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
-                      <button onClick={() => setEditing({ ...p })}
+                      <button onClick={() => setEditing({ package_size: "", package_size_unit: "جم", ...p })}
                         className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors" title="تعديل">
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -185,7 +185,7 @@ export default function CreateFinalProduct() {
                 <div>
                   <label className="block text-[12px] font-semibold text-slate-600 mb-1">الوحدة</label>
                   <select
-                    value={editing.unit || "كجم"}
+                    value={editing.unit || "قطعة"}
                     onChange={(e) => setEditing({ ...editing, unit: e.target.value })}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   >
@@ -219,6 +219,39 @@ export default function CreateFinalProduct() {
                     onChange={(e) => setEditing({ ...editing, balance: parseFloat(e.target.value) || 0 })}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
                   />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1">
+                    حجم العبوة <span className="text-red-500">*</span>
+                    <span className="text-xs text-slate-400 font-normal mr-1">(وزن أو حجم الوحدة الواحدة)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      required
+                      min="0.001"
+                      step="0.001"
+                      placeholder="مثال: 300"
+                      value={editing.package_size || ""}
+                      onChange={(e) => setEditing({ ...editing, package_size: e.target.value })}
+                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    />
+                    <select
+                      value={editing.package_size_unit || "جم"}
+                      onChange={(e) => setEditing({ ...editing, package_size_unit: e.target.value })}
+                      className="w-24 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+                    >
+                      <option value="جم">جم</option>
+                      <option value="كجم">كجم</option>
+                      <option value="مل">مل</option>
+                      <option value="لتر">لتر</option>
+                    </select>
+                  </div>
+                  {editing.package_size && (
+                    <p className="text-[11px] text-sky-600 mt-1">
+                      مثال: أمر إنتاج 200 كجم ÷ {editing.package_size} {editing.package_size_unit || "جم"} = {Math.floor((200000 / (parseFloat(editing.package_size) * (editing.package_size_unit === "كجم" ? 1000 : editing.package_size_unit === "لتر" ? 1000 : 1))) * 100) / 100} {editing.unit || "قطعة"}
+                    </p>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <label className="block text-[12px] font-semibold text-slate-600 mb-1">الوصف</label>
