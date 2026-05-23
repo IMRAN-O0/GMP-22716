@@ -62,6 +62,11 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 5,
           name: "add_supplier_name_to_materials",
           up: `ALTER TABLE materials ADD COLUMN supplier_name TEXT DEFAULT '';`
+        },
+        {
+          version: 6,
+          name: "add_tax_number_to_suppliers",
+          up: `ALTER TABLE suppliers ADD COLUMN tax_number TEXT;`
         }
       ];
 
@@ -180,6 +185,7 @@ const createTables = async () => {
       phone TEXT,
       email TEXT,
       address TEXT,
+      tax_number TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS customers (

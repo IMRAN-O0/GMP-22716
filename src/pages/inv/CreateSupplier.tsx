@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { Plus, Pencil, Trash2, X, Save, CheckCircle } from "lucide-react";
 
-const EMPTY = { code: "", name: "", name_en: "", contact_person: "", phone: "", email: "", address: "" };
+const EMPTY = { code: "", name: "", name_en: "", contact_person: "", phone: "", email: "", address: "", tax_number: "" };
 
 export default function CreateSupplier() {
   const { user } = useAuth();
@@ -90,6 +90,7 @@ export default function CreateSupplier() {
               <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">المسؤول</th>
               <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">الهاتف</th>
               <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">البريد</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">الرقم الضريبي</th>
               {canEdit && <th className="px-4 py-3 w-24" />}
             </tr>
           </thead>
@@ -104,6 +105,7 @@ export default function CreateSupplier() {
                 <td className="px-4 py-3 text-slate-600">{s.contact_person || "—"}</td>
                 <td className="px-4 py-3 text-slate-600 ltr">{s.phone || "—"}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{s.email || "—"}</td>
+                <td className="px-4 py-3 text-slate-500 text-xs">{s.tax_number || "—"}</td>
                 {canEdit && (
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
@@ -139,12 +141,13 @@ export default function CreateSupplier() {
             <form onSubmit={handleSave} className="p-6">
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { key: "code", label: "كود المورد", required: true, placeholder: "مثال: 01 أو SUP-01", mono: true },
+                  { key: "code", label: "كود المورد (رقمان فقط)", required: true, placeholder: "مثال: 01", mono: true },
                   { key: "name", label: "اسم المورد", required: true, placeholder: "شركة المورد" },
                   { key: "name_en", label: "الاسم بالإنجليزية", placeholder: "Supplier Co." },
                   { key: "contact_person", label: "الشخص المسؤول", placeholder: "أحمد محمد" },
                   { key: "phone", label: "رقم الهاتف", placeholder: "+966..." },
                   { key: "email", label: "البريد الإلكتروني", placeholder: "contact@domain.com" },
+                  { key: "tax_number", label: "الرقم الضريبي", placeholder: "300XXXXXXXXX1003" },
                 ].map(({ key, label, required, placeholder, mono }) => (
                   <div key={key}>
                     <label className="block text-[12px] font-semibold text-slate-600 mb-1">
@@ -155,7 +158,14 @@ export default function CreateSupplier() {
                       required={required}
                       placeholder={placeholder}
                       value={(editing as any)[key] || ""}
-                      onChange={(e) => setEditing({ ...editing, [key]: e.target.value })}
+                      maxLength={key === "code" ? 2 : undefined}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (key === "code") {
+                          val = val.replace(/\D/g, "").slice(0, 2);
+                        }
+                        setEditing({ ...editing, [key]: val });
+                      }}
                       className={`w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400 ${mono ? "font-mono" : ""}`}
                     />
                   </div>

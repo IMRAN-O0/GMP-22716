@@ -713,10 +713,10 @@ router.get("/suppliers", requireAuth, (req, res) => {
 
 // INV: Create Supplier
 router.post("/suppliers", requireAuth, (req, res) => {
-  const { code, name, name_en, contact_person, phone, email, address } = req.body;
+  const { code, name, name_en, contact_person, phone, email, address, tax_number } = req.body;
   getDb().run(
-    `INSERT INTO suppliers (code, name, name_en, contact_person, phone, email, address) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [code, name, name_en, contact_person, phone, email, address],
+    `INSERT INTO suppliers (code, name, name_en, contact_person, phone, email, address, tax_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [code, name, name_en, contact_person, phone, email, address, tax_number || null],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
@@ -736,10 +736,10 @@ router.delete("/suppliers/:id", requireAuth, (req: any, res) => {
 // INV: Update Supplier
 router.put("/suppliers/:id", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
-  const { code, name, name_en, contact_person, phone, email, address } = req.body;
+  const { code, name, name_en, contact_person, phone, email, address, tax_number } = req.body;
   getDb().run(
-    `UPDATE suppliers SET code=?, name=?, name_en=?, contact_person=?, phone=?, email=?, address=? WHERE id=?`,
-    [code, name, name_en, contact_person, phone, email, address, req.params.id],
+    `UPDATE suppliers SET code=?, name=?, name_en=?, contact_person=?, phone=?, email=?, address=?, tax_number=? WHERE id=?`,
+    [code, name, name_en, contact_person, phone, email, address, tax_number || null, req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });

@@ -11,6 +11,7 @@ export default function FormRMT() {
 
   const [materials, setMaterials] = useState<any[]>([]);
   const [issueRequests, setIssueRequests] = useState<any[]>([]);
+  const [pinForms, setPinForms] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [sysDate] = useState(new Date().toLocaleDateString("ar-EG"));
   const [showMaterialModal, setShowMaterialModal] = useState(false);
@@ -42,6 +43,9 @@ export default function FormRMT() {
               (f.form_id === "F-PRD-001" || f.form_id === "F-LAB-007") &&
               f.status === "approved",
           ),
+        );
+        setPinForms(
+          data.filter((f: any) => f.form_id === "F-INV-PIN-001" && f.status === "approved"),
         );
       })
       .catch(console.error);
@@ -267,19 +271,43 @@ export default function FormRMT() {
             ) : (
               <>
                 <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-                  المستند المرجعي (فاتورة، أمر إنتاج...)
+                  ربط بفاتورة شراء (PIN) — اختياري
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.referenceDocument}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      referenceDocument: e.target.value,
-                    })
-                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setFormData((prev: any) => ({ ...prev, referenceDocument: "" }));
+                      return;
+                    }
+                    const pin = pinForms.find((f: any) => f.record_id === val);
+                    if (pin) {
+                      const pinData = pin.data || {};
+                      const newItems = Array.isArray(pinData.items) && pinData.items.length > 0
+                        ? pinData.items.map((itm: any) => ({
+                            materialCode: itm.materialCode || "",
+                            materialName: itm.materialName || "",
+                            quantity: itm.quantity || itm.receivedQuantity || "",
+                          }))
+                        : [{ materialCode: "", materialName: "", quantity: "" }];
+                      setFormData((prev: any) => ({ ...prev, referenceDocument: val, items: newItems }));
+                    } else {
+                      setFormData((prev: any) => ({ ...prev, referenceDocument: val }));
+                    }
+                  }}
                   className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
-                />
+                >
+                  <option value="">-- بدون ربط بفاتورة شراء --</option>
+                  {pinForms.map((f: any) => {
+                    const d = f.data || {};
+                    return (
+                      <option key={f.record_id} value={f.record_id}>
+                        {f.record_id} — {d.supplierName || ""}
+                      </option>
+                    );
+                  })}
+                </select>
               </>
             )}
           </div>

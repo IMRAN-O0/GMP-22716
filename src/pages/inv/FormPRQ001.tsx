@@ -45,7 +45,7 @@ export default function FormPRQ001() {
 
     fetch("/api/warehouses", { headers: h })
       .then((r) => r.json())
-      .then((data) => { setWarehouses(Array.isArray(data) ? data : []); })
+      .then((data) => { setWarehouses(Array.isArray(data) ? data.filter((w: any) => w.id && w.name && w.name !== "0") : []); })
       .catch(console.error);
 
     fetch("/api/suppliers", { headers: h })
@@ -518,10 +518,18 @@ export default function FormPRQ001() {
         <SearchModal
           title={formData.supplierName ? `مواد المورد: ${formData.supplierName} (F3)` : "بحث عن مادة (F3)"}
           items={formData.supplierName
-            ? materials.filter((m: any) =>
-                m.supplier_name === formData.supplierName ||
-                m.supplierName === formData.supplierName
-              )
+            ? (() => {
+                const sup = suppliers.find((s: any) => s.name === formData.supplierName);
+                return materials.filter((m: any) => {
+                  if (m.supplier_name === formData.supplierName) return true;
+                  if (m.supplierName === formData.supplierName) return true;
+                  if (sup?.code && m.code) {
+                    const codeStr = String(sup.code).padStart(2, "0");
+                    return m.code.endsWith(`-${codeStr}`) || m.code.endsWith(`-${sup.code}`);
+                  }
+                  return false;
+                });
+              })()
             : materials}
           columns={[
             { key: "code", label: "كود المادة", className: "font-mono w-28" },

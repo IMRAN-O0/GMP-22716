@@ -45,7 +45,7 @@ export default function FormPIN001() {
 
     fetch("/api/warehouses", { headers: h })
       .then((r) => r.json())
-      .then((data) => { setWarehouses(Array.isArray(data) ? data : []); })
+      .then((data) => { setWarehouses(Array.isArray(data) ? data.filter((w: any) => w.id && w.name && w.name !== "0") : []); })
       .catch(console.error);
 
     fetch("/api/suppliers", { headers: h })

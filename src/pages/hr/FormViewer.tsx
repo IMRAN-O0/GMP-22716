@@ -232,13 +232,20 @@ export default function FormViewer() {
         @media print {
           @page {
             size: A4 ${isLandscape ? "landscape" : "portrait"};
-            margin: 15mm 12mm 15mm 12mm;
+            margin: 8mm 6mm;
           }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 9pt !important; }
           .print\\:hidden { display: none !important; }
           .print\\:border-none { border: none !important; }
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:rounded-none { border-radius: 0 !important; }
+          table { font-size: 8pt !important; }
+          th, td { padding: 3px 5px !important; font-size: 8pt !important; }
+          h1 { font-size: 13pt !important; }
+          h2 { font-size: 11pt !important; }
+          p, span, div { font-size: 9pt; }
+          /* Keep signature block on same page */
+          .px-8.pb-6 { page-break-inside: avoid; }
         }
       `}</style>
       {/* Action Bar - hidden on print */}
