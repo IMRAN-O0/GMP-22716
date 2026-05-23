@@ -95,12 +95,12 @@ export default function FormFP001() {
 
     const d = order.data;
     const productCode = d.itemNumber || d.productCode || "";
-    const productionQty = parseFloat(d.actualQuantity || d.plannedQuantity) || 0;
+    const productionQty = parseFloat(d.actualQuantity || d.plannedQuantity || d.requiredBatchSize) || 0;
     const productionUnit = d.quantityUnit || d.unit || "كجم";
 
     // Fetch material package size
     let matInfo: any = null;
-    let relQty = String(productionQty || "");
+    let relQty = "";
     if (productCode) {
       try {
         const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
@@ -109,7 +109,7 @@ export default function FormFP001() {
           matInfo = await res.json();
           if (matInfo.packageSize && matInfo.packageSize > 0 && productionQty > 0) {
             const units = calcUnits(productionQty, productionUnit, matInfo.packageSize, matInfo.packageSizeUnit || matInfo.package_size_unit || "جم");
-            relQty = String(Math.floor(units * 100) / 100); // round to 2 decimal
+            relQty = String(Math.floor(units * 100) / 100);
           }
         }
       } catch { /* ignore */ }
@@ -209,10 +209,12 @@ export default function FormFP001() {
               <p className="text-[11px] text-sky-600 mt-1 font-semibold">
                 حساب تلقائي: {(formData as any).productionQty} {(formData as any).productionUnit} ÷ {materialInfo.packageSize} {materialInfo.packageSizeUnit || materialInfo.package_size_unit} = {formData.releasedQuantity} {materialInfo.unit || "قطعة"}
               </p>
-            ) : (
-              <p className="text-[11px] text-slate-400 mt-1">
-                {materialInfo ? "لم يُحدد حجم العبوة في تعريف المنتج — الكمية من أمر الإنتاج مباشرة" : "من أمر الإنتاج"}
+            ) : materialInfo ? (
+              <p className="text-[11px] text-rose-500 mt-1 font-semibold">
+                ⚠ يجب تحديد حجم العبوة في تعريف المنتج أولاً (إدارة المنتجات النهائية → تعديل {formData.productCode})
               </p>
+            ) : (
+              <p className="text-[11px] text-slate-400 mt-1">يُحسب تلقائياً بعد اختيار أمر الإنتاج</p>
             )}
           </div>
 
