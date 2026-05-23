@@ -35,7 +35,7 @@ export default function ReportEnvMonitoring() {
                 temp: Number(reading.temperature || reading.temp) || 0,
                 humidity: Number(reading.humidity) || 0,
                 status:
-                  reading.withinLimits === "لا" ? "Out of Spec" : "Within Spec",
+                  reading.withinLimits === "لا" ? "خارج الحدود" : "ضمن الحدود",
                 recorder: r.data.observerName || "---",
               });
             });
@@ -82,7 +82,7 @@ export default function ReportEnvMonitoring() {
                 y={25}
                 stroke="red"
                 strokeDasharray="3 3"
-                label="Temp Max"
+                label="الحد الأقصى للحرارة"
               />
               <Line
                 yAxisId="left"
@@ -132,7 +132,7 @@ export default function ReportEnvMonitoring() {
                   key={i}
                   className={
                     "hover:bg-slate-50 " +
-                    (d.status === "Out of Spec" ? "bg-red-50" : "")
+                    (d.status === "خارج الحدود" ? "bg-red-50" : "")
                   }
                 >
                   <td className="p-3 font-semibold text-slate-700">
@@ -159,7 +159,7 @@ export default function ReportEnvMonitoring() {
                     <span
                       className={
                         "px-2 py-1 rounded text-xs font-bold " +
-                        (d.status === "Within Spec"
+                        (d.status === "ضمن الحدود"
                           ? "text-green-700 bg-green-100"
                           : "text-red-700 bg-red-100")
                       }

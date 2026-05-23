@@ -191,9 +191,9 @@ export default function ReportTransactions() {
             className="border border-slate-300 rounded-lg p-2 outline-none focus:border-blue-500 w-full md:w-auto"
           >
             <option value="ALL">جميع الحركات</option>
-            <option value="RECEIVE">استلام (Receive)</option>
-            <option value="ISSUE">صرف (Issue)</option>
-            <option value="TRANSFER">تحويل (Transfer)</option>
+            <option value="RECEIVE">وارد (استلام)</option>
+            <option value="ISSUE">منصرف (صرف)</option>
+            <option value="TRANSFER">تحويل داخلي</option>
           </select>
         </div>
         <div className="overflow-x-auto">

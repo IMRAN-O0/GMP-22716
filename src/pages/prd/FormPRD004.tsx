@@ -215,8 +215,8 @@ export default function FormPRD004() {
               <tr>
                 <th className="p-3 border-r border-slate-200">الوقت</th>
                 <th className="p-3 border-r border-slate-200 w-1/4">
-                  المعيار (Parameter)
-                </th>
+                  المعيار
+</th>
                 <th className="p-3 border-r border-slate-200">
                   القيمة المطلوبة
                 </th>

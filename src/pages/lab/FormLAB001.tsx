@@ -171,7 +171,7 @@ export default function FormLAB001() {
                 >
                   <option value="Raw Material">مادة خام</option>
                   <option value="Finished Product">منتج نهائي</option>
-                  <option value="In-Process">قيد التصنيع (WIP)</option>
+                  <option value="In-Process">قيد التصنيع</option>
                   <option value="Packaging">مواد تعبئة وتغليف</option>
                 </select>
               </div>
@@ -200,7 +200,7 @@ export default function FormLAB001() {
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  رقم التشغيلة / الدفعة (Batch/Lot){" "}
+                  رقم التشغيلة / الدفعة{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input

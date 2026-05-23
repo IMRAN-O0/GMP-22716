@@ -198,7 +198,7 @@ export default function FormLAB004() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  رقم التشغيلة / الدفعة (Batch/Lot)
+                  رقم التشغيلة / الدفعة
                 </label>
                 <input
                   type="text"
@@ -276,7 +276,7 @@ export default function FormLAB004() {
 
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                ملاحظات / استنتاجات (Remarks)
+                ملاحظات / استنتاجات
               </label>
               <textarea
                 rows={3}
