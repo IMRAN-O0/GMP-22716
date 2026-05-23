@@ -90,6 +90,21 @@ export default function ReportTransactions() {
                 });
               });
             }
+          } else if (record.form_id === "F-FP-001" && fd.qcStatus !== "Rejected") {
+            const code = getMaterialName(fd.productCode || fd.batchNumber || "—");
+            const qty = parseFloat(fd.releasedQuantity || fd.actualQuantity || fd.plannedQuantity) || 0;
+            if (qty > 0) {
+              rows.push({
+                id: record.record_id,
+                date: fd.releaseDate || (record.created_at ? record.created_at.split("T")[0] : "—"),
+                type: "RECEIVE",
+                material_code: code,
+                quantity: qty,
+                warehouse: fd.warehouseId || "—",
+                reference: `إطلاق دفعة — ${fd.batchNumber || ""}`,
+                createdBy: record.creator_id,
+              });
+            }
           } else if (record.form_id === "F-FP-002") {
             rows.push({
               id: record.record_id,
