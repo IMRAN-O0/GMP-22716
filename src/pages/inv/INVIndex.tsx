@@ -231,20 +231,45 @@ export default function INVIndex() {
 
         {/* Data Table */}
         <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col lg:col-span-3" style={{maxHeight: "420px"}}>
-          <div className="px-4 py-3 flex justify-between items-center border-b border-slate-100 flex-shrink-0">
+          <div className="px-4 py-3 flex justify-between items-center border-b border-slate-100 flex-shrink-0 gap-2 flex-wrap">
             <span className="text-[15px] font-bold text-slate-900">
               أرصدة الأصناف
               <span className="text-[12px] font-normal text-slate-400 mr-2">({materials.filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch)).length} صنف)</span>
             </span>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="بحث باسم أو كود..."
-                value={balanceSearch}
-                onChange={(e) => setBalanceSearch(e.target.value)}
-                className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] w-48 focus:ring-sky-400 focus:border-sky-400 text-slate-600"
-              />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+            <div className="flex gap-2 items-center">
+              {user?.level === 1 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm("سيتم مزامنة جميع الأرصدة من السجلات المعتمدة. هل تريد المتابعة؟")) return;
+                    const res = await fetch("/api/materials/sync-from-transactions", {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                      alert(`تمت المزامنة — تم تحديث ${result.updated} مادة.`);
+                      fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+                        .then(r => r.json()).then(d => setMaterials(Array.isArray(d) ? d : []));
+                    } else {
+                      alert("فشل: " + result.error);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-lg text-[12px] font-semibold hover:bg-sky-100"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" /> مزامنة الأرصدة
+                </button>
+              )}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="بحث باسم أو كود..."
+                  value={balanceSearch}
+                  onChange={(e) => setBalanceSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] w-48 focus:ring-sky-400 focus:border-sky-400 text-slate-600"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              </div>
             </div>
           </div>
           <div className="overflow-auto flex-1">
@@ -374,18 +399,6 @@ export default function INVIndex() {
               <p className="text-sm text-slate-500 mt-1">
                 الإفراج عن دفعة (Batch Release)
               </p>
-            </Link>
-          )}
-          {hasPerm("F-FP-002") && (
-            <Link
-              to="/inv/fp-002"
-              className="bg-white border text-center border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-sky-300 transition-all flex flex-col items-center group"
-            >
-              <div className="w-12 h-12 bg-sky-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Package className="text-sky-500 w-6 h-6" />
-              </div>
-              <h4 className="font-bold text-slate-800">F-FP-002</h4>
-              <p className="text-sm text-slate-500 mt-1">تخزين المنتجات</p>
             </Link>
           )}
           {hasPerm("F-FP-003") && (

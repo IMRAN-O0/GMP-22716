@@ -191,6 +191,13 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     );
   };
 
+  // 3a. F-FP-001 (Batch Release) - Add released quantity to finished product balance
+  if (fId === "F-FP-001" && data.qcStatus !== "Rejected") {
+    const code = data.productCode;
+    const qty = parseFloat(data.releasedQuantity || data.actualQuantity || data.plannedQuantity) || 0;
+    if (code && qty > 0) updateFPBalance(code, data.batchNumber, qty, 1, data.releaseId || fId, 'FP_RELEASE');
+  }
+
   // 3. F-FP-002 (Finished Product Storage) - Add to balance
   if (fId === "F-FP-002" && data.quantityStored) {
     const qty = parseFloat(data.quantityStored) || 0;
@@ -744,6 +751,143 @@ router.patch("/materials/:id/balance", requireAuth, (req: any, res) => {
   getDb().run("UPDATE materials SET balance = ? WHERE id = ?", [newBalance, req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true, balance: newBalance });
+  });
+});
+
+// INV: Sync all material balances from approved transaction records (admin only)
+router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) => {
+  const user = req.user;
+  if (!user || user.level > 1) return res.status(403).json({ error: "المدير فقط" });
+
+  const db = getDb();
+  db.all("SELECT * FROM forms_records WHERE status = 'approved' ORDER BY created_at ASC", [], (err, rows: any[]) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const balances: Record<string, number> = {};
+
+    // Build PRD-001 lookup maps
+    const prd001ById: Record<string, any> = {};
+    const prd001ByBatch: Record<string, string> = {}; // batchNumber -> productCode (itemNumber)
+    rows.filter((r: any) => r.form_id === "F-PRD-001").forEach((r: any) => {
+      try {
+        const d = JSON.parse(r.data_json || "{}");
+        prd001ById[r.record_id] = d;
+        if (d.batchNumber && d.itemNumber) prd001ByBatch[d.batchNumber] = d.itemNumber;
+      } catch { /* skip */ }
+    });
+
+    // Helper: resolve finished-product code from productCode or batchNumber
+    const fpCode = (d: any): string | undefined =>
+      d.productCode || (d.batchNumber ? prd001ByBatch[d.batchNumber] : undefined);
+
+    for (const row of rows as any[]) {
+      const fId: string = row.form_id;
+      let d: any;
+      try { d = JSON.parse(row.data_json || "{}"); } catch { continue; }
+
+      // RM-001 / MAT: opening balance (set ONLY on first occurrence per code)
+      if ((fId === "F-INV-RM-001" || fId === "F-INV-MAT") && d.code) {
+        if (!(d.code in balances)) {
+          balances[d.code] = parseFloat(d.balance) || 0;
+        }
+      }
+
+      // PIN: add purchased quantities
+      else if (fId === "F-INV-PIN-001" && Array.isArray(d.items)) {
+        d.items.forEach((item: any) => {
+          const qty = parseFloat(item.quantity) || 0;
+          if (item.materialCode && qty > 0) {
+            balances[item.materialCode] = (balances[item.materialCode] || 0) + qty;
+          }
+        });
+      }
+
+      // RMT: receive or issue (skip receive if linked to PIN — already counted)
+      else if (fId === "F-INV-RMT-001" && Array.isArray(d.items)) {
+        if (d.transactionType === "Receive" && d.referenceDocument && /^PIN-/i.test(String(d.referenceDocument))) {
+          continue; // PIN already updated balance
+        }
+        const mult = d.transactionType === "Receive" ? 1 : -1;
+        d.items.forEach((item: any) => {
+          const qty = parseFloat(item.quantity) || 0;
+          if (item.materialCode && qty > 0) {
+            balances[item.materialCode] = Math.max(0, (balances[item.materialCode] || 0) + qty * mult);
+          }
+        });
+      }
+
+      // PRD-002: deduct raw materials used in production (read from linked PRD-001 ONLY)
+      else if (fId === "F-PRD-002" && d.productionOrderNo) {
+        const prd1 = prd001ById[d.productionOrderNo];
+        if (prd1 && Array.isArray(prd1.rawMaterials)) {
+          prd1.rawMaterials.forEach((mat: any) => {
+            const qty = parseFloat(mat.quantity) || 0;
+            if (mat.materialCode && qty > 0) {
+              balances[mat.materialCode] = Math.max(0, (balances[mat.materialCode] || 0) - qty);
+            }
+          });
+        }
+      }
+
+      // FP-001 (NEW): batch release adds finished product to balance
+      else if (fId === "F-FP-001" && d.qcStatus !== "Rejected") {
+        const code = fpCode(d);
+        const qty = parseFloat(d.releasedQuantity || d.actualQuantity || d.plannedQuantity) || 0;
+        if (code && qty > 0) {
+          balances[code] = (balances[code] || 0) + qty;
+        }
+      }
+
+      // FP-002 (legacy): storage adds finished product (keep for old data)
+      else if (fId === "F-FP-002") {
+        const code = fpCode(d);
+        const qty = parseFloat(d.quantityStored) || 0;
+        if (code && qty > 0) {
+          balances[code] = (balances[code] || 0) + qty;
+        }
+      }
+
+      // FP-003: shipment deducts from balance
+      else if (fId === "F-FP-003") {
+        const code = fpCode(d);
+        const qty = parseFloat(d.shippedQuantity) || 0;
+        if (code && qty > 0) {
+          balances[code] = Math.max(0, (balances[code] || 0) - qty);
+        }
+      }
+
+      // FP-004: return adds back to balance
+      else if (fId === "F-FP-004") {
+        const code = fpCode(d);
+        const qty = parseFloat(d.returnedQuantity) || 0;
+        if (code && qty > 0) {
+          balances[code] = (balances[code] || 0) + qty;
+        }
+      }
+
+      // FP-005: disposal deducts from balance
+      else if (fId === "F-FP-005" && d.batchOrCode) {
+        const qty = parseFloat(d.quantity) || 0;
+        if (qty > 0) {
+          balances[d.batchOrCode] = Math.max(0, (balances[d.batchOrCode] || 0) - qty);
+        }
+      }
+    }
+
+    // Apply computed balances
+    const entries = Object.entries(balances);
+    if (entries.length === 0) return res.json({ success: true, updated: 0, balances: {} });
+
+    db.serialize(() => {
+      db.run("BEGIN TRANSACTION");
+      entries.forEach(([code, bal]) => {
+        db.run("UPDATE materials SET balance = ? WHERE code = ?", [Math.max(0, bal), code]);
+      });
+      db.run("COMMIT", (commitErr) => {
+        if (commitErr) { db.run("ROLLBACK"); return res.status(500).json({ error: "فشل تطبيق التحديثات" }); }
+        res.json({ success: true, updated: entries.length, balances });
+      });
+    });
   });
 });
 

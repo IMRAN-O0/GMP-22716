@@ -35,7 +35,6 @@ import FormPRQ001 from './pages/inv/FormPRQ001';
 import FormPIN001 from './pages/inv/FormPIN001';
 import FormRMT from './pages/inv/FormRMT';
 import FormFP001 from './pages/inv/FormFP001';
-import FormFP002 from './pages/inv/FormFP002';
 import FormFP003 from './pages/inv/FormFP003';
 import FormFP004 from './pages/inv/FormFP004';
 import FormFP005 from './pages/inv/FormFP005';
@@ -118,7 +117,6 @@ export default function App() {
             <Route path="inv/pin-001" element={<FormPIN001 />} />
             <Route path="inv/rmt" element={<FormRMT />} />
             <Route path="inv/fp-001" element={<FormFP001 />} />
-            <Route path="inv/fp-002" element={<FormFP002 />} />
             <Route path="inv/fp-003" element={<FormFP003 />} />
             <Route path="inv/fp-004" element={<FormFP004 />} />
             <Route path="inv/fp-005" element={<FormFP005 />} />
