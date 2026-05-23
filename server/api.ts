@@ -203,6 +203,70 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     );
   }
 
+  // 5. F-FP-003 (Shipment) - Deduct shipped quantity from finished product balance
+  if (fId === "F-FP-003" && data.batchNumber && data.shippedQuantity) {
+    const qty = parseFloat(data.shippedQuantity) || 0;
+    if (qty > 0) {
+      getDb().all(
+        "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
+        [],
+        (err, prdRows: any[]) => {
+          if (!err && prdRows) {
+            for (const prdRow of prdRows) {
+              try {
+                const prdData = JSON.parse(prdRow.data_json || "{}");
+                if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
+                  const db = getDb();
+                  db.serialize(() => {
+                    db.run("BEGIN TRANSACTION");
+                    db.run(
+                      `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`,
+                      [qty, prdData.itemNumber]
+                    );
+                    db.run("COMMIT", (commitErr) => { if (commitErr) db.run("ROLLBACK"); });
+                  });
+                  break;
+                }
+              } catch (e) { /* ignore */ }
+            }
+          }
+        }
+      );
+    }
+  }
+
+  // 6. F-FP-004 (Return) - Add returned quantity back to finished product balance
+  if (fId === "F-FP-004" && data.batchNumber && data.returnedQuantity) {
+    const qty = parseFloat(data.returnedQuantity) || 0;
+    if (qty > 0) {
+      getDb().all(
+        "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
+        [],
+        (err, prdRows: any[]) => {
+          if (!err && prdRows) {
+            for (const prdRow of prdRows) {
+              try {
+                const prdData = JSON.parse(prdRow.data_json || "{}");
+                if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
+                  const db = getDb();
+                  db.serialize(() => {
+                    db.run("BEGIN TRANSACTION");
+                    db.run(
+                      `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
+                      [qty, prdData.itemNumber]
+                    );
+                    db.run("COMMIT", (commitErr) => { if (commitErr) db.run("ROLLBACK"); });
+                  });
+                  break;
+                }
+              } catch (e) { /* ignore */ }
+            }
+          }
+        }
+      );
+    }
+  }
+
   // Auto-create CAPA for DEV-001 when capaRequired is true
   if (fId === "F-DEV-001" && data.capaRequired === true) {
     const capaId = `CAPA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;

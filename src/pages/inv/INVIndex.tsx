@@ -22,6 +22,7 @@ export default function INVIndex() {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [forms, setForms] = useState<any[]>([]);
+  const [balanceSearch, setBalanceSearch] = useState("");
 
   const hasPerm = (id: string) => {
     if (!user) return false;
@@ -228,62 +229,66 @@ export default function INVIndex() {
         </div>
 
         {/* Data Table */}
-        <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col pt-2 lg:col-span-3">
-          <div className="px-6 py-4 flex justify-between items-center mb-2">
-            <span className="text-[16px] font-bold text-slate-900">
+        <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col lg:col-span-3" style={{maxHeight: "420px"}}>
+          <div className="px-4 py-3 flex justify-between items-center border-b border-slate-100 flex-shrink-0">
+            <span className="text-[15px] font-bold text-slate-900">
               أرصدة الأصناف
+              <span className="text-[12px] font-normal text-slate-400 mr-2">({materials.filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch)).length} صنف)</span>
             </span>
             <div className="relative">
               <input
                 type="text"
-                placeholder="بحث باسم أو كود المادة..."
-                className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-[14px] w-64 focus:ring-sky-400 focus:border-sky-400 text-slate-500"
+                placeholder="بحث باسم أو كود..."
+                value={balanceSearch}
+                onChange={(e) => setBalanceSearch(e.target.value)}
+                className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] w-48 focus:ring-sky-400 focus:border-sky-400 text-slate-600"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto flex-1">
             <table className="w-full text-right border-collapse">
-              <thead className="bg-white text-slate-500 text-[13px] font-semibold">
+              <thead className="bg-slate-50 text-slate-500 text-[12px] font-semibold sticky top-0 z-10">
                 <tr>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">كود المادة</th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">اسم ووصف المادة</th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">موقع المستودع</th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">الوحدة</th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">الرصيد</th>
-                  {user?.level <= 2 && <th className="px-6 py-4 font-semibold border-b border-slate-100 text-center w-16">حذف</th>}
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">كود المادة</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">اسم المادة</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">المستودع</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">الوحدة</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">الرصيد</th>
+                  {user?.level <= 2 && <th className="px-3 py-2.5 font-semibold border-b border-slate-100 text-center w-12">حذف</th>}
                 </tr>
               </thead>
-              <tbody className="text-[14px] text-slate-600">
+              <tbody className="text-[13px] text-slate-600">
                 {materials.length === 0 ? (
                   <tr>
-                    <td colSpan={user?.level <= 2 ? 6 : 5} className="px-6 py-8 text-center text-slate-400">
+                    <td colSpan={user?.level <= 2 ? 6 : 5} className="px-4 py-6 text-center text-slate-400">
                       لا توجد مواد مسجلة حتى الآن
                     </td>
                   </tr>
                 ) : (
-                  materials.map((m, i) => {
+                  materials
+                    .filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch))
+                    .map((m, i) => {
                     const warehouse = warehouses.find((w) => w.id === m.warehouse_id);
                     const isLow = m.minBalance && m.balance <= m.minBalance;
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
-                        <td className="px-6 py-4 font-mono font-bold text-sky-600">{m.code}</td>
-                        <td className="px-6 py-4">
-                          <span className="font-bold text-slate-800 block">{m.name}</span>
-                          <span className="text-xs text-slate-400">{m.description}</span>
+                        <td className="px-3 py-2 font-mono font-bold text-sky-600 text-[12px]">{m.code}</td>
+                        <td className="px-3 py-2">
+                          <span className="font-semibold text-slate-800">{m.name}</span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[11px] font-bold">
+                        <td className="px-3 py-2">
+                          <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-bold">
                             {warehouse ? warehouse.name : "غير محدد"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">{m.unit}</td>
-                        <td className={`px-6 py-4 font-bold ${isLow ? "text-red-600" : "text-slate-900"}`}>
+                        <td className="px-3 py-2 text-slate-500">{m.unit}</td>
+                        <td className={`px-3 py-2 font-bold ${isLow ? "text-red-600" : "text-slate-900"}`}>
                           {m.balance}
-                          {isLow && <span className="text-[10px] text-red-500 block">مخزون منخفض</span>}
+                          {isLow && <span className="text-[10px] text-red-500 block">منخفض</span>}
                         </td>
                         {user?.level <= 2 && (
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-3 py-2 text-center">
                             <button
                               type="button"
                               onClick={async () => {
@@ -299,10 +304,10 @@ export default function INVIndex() {
                                   alert("فشل الحذف: " + err.error);
                                 }
                               }}
-                              className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                              className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors"
                               title="حذف المادة"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
                         )}

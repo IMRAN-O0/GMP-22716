@@ -105,6 +105,26 @@ const FIELD_LABELS: Record<string, string> = {
   employeeId: "رقم الموظف",
   score: "الدرجة",
   result: "النتيجة",
+  // PRD-003 Production Checklist
+  auditorName: "اسم المراجع",
+  checksBefore: "فحوصات قبل الإنتاج",
+  checksDuring: "فحوصات أثناء الإنتاج",
+  checksAfter: "فحوصات بعد الإنتاج",
+  cleanMachine: "نظافة الآلة",
+  materialsReady: "المواد جاهزة",
+  areaClear: "المنطقة خالية",
+  tempNormal: "درجة الحرارة طبيعية",
+  noLeaks: "لا توجد تسربات",
+  speedNormal: "السرعة طبيعية",
+  machineOff: "إيقاف الآلة",
+  areaCleaned: "تنظيف المنطقة",
+  productHandedOver: "تسليم المنتج",
+  // PRD-004 Process Monitoring
+  readings: "القراءات",
+  parameter: "المعامل / المعيار",
+  requiredValue: "القيمة المطلوبة",
+  actualValue: "القيمة الفعلية",
+  withinLimits: "ضمن الحدود",
   // Lab
   sampleId: "رقم العينة",
   testDate: "تاريخ الفحص",
@@ -435,6 +455,26 @@ export default function FormViewer() {
                               {Object.values(item).map((v: any, j: number) => (
                                 <td key={j} className="p-2.5 border-l border-slate-100 last:border-l-0">{String(v ?? "—")}</td>
                               ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+                return (
+                  <div key={idx} className="col-span-2 mt-2">
+                    <div className="bg-slate-700 text-white px-4 py-2 font-bold text-[13px] rounded-t-lg">{translateKey(key)}</div>
+                    <div className="border border-slate-200 rounded-b-lg overflow-hidden">
+                      <table className="w-full text-right border-collapse text-[13px]">
+                        <tbody>
+                          {Object.entries(val as Record<string, any>).map(([k, v], j) => (
+                            <tr key={j} className="border-b border-slate-100 last:border-0">
+                              <td className="p-2.5 font-semibold text-slate-600 border-l border-slate-100 w-1/2">{translateKey(k)}</td>
+                              <td className="p-2.5 font-bold text-slate-900">{typeof v === "boolean" ? (v ? "✓ نعم" : "✗ لا") : String(v ?? "—")}</td>
                             </tr>
                           ))}
                         </tbody>

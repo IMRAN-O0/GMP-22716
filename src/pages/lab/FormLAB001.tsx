@@ -10,6 +10,7 @@ export default function FormLAB001() {
   const navigate = useNavigate();
 
   const [materials, setMaterials] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
 
@@ -17,6 +18,10 @@ export default function FormLAB001() {
     fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
+      .catch(console.error);
+    fetch("/api/warehouses", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      .then((r) => r.json())
+      .then((data) => setWarehouses(data))
       .catch(console.error);
     fetch("/api/forms/dept/PRD", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
@@ -367,7 +372,17 @@ export default function FormLAB001() {
           title="بحث عن مادة (F3)"
           items={
             formData.sampleType === "Raw Material"
-              ? materials.filter((m: any) => m.category === "مادة خام" || m.category === "Raw Material")
+              ? (() => {
+                  const rawWhIds = new Set(
+                    warehouses
+                      .filter((w: any) => w.name && (w.name.includes("خام") || /raw/i.test(w.name)))
+                      .map((w: any) => w.id)
+                  );
+                  return materials.filter((m: any) =>
+                    (m.category === "مادة خام" || m.category === "Raw Material") &&
+                    (rawWhIds.size === 0 || rawWhIds.has(m.warehouse_id))
+                  );
+                })()
               : formData.sampleType === "Packaging"
               ? materials.filter((m: any) => m.category === "مواد تعبئة وتغليف" || m.category === "Packaging")
               : formData.sampleType === "Finished Product"
