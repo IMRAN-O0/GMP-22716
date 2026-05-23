@@ -25,6 +25,14 @@ export const formatProductCode = (value: string): string => {
     return `FD-${digits.slice(0, 4)}`;
 };
 
+// BOM/Composition code: AH-XXXX (user types 4 digits, AH- is always prepended)
+export const formatBOMCode = (value: string): string => {
+    const withoutPrefix = value.replace(/^AH-?/i, '');
+    const digits = withoutPrefix.replace(/\D/g, '');
+    if (digits.length === 0) return 'AH-';
+    return `AH-${digits.slice(0, 4)}`;
+};
+
 // Extract supplier code (last 2 digits after dash) from material code XXXX-YY
 export const extractSupplierCode = (code: string): string => {
     const match = code.match(/\d{4}-(\d{2})$/);

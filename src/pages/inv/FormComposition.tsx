@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { formatMaterialCode, formatProductCode } from "../../lib/utils";
+import { formatMaterialCode, formatProductCode, formatBOMCode } from "../../lib/utils";
 import { Save, ArrowRight, PlusCircle, Trash2, Beaker } from "lucide-react";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
@@ -15,7 +15,7 @@ export default function FormComposition() {
   const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
-    compositionNo: `BOM-${Math.floor(Date.now() / 1000)}`,
+    compositionNo: `AH-${String(Math.floor(Math.random() * 9000) + 1000)}`,
     productCode: "",
     productName: "",
     version: "1.0",
@@ -157,10 +157,21 @@ export default function FormComposition() {
             </div>
           </div>
         </div>
-        <div className="text-left">
-          <p className="text-[12px] font-bold text-slate-500">
-            رقم السجل: {formData.compositionNo}
-          </p>
+        <div className="flex items-center gap-2 text-left">
+          <span className="text-[12px] font-bold text-slate-500">رقم التركيبة:</span>
+          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+            <span className="bg-emerald-50 text-emerald-700 font-bold text-[12px] px-2 py-1 border-l border-slate-200">AH-</span>
+            <input
+              type="text"
+              maxLength={4}
+              value={formData.compositionNo.replace(/^AH-/i, "")}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                setFormData({ ...formData, compositionNo: `AH-${digits}` });
+              }}
+              className="w-14 text-center font-mono font-bold text-[13px] text-slate-800 border-0 focus:ring-0 py-1 bg-white"
+            />
+          </div>
         </div>
       </div>
 

@@ -110,6 +110,12 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
   // 2. RMT (Material Receive/Issue) - Add or Subtract (wrapped in transaction)
   if (fId === "F-INV-RMT-001" && Array.isArray(data.items)) {
     const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
+    // Skip balance update for Receive linked to a PIN (PIN already updated the balance)
+    if (data.transactionType === "Receive" &&
+        data.referenceDocument &&
+        /^PIN-/i.test(String(data.referenceDocument))) {
+      return;
+    }
     const db = getDb();
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
