@@ -90,79 +90,111 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     );
   }
 
-  // 1. PIN (Purchase Invoice) - Add to balance (wrapped in transaction)
+  // Helper: log to inventory_transactions
+  const logTxn = (type: string, materialCode: string, qty: number, unit: string, batchNo: string, refId: string) => {
+    const txnId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    getDb().run(
+      `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, reference_record_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+      [txnId, type, materialCode, qty, unit, batchNo, refId]
+    );
+  };
+
+  // 1. PIN (Purchase Invoice) - Add to balance
   if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
     const db = getDb();
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       data.items.forEach((item: any) => {
-        if (item.materialCode && item.quantity) {
-          db.run(
-            `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-            [parseFloat(item.quantity) || 0, item.materialCode]
-          );
+        const qty = parseFloat(item.quantity) || 0;
+        if (item.materialCode && qty > 0) {
+          db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty, item.materialCode]);
         }
       });
       db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
     });
+    // Log each item
+    data.items.forEach((item: any) => {
+      const qty = parseFloat(item.quantity) || 0;
+      if (item.materialCode && qty > 0) logTxn('RECEIVE', item.materialCode, qty, item.unit || '', '', fId);
+    });
   }
 
-  // 2. RMT (Material Receive/Issue) - Add or Subtract (wrapped in transaction)
+  // 2. RMT (Material Receive/Issue) - Add or Subtract
   if (fId === "F-INV-RMT-001" && Array.isArray(data.items)) {
-    const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
     // Skip balance update for Receive linked to a PIN (PIN already updated the balance)
     if (data.transactionType === "Receive" &&
         data.referenceDocument &&
         /^PIN-/i.test(String(data.referenceDocument))) {
+      // Still log the receipt for audit trail
+      data.items.forEach((item: any) => {
+        const qty = parseFloat(item.quantity) || 0;
+        if (item.materialCode && qty > 0) logTxn('RECEIVE_PIN', item.materialCode, qty, item.unit || '', '', data.referenceDocument);
+      });
       return;
     }
+    const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
+    const txnType = data.transactionType === "Receive" ? "RECEIVE" : "ISSUE";
     const db = getDb();
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       data.items.forEach((item: any) => {
-        if (item.materialCode && item.quantity) {
-          db.run(
-            `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-            [(parseFloat(item.quantity) || 0) * qtyMultiplier, item.materialCode]
-          );
+        const qty = parseFloat(item.quantity) || 0;
+        if (item.materialCode && qty > 0) {
+          db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty * qtyMultiplier, item.materialCode]);
         }
       });
       db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
     });
+    data.items.forEach((item: any) => {
+      const qty = parseFloat(item.quantity) || 0;
+      if (item.materialCode && qty > 0) logTxn(txnType, item.materialCode, qty, item.unit || '', '', data.referenceDocument || fId);
+    });
   }
 
-  // 3. F-FP-002 (Finished Product Storage) - Add to balance (wrapped in transaction inside callback)
-  if (fId === "F-FP-002" && data.batchNumber && data.quantityStored) {
-    const qty = parseFloat(data.quantityStored) || 0;
-    if (qty > 0) {
-      getDb().all(
-        "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
-        [],
-        (err, prdRows: any[]) => {
-          if (!err && prdRows) {
-            for (const prdRow of prdRows) {
-              try {
-                const prdData = JSON.parse(prdRow.data_json || "{}");
-                if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
-                  const db = getDb();
-                  db.serialize(() => {
-                    db.run("BEGIN TRANSACTION");
-                    db.run(
-                      `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-                      [qty, prdData.itemNumber]
-                    );
-                    db.run("COMMIT", (commitErr) => { if (commitErr) db.run("ROLLBACK"); });
-                  });
-                  break;
-                }
-              } catch (e) {
-                // ignore json parse error
-              }
-            }
-          }
-        }
-      );
+  // Helper: update FP balance using productCode directly (with fallback to PRD-001 lookup)
+  const updateFPBalance = (productCode: string | undefined, batchNumber: string | undefined, qty: number, direction: 1 | -1, refId: string, txnType: string) => {
+    const applyUpdate = (code: string) => {
+      const db = getDb();
+      const sql = direction > 0
+        ? `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`
+        : `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`;
+      db.serialize(() => {
+        db.run("BEGIN TRANSACTION");
+        db.run(sql, [qty, code]);
+        db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
+      });
+      logTxn(txnType, code, qty, '', batchNumber || '', refId);
+    };
+
+    // If productCode is stored directly, use it
+    if (productCode) {
+      applyUpdate(productCode);
+      return;
     }
+    // Fallback: lookup via PRD-001 batchNumber
+    if (!batchNumber) return;
+    getDb().all(
+      "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
+      [],
+      (err, rows: any[]) => {
+        if (err || !rows) return;
+        for (const row of rows) {
+          try {
+            const prd = JSON.parse(row.data_json || "{}");
+            if (prd.batchNumber === batchNumber && prd.itemNumber) {
+              applyUpdate(prd.itemNumber);
+              break;
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    );
+  };
+
+  // 3. F-FP-002 (Finished Product Storage) - Add to balance
+  if (fId === "F-FP-002" && data.quantityStored) {
+    const qty = parseFloat(data.quantityStored) || 0;
+    if (qty > 0) updateFPBalance(data.productCode, data.batchNumber, qty, 1, data.storageId || fId, 'FP_RECEIVE');
   }
 
   // 4. F-PRD-002 (Batch Manufacturing Record) - Deduct raw materials from inventory
@@ -179,22 +211,16 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
           db.serialize(() => {
             db.run("BEGIN TRANSACTION");
             rawMaterials.forEach((mat: any) => {
-              if (mat.materialCode && mat.quantity) {
-                const qty = parseFloat(mat.quantity) || 0;
-                if (qty > 0) {
-                  db.run(
-                    `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`,
-                    [qty, mat.materialCode]
-                  );
-                  const txnId = `PRD-${Date.now()}-${mat.materialCode}`;
-                  db.run(
-                    `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, reference_record_id, status) VALUES (?, 'ISSUE', ?, ?, ?, ?, ?, 'confirmed')`,
-                    [txnId, mat.materialCode, qty, mat.unit || '', data.batchNumber || '', data.productionOrderNo]
-                  );
-                }
+              const qty = parseFloat(mat.quantity) || 0;
+              if (mat.materialCode && qty > 0) {
+                db.run(`UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`, [qty, mat.materialCode]);
               }
             });
             db.run("COMMIT");
+          });
+          rawMaterials.forEach((mat: any) => {
+            const qty = parseFloat(mat.quantity) || 0;
+            if (mat.materialCode && qty > 0) logTxn('ISSUE', mat.materialCode, qty, mat.unit || '', data.batchNumber || '', data.productionOrderNo);
           });
         } catch (e) {
           console.error("PRD002 material deduction error:", e);
@@ -204,66 +230,27 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
   }
 
   // 5. F-FP-003 (Shipment) - Deduct shipped quantity from finished product balance
-  if (fId === "F-FP-003" && data.batchNumber && data.shippedQuantity) {
+  if (fId === "F-FP-003" && data.shippedQuantity) {
     const qty = parseFloat(data.shippedQuantity) || 0;
-    if (qty > 0) {
-      getDb().all(
-        "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
-        [],
-        (err, prdRows: any[]) => {
-          if (!err && prdRows) {
-            for (const prdRow of prdRows) {
-              try {
-                const prdData = JSON.parse(prdRow.data_json || "{}");
-                if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
-                  const db = getDb();
-                  db.serialize(() => {
-                    db.run("BEGIN TRANSACTION");
-                    db.run(
-                      `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`,
-                      [qty, prdData.itemNumber]
-                    );
-                    db.run("COMMIT", (commitErr) => { if (commitErr) db.run("ROLLBACK"); });
-                  });
-                  break;
-                }
-              } catch (e) { /* ignore */ }
-            }
-          }
-        }
-      );
-    }
+    if (qty > 0) updateFPBalance(data.productCode, data.batchNumber, qty, -1, data.shipmentId || fId, 'FP_ISSUE');
   }
 
-  // 6. F-FP-004 (Return) - Add returned quantity back to finished product balance
-  if (fId === "F-FP-004" && data.batchNumber && data.returnedQuantity) {
+  // 6. F-FP-004 (Return) - Add returned quantity to finished product balance
+  if (fId === "F-FP-004" && data.returnedQuantity) {
     const qty = parseFloat(data.returnedQuantity) || 0;
+    if (qty > 0) updateFPBalance(data.productCode, data.batchNumber, qty, 1, data.returnId || fId, 'FP_RETURN');
+  }
+
+  // 7. F-FP-005 (Disposal) - Deduct disposed quantity from balance
+  if (fId === "F-FP-005" && data.batchOrCode && data.quantity) {
+    const qty = parseFloat(data.quantity) || 0;
     if (qty > 0) {
-      getDb().all(
-        "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
-        [],
-        (err, prdRows: any[]) => {
-          if (!err && prdRows) {
-            for (const prdRow of prdRows) {
-              try {
-                const prdData = JSON.parse(prdRow.data_json || "{}");
-                if (prdData.batchNumber === data.batchNumber && prdData.itemNumber) {
-                  const db = getDb();
-                  db.serialize(() => {
-                    db.run("BEGIN TRANSACTION");
-                    db.run(
-                      `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`,
-                      [qty, prdData.itemNumber]
-                    );
-                    db.run("COMMIT", (commitErr) => { if (commitErr) db.run("ROLLBACK"); });
-                  });
-                  break;
-                }
-              } catch (e) { /* ignore */ }
-            }
-          }
+      getDb().get(`SELECT code FROM materials WHERE code = ?`, [data.batchOrCode], (err, row: any) => {
+        if (row) {
+          getDb().run(`UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`, [qty, data.batchOrCode]);
+          logTxn('DISPOSAL', data.batchOrCode, qty, '', data.batchOrCode, data.disposalId || fId);
         }
-      );
+      });
     }
   }
 
@@ -1691,7 +1678,7 @@ router.get("/reports/inv/transactions", requireAuth, (req, res) => {
   if (!hasReportAccess(user, "INV", "REP-INV-TRN")) {
     return res.status(403).json({ error: "Unauthorized" });
   }
-  const query = `SELECT * FROM forms_records WHERE department = 'INV' AND status = 'approved' AND form_id IN ('F-INV-RM-001', 'F-INV-PIN-001', 'F-INV-RMT-001', 'F-FP-002', 'F-FP-003', 'F-FP-004', 'F-FP-005') ORDER BY created_at DESC`;
+  const query = `SELECT * FROM forms_records WHERE status = 'approved' AND form_id IN ('F-INV-RM-001', 'F-INV-MAT', 'F-INV-PIN-001', 'F-INV-RMT-001', 'F-FP-002', 'F-FP-003', 'F-FP-004', 'F-FP-005', 'F-PRD-002') ORDER BY created_at DESC`;
   getDb().all(query, [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(
