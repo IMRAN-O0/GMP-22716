@@ -621,11 +621,12 @@ router.post("/materials", requireAuth, async (req, res) => {
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }
-  const { code, name, name_en, category, description, unit, warehouse_id, balance } =
+  const { code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit } =
     req.body;
   getDb().run(
-    `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [code, name, name_en, category, description, unit, warehouse_id, balance],
+    `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [code, name, name_en, category, description, unit, warehouse_id, balance,
+     package_size ? parseFloat(package_size) : null, package_size_unit || null],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
@@ -735,10 +736,11 @@ router.delete("/materials/:id", requireAuth, (req, res) => {
 
 // INV: Update Material
 router.put("/materials/:id", requireAuth, (req, res) => {
-  const { code, name, name_en, category, description, unit, warehouse_id, balance } = req.body;
+  const { code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit } = req.body;
   getDb().run(
-    `UPDATE materials SET code=?, name=?, name_en=?, category=?, description=?, unit=?, warehouse_id=?, balance=? WHERE id=?`,
-    [code, name, name_en, category, description, unit, warehouse_id, balance, req.params.id],
+    `UPDATE materials SET code=?, name=?, name_en=?, category=?, description=?, unit=?, warehouse_id=?, balance=?, package_size=?, package_size_unit=? WHERE id=?`,
+    [code, name, name_en, category, description, unit, warehouse_id, balance,
+     package_size ? parseFloat(package_size) : null, package_size_unit || null, req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
