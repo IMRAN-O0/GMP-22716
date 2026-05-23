@@ -23,9 +23,11 @@ export default function CreateMaterial() {
     name_en: "",
     category: "منتج نهائي",
     description: "",
-    unit: "كجم",
+    unit: "قطعة",
     warehouse_id: "",
     balance: 0,
+    packageSize: "" as string | number,
+    packageSizeUnit: "جم",
   });
 
   useEffect(() => {
@@ -302,17 +304,47 @@ export default function CreateMaterial() {
             <select
               required
               value={formData.unit}
-              onChange={(e) =>
-                setFormData({ ...formData, unit: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
             >
+              <option>قطعة</option>
+              <option>علبة</option>
               <option>كجم</option>
               <option>جرام</option>
               <option>لتر</option>
               <option>مل</option>
-              <option>قطعة</option>
             </select>
+          </div>
+
+          {/* Package Size — for finished products sold as pieces/boxes */}
+          <div>
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+              حجم العبوة
+              <span className="text-slate-400 font-normal mr-1">(للمنتجات المعبأة — يستخدم لحساب عدد القطع)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number" min="0.001" step="0.001"
+                placeholder="مثال: 300"
+                value={formData.packageSize}
+                onChange={e => setFormData({ ...formData, packageSize: e.target.value })}
+                className="flex-1 border-slate-300 rounded-lg shadow-sm focus:border-sky-400 text-sm py-2"
+              />
+              <select
+                value={formData.packageSizeUnit}
+                onChange={e => setFormData({ ...formData, packageSizeUnit: e.target.value })}
+                className="w-28 border-slate-300 rounded-lg shadow-sm focus:border-sky-400 text-sm py-2"
+              >
+                <option value="جم">جم</option>
+                <option value="كجم">كجم</option>
+                <option value="مل">مل</option>
+                <option value="لتر">لتر</option>
+                <option value="قطعة">قطعة</option>
+              </select>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              مثال: 300 جم → يعني كل علبة تزن 300 جم، فإنتاج 200 كجم = 666 علبة
+            </p>
           </div>
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">

@@ -67,6 +67,16 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 6,
           name: "add_tax_number_to_suppliers",
           up: `ALTER TABLE suppliers ADD COLUMN tax_number TEXT;`
+        },
+        {
+          version: 7,
+          name: "add_package_size_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN package_size REAL DEFAULT NULL;`
+        },
+        {
+          version: 8,
+          name: "add_package_size_unit_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN package_size_unit TEXT DEFAULT NULL;`
         }
       ];
 

@@ -54,15 +54,17 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     data
   ) {
     getDb().run(
-      `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(code) DO UPDATE SET
          name = excluded.name,
          name_en = excluded.name_en,
          category = excluded.category,
          description = excluded.description,
          unit = excluded.unit,
-         warehouse_id = excluded.warehouse_id`,
+         warehouse_id = excluded.warehouse_id,
+         package_size = excluded.package_size,
+         package_size_unit = excluded.package_size_unit`,
       [
         data.code,
         data.name,
@@ -72,6 +74,8 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
         data.unit,
         data.warehouse_id || null,
         data.balance || 0,
+        data.packageSize ? parseFloat(data.packageSize) : null,
+        data.packageSizeUnit || null,
       ],
     );
   }
@@ -739,6 +743,19 @@ router.put("/materials/:id", requireAuth, (req, res) => {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
     },
+  );
+});
+
+// INV: Get material by code (used by FP-001 for package size calculation)
+router.get("/materials/by-code/:code", requireAuth, (req, res) => {
+  getDb().get(
+    "SELECT *, package_size as packageSize, package_size_unit as packageSizeUnit FROM materials WHERE code = ?",
+    [req.params.code],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      if (!row) return res.status(404).json({ error: "not found" });
+      res.json(row);
+    }
   );
 });
 

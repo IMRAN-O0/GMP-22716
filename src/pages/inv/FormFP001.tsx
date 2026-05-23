@@ -11,6 +11,7 @@ export default function FormFP001() {
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [company, setCompany] = useState<any>({});
+  const [materialInfo, setMaterialInfo] = useState<any>(null); // package size info
 
   const [formData, setFormData] = useState({
     releaseId: generateSerialNumber("REL", Math.floor(Math.random() * 10000)),
@@ -49,24 +50,82 @@ export default function FormFP001() {
     }
   }, []);
 
-  const handleOrderChange = (val: string) => {
+  // Convert quantity to base unit (g or ml)
+  const toBase = (qty: number, unit: string): number => {
+    switch (unit?.toLowerCase()) {
+      case "كجم": case "kg": return qty * 1000;
+      case "جم": case "جرام": case "g": return qty;
+      case "مجم": case "mg": return qty / 1000;
+      case "لتر": case "l": case "liter": return qty * 1000;
+      case "مل": case "ml": return qty;
+      default: return qty; // same unit — no conversion
+    }
+  };
+
+  const calcUnits = (productionQty: number, productionUnit: string, pkgSize: number, pkgUnit: string): number => {
+    // If units are the same, divide directly
+    if (!pkgSize || pkgSize <= 0) return productionQty;
+    const prodBase = toBase(productionQty, productionUnit);
+    const pkgBase = toBase(pkgSize, pkgUnit);
+    // If both converted to same base (g or ml), divide
+    const wt = ["كجم","kg","جم","جرام","g","مجم","mg"];
+    const vol = ["لتر","l","liter","مل","ml"];
+    const prodIsWeight = wt.some(u => u === productionUnit?.toLowerCase() || productionUnit === u);
+    const pkgIsWeight = wt.some(u => u === pkgUnit?.toLowerCase() || pkgUnit === u);
+    const prodIsVol = vol.some(u => u === productionUnit?.toLowerCase() || productionUnit === u);
+    const pkgIsVol = vol.some(u => u === pkgUnit?.toLowerCase() || pkgUnit === u);
+    if ((prodIsWeight && pkgIsWeight) || (prodIsVol && pkgIsVol)) {
+      return prodBase / pkgBase;
+    }
+    // fallback: direct division without unit conversion
+    return productionQty / pkgSize;
+  };
+
+  const handleOrderChange = async (val: string) => {
     const codeMatch = val.match(/^([A-Za-z0-9-]+) - /);
     const selectedOrderNo = codeMatch ? codeMatch[1] : val;
     const order = productionOrders.find(
       (o) => o.data?.productionOrderNo === selectedOrderNo || o.record_id === selectedOrderNo
     );
-    if (order?.data) {
-      setFormData(prev => ({
-        ...prev,
-        productionOrderNo: selectedOrderNo,
-        productName: order.data.productName || "",
-        batchNumber: order.data.batchNumber || "",
-        productCode: order.data.itemNumber || order.data.productCode || "",
-        releasedQuantity: String(order.data.actualQuantity || order.data.plannedQuantity || ""),
-      }));
-    } else {
+    if (!order?.data) {
+      setMaterialInfo(null);
       setFormData(prev => ({ ...prev, productionOrderNo: selectedOrderNo, productName: "", batchNumber: "", productCode: "", releasedQuantity: "" }));
+      return;
     }
+
+    const d = order.data;
+    const productCode = d.itemNumber || d.productCode || "";
+    const productionQty = parseFloat(d.actualQuantity || d.plannedQuantity) || 0;
+    const productionUnit = d.quantityUnit || d.unit || "كجم";
+
+    // Fetch material package size
+    let matInfo: any = null;
+    let relQty = String(productionQty || "");
+    if (productCode) {
+      try {
+        const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+        const res = await fetch(`/api/materials/by-code/${encodeURIComponent(productCode)}`, { headers });
+        if (res.ok) {
+          matInfo = await res.json();
+          if (matInfo.packageSize && matInfo.packageSize > 0 && productionQty > 0) {
+            const units = calcUnits(productionQty, productionUnit, matInfo.packageSize, matInfo.packageSizeUnit || matInfo.package_size_unit || "جم");
+            relQty = String(Math.floor(units * 100) / 100); // round to 2 decimal
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    setMaterialInfo(matInfo);
+    setFormData(prev => ({
+      ...prev,
+      productionOrderNo: selectedOrderNo,
+      productName: d.productName || "",
+      batchNumber: d.batchNumber || "",
+      productCode,
+      releasedQuantity: relQty,
+      productionQty: String(productionQty),
+      productionUnit,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent, status: any) => {
@@ -141,11 +200,20 @@ export default function FormFP001() {
               className="w-full border-slate-200 bg-slate-50 rounded-lg shadow-sm text-sm py-2 text-slate-500" />
           </div>
           <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">الكمية المُفرج عنها <span className="text-red-500">*</span></label>
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+              الكمية المُفرج عنها ({materialInfo ? (materialInfo.unit || "قطعة") : "وحدة"}) <span className="text-red-500">*</span>
+            </label>
             <input type="number" readOnly disabled value={formData.releasedQuantity}
-              className="w-full border-slate-200 bg-amber-50 rounded-lg shadow-sm text-sm py-2 font-bold text-amber-800 border-amber-200"
-              title="الكمية محددة من أمر الإنتاج" />
-            <p className="text-[11px] text-slate-400 mt-1">محددة من أمر الإنتاج — لا يمكن تعديلها</p>
+              className="w-full border-slate-200 bg-amber-50 rounded-lg shadow-sm text-sm py-2 font-bold text-amber-800 border-amber-200" />
+            {materialInfo?.packageSize ? (
+              <p className="text-[11px] text-sky-600 mt-1 font-semibold">
+                حساب تلقائي: {(formData as any).productionQty} {(formData as any).productionUnit} ÷ {materialInfo.packageSize} {materialInfo.packageSizeUnit || materialInfo.package_size_unit} = {formData.releasedQuantity} {materialInfo.unit || "قطعة"}
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-400 mt-1">
+                {materialInfo ? "لم يُحدد حجم العبوة في تعريف المنتج — الكمية من أمر الإنتاج مباشرة" : "من أمر الإنتاج"}
+              </p>
+            )}
           </div>
 
           <div>
