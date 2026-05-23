@@ -31,20 +31,22 @@ export default function INVIndex() {
   };
 
   useEffect(() => {
-    fetch("/api/warehouses")
+    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+    fetch("/api/warehouses", { headers })
       .then((r) => r.json())
-      .then((data) => setWarehouses(data))
+      .then((data) => setWarehouses(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/materials")
+    fetch("/api/materials", { headers })
       .then((r) => r.json())
-      .then((data) => setMaterials(data))
+      .then((data) => setMaterials(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/forms/dept/INV")
+    fetch("/api/forms/dept/INV", { headers })
       .then((r) => r.json())
       .then((data) => {
-        setForms(data);
+        setForms(Array.isArray(data) ? data : []);
       })
       .catch(console.error);
   }, []);
@@ -230,20 +232,46 @@ export default function INVIndex() {
 
         {/* Data Table */}
         <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col lg:col-span-3" style={{maxHeight: "420px"}}>
-          <div className="px-4 py-3 flex justify-between items-center border-b border-slate-100 flex-shrink-0">
+          <div className="px-4 py-3 flex justify-between items-center border-b border-slate-100 flex-shrink-0 gap-2 flex-wrap">
             <span className="text-[15px] font-bold text-slate-900">
               أرصدة الأصناف
               <span className="text-[12px] font-normal text-slate-400 mr-2">({materials.filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch)).length} صنف)</span>
             </span>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="بحث باسم أو كود..."
-                value={balanceSearch}
-                onChange={(e) => setBalanceSearch(e.target.value)}
-                className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] w-48 focus:ring-sky-400 focus:border-sky-400 text-slate-600"
-              />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+            <div className="flex gap-2 items-center flex-wrap">
+              {user?.level === 1 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm("سيتم إعادة حساب جميع الأرصدة من سجلات النماذج المعتمدة. هل تريد المتابعة؟")) return;
+                    const res = await fetch("/api/materials/recalculate-balances", {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                      alert(`تم إعادة الحساب بنجاح — تم تحديث ${result.updated} مادة.`);
+                      fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+                        .then(r => r.json()).then(d => setMaterials(Array.isArray(d) ? d : []));
+                    } else {
+                      alert("فشل: " + result.error);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[12px] font-semibold hover:bg-amber-100"
+                  title="إعادة حساب الأرصدة من السجلات المعتمدة"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" /> إعادة حساب الأرصدة
+                </button>
+              )}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="بحث باسم أو كود..."
+                  value={balanceSearch}
+                  onChange={(e) => setBalanceSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] w-48 focus:ring-sky-400 focus:border-sky-400 text-slate-600"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              </div>
             </div>
           </div>
           <div className="overflow-auto flex-1">
