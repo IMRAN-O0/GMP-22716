@@ -554,25 +554,25 @@ function DeptManagerDashboard({ department }: { department: string }) {
 
   const quickLinks: { label: string; route: string }[] = {
     INV: [
-      { label: "استلام مادة خام", route: "/inv/form-rmt" },
-      { label: "طلب شراء", route: "/inv/form-prq001" },
-      { label: "إفراج عن منتج", route: "/inv/form-fp001" },
+      { label: "استلام مادة خام", route: "/inv/rmt" },
+      { label: "طلب شراء", route: "/inv/prq-001" },
+      { label: "إفراج عن منتج", route: "/inv/fp-001" },
     ],
     PRD: [
-      { label: "سجل تشغيل", route: "/prd/form-prd001" },
-      { label: "تقرير إنتاج", route: "/prd/form-prd002" },
+      { label: "أمر إنتاج", route: "/prd/production-order" },
+      { label: "سجل التصنيع", route: "/prd/batch-record" },
     ],
     QM: [
-      { label: "انحراف", route: "/qm/form-dev001" },
-      { label: "شكوى", route: "/qm/form-cmp001" },
-      { label: "أذونات", route: "/qm/form-prm001" },
+      { label: "انحراف", route: "/qm/dev-001" },
+      { label: "شكوى", route: "/qm/cmp-001" },
+      { label: "أذونات", route: "/qm/prm-001" },
     ],
     LAB: [
-      { label: "تحليل مختبر", route: "/lab/form-lab001" },
+      { label: "طلب اختبار مخبري", route: "/lab/lab-001" },
     ],
     HR: [
-      { label: "طلب توظيف", route: "/hr/form-hr001" },
-      { label: "بيانات موظف", route: "/hr/form-hr002" },
+      { label: "طلب توظيف", route: "/hr/new-request" },
+      { label: "ملف موظف", route: "/hr/employee-file" },
     ],
     TRN: [
       { label: "سجل تدريب", route: "/trn" },
@@ -848,22 +848,22 @@ function EmployeeDashboard({
 
   const createLinks: { label: string; route: string }[] = {
     INV: [
-      { label: "استلام مادة خام", route: "/inv/form-rmt" },
-      { label: "طلب شراء", route: "/inv/form-prq001" },
+      { label: "استلام مادة خام", route: "/inv/rmt" },
+      { label: "طلب شراء", route: "/inv/prq-001" },
     ],
     PRD: [
-      { label: "سجل تشغيل", route: "/prd/form-prd001" },
+      { label: "أمر إنتاج", route: "/prd/production-order" },
     ],
     QM: [
-      { label: "بلاغ انحراف", route: "/qm/form-dev001" },
-      { label: "شكوى", route: "/qm/form-cmp001" },
+      { label: "بلاغ انحراف", route: "/qm/dev-001" },
+      { label: "شكوى", route: "/qm/cmp-001" },
     ],
     LAB: [
-      { label: "نموذج تحليل", route: "/lab/form-lab001" },
+      { label: "طلب اختبار مخبري", route: "/lab/lab-001" },
     ],
     HR: [
-      { label: "طلب توظيف", route: "/hr/form-hr001" },
-      { label: "بيانات موظف جديد", route: "/hr/form-hr002" },
+      { label: "طلب توظيف", route: "/hr/new-request" },
+      { label: "ملف موظف جديد", route: "/hr/employee-file" },
     ],
     TRN: [
       { label: "سجل تدريب", route: "/trn" },

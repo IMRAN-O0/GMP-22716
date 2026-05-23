@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm 8mm;
+  }
+
+  html, body {
+    font-size: 10pt !important;
+  }
+
+  /* Scale down wide print content to fit one page */
+  .print\:text-sm,
+  .print\:text-sm * {
+    font-size: 9pt !important;
+  }
+
+  table {
+    font-size: 9pt !important;
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  th, td {
+    padding: 4px 6px !important;
+    font-size: 9pt !important;
+  }
+
+  /* Avoid page breaks inside table rows */
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Don't show buttons/nav in print */
+  .print\:hidden {
+    display: none !important;
+  }
+}
