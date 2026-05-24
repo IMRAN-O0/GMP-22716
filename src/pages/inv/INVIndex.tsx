@@ -12,6 +12,9 @@ import {
   Trash2,
   Archive,
   BarChart3,
+  Pencil,
+  X,
+  Check,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -24,6 +27,7 @@ export default function INVIndex() {
   const [forms, setForms] = useState<any[]>([]);
   const [balanceSearch, setBalanceSearch] = useState("");
   const [editingBalance, setEditingBalance] = useState<{ id: number; val: string } | null>(null);
+  const [editingWH, setEditingWH] = useState<{ id: number; name: string; type: string; code: string; parent_id: number | null; description: string } | null>(null);
 
   const hasPerm = (id: string) => {
     if (!user) return false;
@@ -200,27 +204,62 @@ export default function INVIndex() {
               .filter((w) => !w.parent_id || w.type === "MAIN")
               .map((main) => (
                 <li key={main.id} className="text-[13px] text-slate-700 mb-2">
-                  <div className="font-bold flex items-center mb-1">
-                    <Server className="w-4 h-4 ml-1 text-slate-400" />
-                    {main.name}{" "}
-                    <span className="text-[10px] text-slate-400 mr-2 bg-slate-100 px-1 rounded">
-                      {main.code}
-                    </span>
-                  </div>
+                  {editingWH?.id === main.id ? (
+                    <div className="bg-sky-50 border border-sky-200 rounded-lg p-2 mb-1 space-y-1">
+                      <input className="w-full border border-slate-200 rounded px-2 py-1 text-[12px]" value={editingWH.name} onChange={e => setEditingWH({ ...editingWH, name: e.target.value })} placeholder="اسم المستودع" />
+                      <select className="w-full border border-slate-200 rounded px-2 py-1 text-[12px]" value={editingWH.type} onChange={e => setEditingWH({ ...editingWH, type: e.target.value })}>
+                        <option value="MAIN">رئيسي</option>
+                        <option value="SUB">فرعي</option>
+                      </select>
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={async () => {
+                          const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
+                          await fetch(`/api/warehouses/${editingWH.id}`, { method: "PUT", headers: h, body: JSON.stringify({ code: editingWH.code, name: editingWH.name, type: editingWH.type, parent_id: editingWH.parent_id, description: editingWH.description }) });
+                          setWarehouses(prev => prev.map(w => w.id === editingWH.id ? { ...w, name: editingWH.name, type: editingWH.type } : w));
+                          setEditingWH(null);
+                        }} className="flex items-center gap-1 px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold"><Check className="w-3 h-3" /> حفظ</button>
+                        <button onClick={() => setEditingWH(null)} className="px-2 py-1 bg-slate-100 rounded text-[11px] text-slate-600"><X className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="font-bold flex items-center mb-1 group">
+                      <Server className="w-4 h-4 ml-1 text-slate-400" />
+                      {main.name}{" "}
+                      <span className="text-[10px] text-slate-400 mr-2 bg-slate-100 px-1 rounded">{main.code}</span>
+                      {user?.level <= 2 && (
+                        <button onClick={() => setEditingWH({ id: main.id, name: main.name, type: main.type, code: main.code, parent_id: main.parent_id ?? null, description: main.description || "" })} className="opacity-0 group-hover:opacity-100 ml-2 p-0.5 text-slate-400 hover:text-sky-600 transition-all"><Pencil className="w-3 h-3" /></button>
+                      )}
+                    </div>
+                  )}
                   <ul className="pr-4 border-r-2 border-slate-100 mt-1 space-y-1">
                     {warehouses
                       .filter((sub) => sub.parent_id === main.id)
                       .map((sub) => (
-                        <li
-                          key={sub.id}
-                          className="flex items-center text-slate-600 hover:text-sky-600 cursor-pointer"
-                        >
-                          <div className="w-2 h-[2px] bg-slate-200 ml-2"></div>
-                          <Package className="w-3 h-3 ml-1" />
-                          {sub.name}{" "}
-                          <span className="text-[10px] text-slate-400 mr-2">
-                            ({sub.code})
-                          </span>
+                        <li key={sub.id} className="text-slate-600">
+                          {editingWH?.id === sub.id ? (
+                            <div className="bg-sky-50 border border-sky-200 rounded-lg p-2 space-y-1">
+                              <input className="w-full border border-slate-200 rounded px-2 py-1 text-[12px]" value={editingWH.name} onChange={e => setEditingWH({ ...editingWH, name: e.target.value })} placeholder="اسم المستودع" />
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={async () => {
+                                  const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
+                                  await fetch(`/api/warehouses/${editingWH.id}`, { method: "PUT", headers: h, body: JSON.stringify({ code: editingWH.code, name: editingWH.name, type: editingWH.type, parent_id: editingWH.parent_id, description: editingWH.description }) });
+                                  setWarehouses(prev => prev.map(w => w.id === editingWH.id ? { ...w, name: editingWH.name } : w));
+                                  setEditingWH(null);
+                                }} className="flex items-center gap-1 px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold"><Check className="w-3 h-3" /> حفظ</button>
+                                <button onClick={() => setEditingWH(null)} className="px-2 py-1 bg-slate-100 rounded text-[11px] text-slate-600"><X className="w-3 h-3" /></button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center hover:text-sky-600 group">
+                              <div className="w-2 h-[2px] bg-slate-200 ml-2"></div>
+                              <Package className="w-3 h-3 ml-1" />
+                              {sub.name}{" "}
+                              <span className="text-[10px] text-slate-400 mr-2">({sub.code})</span>
+                              {user?.level <= 2 && (
+                                <button onClick={() => setEditingWH({ id: sub.id, name: sub.name, type: sub.type, code: sub.code, parent_id: sub.parent_id ?? null, description: sub.description || "" })} className="opacity-0 group-hover:opacity-100 ml-2 p-0.5 text-slate-400 hover:text-sky-600 transition-all"><Pencil className="w-3 h-3" /></button>
+                              )}
+                            </div>
+                          )}
                         </li>
                       ))}
                   </ul>

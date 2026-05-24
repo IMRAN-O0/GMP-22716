@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { PlusCircle, Search, FileSignature } from "lucide-react";
+import { PlusCircle, Search, FileSignature, Pencil } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
 
@@ -151,14 +151,25 @@ export default function HRIndex() {
                     <td className="px-6 py-4">
                       <StatusBadge status={f.status} />
                     </td>
-                    <td className="px-6 py-4 text-sky-400 font-semibold hover:underline cursor-pointer">
-                      <Link
-                        to={`/hr/view/${f.record_id}`}
-                        className="flex items-center gap-1 justify-end"
-                      >
-                        <FileSignature className="w-4 h-4" />
-                        عرض التفاصيل
-                      </Link>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2 justify-end">
+                        {f.form_id === "F-HR-002" && (
+                          <Link
+                            to={`/hr/employee-file?edit=${f.record_id}`}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold rounded-lg text-[12px] border border-amber-200"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            تعديل
+                          </Link>
+                        )}
+                        <Link
+                          to={`/hr/view/${f.record_id}`}
+                          className="flex items-center gap-1 text-sky-500 hover:text-sky-700 font-semibold text-[13px]"
+                        >
+                          <FileSignature className="w-4 h-4" />
+                          عرض
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))

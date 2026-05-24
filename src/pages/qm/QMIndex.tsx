@@ -22,6 +22,7 @@ import {
   Lightbulb,
   Wrench,
   FileBarChart2,
+  Pencil,
 } from "lucide-react";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
 
@@ -368,12 +369,23 @@ export default function QMIndex() {
                         {new Date(r.created_at).toLocaleDateString("ar-EG")}
                       </td>
                       <td className="p-4 text-center">
-                        <Link
-                          to={`/qm/view/${r.record_id}`}
-                          className="inline-block px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 font-bold rounded-lg text-xs transition-colors"
-                        >
-                          عرض / طباعة
-                        </Link>
+                        <div className="flex items-center gap-2 justify-center">
+                          {r.form_id === "F-EQP-001" && (
+                            <Link
+                              to={`/qm/eqp-001?edit=${r.record_id}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold rounded-lg text-xs border border-amber-200 transition-colors"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              تعديل
+                            </Link>
+                          )}
+                          <Link
+                            to={`/qm/view/${r.record_id}`}
+                            className="inline-block px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 font-bold rounded-lg text-xs transition-colors"
+                          >
+                            عرض / طباعة
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))
