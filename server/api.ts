@@ -249,22 +249,19 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
       applyUpdate(productCode);
       return;
     }
-    // Fallback: lookup via PRD-001 batchNumber
+    // Fallback: targeted lookup via PRD-001 batchNumber (LIKE index scan, not full scan)
     if (!batchNumber) return;
-    getDb().all(
-      "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
-      [],
-      (err, rows: any[]) => {
-        if (err || !rows) return;
-        for (const row of rows) {
-          try {
-            const prd = JSON.parse(row.data_json || "{}");
-            if (prd.batchNumber === batchNumber && prd.itemNumber) {
-              applyUpdate(prd.itemNumber);
-              break;
-            }
-          } catch { /* ignore */ }
-        }
+    getDb().get(
+      "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved' AND data_json LIKE ?",
+      [`%"batchNumber":"${batchNumber}"%`],
+      (err, row: any) => {
+        if (err || !row) return;
+        try {
+          const prd = JSON.parse(row.data_json || "{}");
+          if (prd.batchNumber === batchNumber && prd.itemNumber) {
+            applyUpdate(prd.itemNumber);
+          }
+        } catch { /* skip */ }
       }
     );
   };
@@ -673,9 +670,120 @@ router.get("/inventory/transactions", requireAuth, (req, res) => {
   });
 });
 
+// INV: Sync material balances from transaction history
+router.post("/materials/sync-from-transactions", requireAuth, (req, res) => {
+  // Fetch all approved transaction forms in chronological order
+  const query = `SELECT form_id, data_json, created_at FROM forms_records
+    WHERE status = 'approved'
+    AND form_id IN ('F-INV-PIN-001','F-INV-RMT-001','F-PRD-002','F-FP-002','F-FP-003','F-FP-005')
+    ORDER BY created_at ASC`;
+
+  getDb().all(query, [], (err, rows: any[]) => {
+    if (err) return res.status(500).json({ error: "DB Error" });
+
+    const balances: Record<string, number> = {};
+
+    rows.forEach((row) => {
+      let data: any = {};
+      try { data = JSON.parse(row.data_json || "{}"); } catch { return; }
+
+      const fId: string = row.form_id;
+
+      // PIN: add purchased quantities
+      if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
+        data.items.forEach((item: any) => {
+          if (item.materialCode && item.quantity) {
+            const qty = parseFloat(item.quantity) || 0;
+            // RMT ISSUE fix: no intermediate Math.max
+            balances[item.materialCode] = (balances[item.materialCode] || 0) + qty;
+          }
+        });
+      }
+
+      // RMT: receive (+) or issue (-)
+      if (fId === "F-INV-RMT-001" && Array.isArray(data.items)) {
+        const mult = data.transactionType === "Receive" ? 1 : -1;
+        data.items.forEach((item: any) => {
+          if (item.materialCode && item.quantity) {
+            const qty = parseFloat(item.quantity) || 0;
+            // RMT ISSUE fix: no intermediate Math.max
+            balances[item.materialCode] = (balances[item.materialCode] || 0) + qty * mult;
+          }
+        });
+      }
+
+      // PRD-002: production consumes raw materials
+      if (fId === "F-PRD-002" && Array.isArray(data.materials)) {
+        data.materials.forEach((mat: any) => {
+          if (mat.materialCode && mat.quantity) {
+            const qty = parseFloat(mat.quantity) || 0;
+            // PRD-002 fix: no intermediate Math.max
+            balances[mat.materialCode] = (balances[mat.materialCode] || 0) - qty;
+          }
+        });
+      }
+
+      // FP-002: finished product stored (+)
+      if (fId === "F-FP-002" && data.productCode && data.quantityStored) {
+        const qty = parseFloat(data.quantityStored) || 0;
+        balances[data.productCode] = (balances[data.productCode] || 0) + qty;
+      }
+
+      // FP-003: shipment of finished product (-)
+      if (fId === "F-FP-003" && Array.isArray(data.items)) {
+        data.items.forEach((item: any) => {
+          const code = item.productCode || item.materialCode;
+          if (code && item.quantity) {
+            const qty = parseFloat(item.quantity) || 0;
+            // FP-003 fix: no intermediate Math.max
+            balances[code] = (balances[code] || 0) - qty;
+          }
+        });
+      }
+
+      // FP-005: disposal (-)
+      if (fId === "F-FP-005" && Array.isArray(data.details)) {
+        data.details.forEach((d: any) => {
+          if (d.batchOrCode && d.quantity) {
+            const qty = parseFloat(d.quantity) || 0;
+            // FP-005 fix: no intermediate Math.max
+            balances[d.batchOrCode] = (balances[d.batchOrCode] || 0) - qty;
+          }
+        });
+      }
+    });
+
+    // Write back — only final cap at Math.max(0, bal)
+    const codes = Object.keys(balances);
+    if (codes.length === 0) return res.json({ updated: 0 });
+
+    let pending = codes.length;
+    let updated = 0;
+    codes.forEach((code) => {
+      const bal = Math.max(0, balances[code]);
+      getDb().run(
+        "UPDATE materials SET balance = ? WHERE code = ?",
+        [bal, code],
+        (updateErr) => {
+          if (!updateErr) updated++;
+          pending--;
+          if (pending === 0) res.json({ updated });
+        }
+      );
+    });
+  });
+});
+
 // INV: Get Materials
 router.get("/materials", requireAuth, (req, res) => {
-  getDb().all("SELECT *, min_balance as minBalance FROM materials WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
+  const { category, warehouse_id, low_stock } = req.query;
+  const conditions: string[] = ["is_active = 1"];
+  const params: any[] = [];
+  if (category && category !== "ALL") { conditions.push("category = ?"); params.push(category); }
+  if (warehouse_id && warehouse_id !== "ALL") { conditions.push("warehouse_id = ?"); params.push(warehouse_id); }
+  if (low_stock === "true") { conditions.push("balance <= min_balance"); }
+  const where = conditions.join(" AND ");
+  getDb().all(`SELECT *, min_balance as minBalance FROM materials WHERE ${where} ORDER BY code ASC`, params, (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -1338,30 +1446,34 @@ const validateFormData = (formId: string, data: any): string[] => {
 
 router.get("/forms", requireAuth, (req: any, res) => {
   const user: any = req.user;
-  let query = "SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC";
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 50);
+  const offset = (page - 1) * limit;
+
+  let query = "SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT ? OFFSET ?";
   let params: any[] = [];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE status != 'deleted' AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?";
       params = [user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL") {
         query =
-          "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC";
+          "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT ? OFFSET ?";
         params = [user.department];
       }
     }
   }
 
-  getDb().all(query, params, (err, rows) => {
+  getDb().all(query, [...params, limit, offset], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const mappedRows = rows.map((r: any) => ({
       ...r,
       data: JSON.parse(r.data_json || "{}"),
     }));
-    res.json(mappedRows);
+    res.json({ data: mappedRows, page, limit, total: null });
   });
 });
 
@@ -1615,7 +1727,7 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-  getDb().all("SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC", [], (err, rows) => {
+  getDb().all("SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT 200", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const records = rows.map((r: any) => ({
       ...r,
@@ -1847,31 +1959,34 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
 router.get("/forms/dept/:department", requireAuth, (req, res) => {
   const { department } = req.params;
   const user: any = getAuthUser(req);
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 50);
+  const offset = (page - 1) * limit;
 
   let query =
-    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT ? OFFSET ?";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
       // Can see all in department, but only if they are in this department
       if (user.department !== "ALL" && user.department !== department) {
-        return res.json([]); // Empty if unauthorized
+        return res.json({ data: [], page, limit, total: null }); // Empty if unauthorized
       }
     }
   }
 
-  getDb().all(query, params, (err, rows) => {
+  getDb().all(query, [...params, limit, offset], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const mappedRows = rows.map((r: any) => ({
       ...r,
       data: JSON.parse(r.data_json || "{}"),
     }));
-    res.json(mappedRows);
+    res.json({ data: mappedRows, page, limit, total: null });
   });
 });
 
@@ -1879,31 +1994,34 @@ router.get("/forms/dept/:department", requireAuth, (req, res) => {
 router.get("/forms/:department", requireAuth, (req, res) => {
   const { department } = req.params;
   const user: any = getAuthUser(req);
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 50);
+  const offset = (page - 1) * limit;
 
   let query =
-    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT ? OFFSET ?";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL" && user.department !== department) {
-        return res.json([]);
+        return res.json({ data: [], page, limit, total: null });
       }
     }
   }
 
-  getDb().all(query, params, (err, rows) => {
+  getDb().all(query, [...params, limit, offset], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
 
     const mappedRows = rows.map((r: any) => ({
       ...r,
       data: JSON.parse(r.data_json || "{}"),
     }));
-    res.json(mappedRows);
+    res.json({ data: mappedRows, page, limit, total: null });
   });
 });
 
