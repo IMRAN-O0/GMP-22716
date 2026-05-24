@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, CheckCircle, Trash2 } from "lucide-react";
+import { Save, CheckCircle, Trash2, Pencil, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function CreateWarehouse() {
@@ -8,6 +8,7 @@ export default function CreateWarehouse() {
   const navigate = useNavigate();
 
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     code: "",
@@ -16,6 +17,17 @@ export default function CreateWarehouse() {
     parent_id: "",
     description: "",
   });
+
+  const startEdit = (w: any) => {
+    setEditingId(w.id);
+    setFormData({ code: w.code, name: w.name, type: w.type, parent_id: w.parent_id ? String(w.parent_id) : "", description: w.description || "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setFormData({ code: "", name: "", type: "MAIN", parent_id: "", description: "" });
+  };
 
   useEffect(() => {
     fetch("/api/warehouses")
@@ -26,6 +38,26 @@ export default function CreateWarehouse() {
 
   const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
     e.preventDefault();
+
+    // Edit existing warehouse directly
+    if (editingId !== null) {
+      const payload = { code: formData.code, name: formData.name, type: formData.type, parent_id: formData.type === "SUB" && formData.parent_id ? parseInt(formData.parent_id) : null, description: formData.description };
+      const res = await fetch(`/api/warehouses/${editingId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setWarehouses(prev => prev.map(w => w.id === editingId ? { ...w, ...payload } : w));
+        cancelEdit();
+        alert("تم تعديل المستودع بنجاح");
+      } else {
+        const err = await res.json().catch(() => ({ error: "خطأ" }));
+        alert("فشل التعديل: " + err.error);
+      }
+      return;
+    }
+
     if (status === "draft") {
       try {
         const formPayload = {
@@ -161,6 +193,17 @@ export default function CreateWarehouse() {
       </div>
 
       <form className="p-8" onSubmit={handleSubmit}>
+        {editingId !== null && (
+          <div className="flex items-center justify-between mb-4 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+            <span className="text-[13px] font-bold text-amber-800">
+              <Pencil className="w-4 h-4 inline ml-1" />
+              وضع التعديل — قم بتعديل البيانات ثم اضغط "حفظ التعديل"
+            </span>
+            <button type="button" onClick={cancelEdit} className="flex items-center gap-1 text-[12px] text-amber-700 hover:text-red-600 font-semibold">
+              <X className="w-4 h-4" /> إلغاء التعديل
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -254,19 +297,27 @@ export default function CreateWarehouse() {
         </div>
 
                 <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
-          <button
-            type="button"
-            
-            onClick={(e) => handleSubmit(e, "draft")}
-            className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
-          >
-            حفظ كمسودة
-          </button>
-          
-          {user?.level <= 2 ? (
+          {editingId === null && (
             <button
               type="button"
-              
+              onClick={(e) => handleSubmit(e, "draft")}
+              className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
+            >
+              حفظ كمسودة
+            </button>
+          )}
+
+          {editingId !== null ? (
+            <button
+              type="button"
+              onClick={(e) => handleSubmit(e, "approved")}
+              className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold text-[14px]"
+            >
+              <Pencil className="w-4 h-4" /> حفظ التعديل
+            </button>
+          ) : user?.level <= 2 ? (
+            <button
+              type="button"
               onClick={(e) => handleSubmit(e, "approved")}
               className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
             >
@@ -275,13 +326,7 @@ export default function CreateWarehouse() {
           ) : (
             <button
               type="button"
-              
-              onClick={(e) =>
-                handleSubmit(
-                  e,
-                  user?.level === 3 ? "pending_approval" : "pending_review"
-                )
-              }
+              onClick={(e) => handleSubmit(e, user?.level === 3 ? "pending_approval" : "pending_review")}
               className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
             >
               إرسال للمراجعة
@@ -317,7 +362,7 @@ export default function CreateWarehouse() {
                   <th className="p-3 border-b font-semibold">الكود</th>
                   <th className="p-3 border-b font-semibold">الاسم</th>
                   <th className="p-3 border-b font-semibold">النوع</th>
-                  {user?.level === 1 && <th className="p-3 border-b font-semibold text-center w-20">حذف</th>}
+                  {user?.level <= 2 && <th className="p-3 border-b font-semibold text-center w-28">إجراء</th>}
                 </tr>
               </thead>
               <tbody>
@@ -326,16 +371,28 @@ export default function CreateWarehouse() {
                     <td className="p-3 font-mono text-sky-700 font-bold">{w.code}</td>
                     <td className="p-3 text-slate-800">{w.name}</td>
                     <td className="p-3 text-slate-500">{w.type === "MAIN" ? "رئيسي" : "فرعي"}</td>
-                    {user?.level === 1 && (
+                    {user?.level <= 2 && (
                       <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(w.id, w.name)}
-                          className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
-                          title="حذف المستودع"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => startEdit(w)}
+                            className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-[11px] font-bold border border-amber-200 transition-colors"
+                            title="تعديل المستودع"
+                          >
+                            <Pencil className="w-3 h-3" /> تعديل
+                          </button>
+                          {user?.level === 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(w.id, w.name)}
+                              className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                              title="حذف المستودع"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
