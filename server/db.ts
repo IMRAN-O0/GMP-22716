@@ -77,6 +77,31 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 8,
           name: "add_package_size_unit_to_materials",
           up: `ALTER TABLE materials ADD COLUMN package_size_unit TEXT DEFAULT NULL;`
+        },
+        {
+          version: 9,
+          name: "soft_delete_users",
+          up: `ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
+        },
+        {
+          version: 10,
+          name: "soft_delete_materials",
+          up: `ALTER TABLE materials ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
+        },
+        {
+          version: 11,
+          name: "soft_delete_suppliers",
+          up: `ALTER TABLE suppliers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
+        },
+        {
+          version: 12,
+          name: "soft_delete_customers",
+          up: `ALTER TABLE customers ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
+        },
+        {
+          version: 13,
+          name: "soft_delete_warehouses",
+          up: `ALTER TABLE warehouses ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
         }
       ];
 

@@ -23,9 +23,11 @@ const matchesReference = (formData: any, targetId: string): boolean => {
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET environment variable is missing and is required in production.");
 } else if (!process.env.JWT_SECRET) {
-  console.warn("WARNING: JWT_SECRET environment variable is missing. Using dynamic fallback secret. Existing tokens will be invalidated on server restart.");
+  console.warn("WARNING: JWT_SECRET is not set. Using a fixed development fallback. Set JWT_SECRET in production.");
 }
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+// In production the line above throws, so reaching here without JWT_SECRET is dev-only.
+// We use a fixed dev secret so sessions survive server restarts during development.
+const JWT_SECRET = process.env.JWT_SECRET || "dev-only-jwt-secret-do-not-use-in-production";
 
 const getAuthUser = (req: any) => {
   const authHeader = req.headers.authorization;
@@ -435,7 +437,7 @@ router.get("/users", requireAuth, (req: any, res) => {
   const caller = req.user;
   if (!caller || caller.level > 2) return res.status(403).json({ error: "غير مصرح" });
   getDb().all(
-    "SELECT id, user_id, name, department, level, status, permissions FROM users ORDER BY level ASC",
+    "SELECT id, user_id, name, department, level, status, permissions FROM users WHERE is_active = 1 ORDER BY level ASC",
     [],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -491,8 +493,8 @@ router.put("/users/:id", requireAuth, async (req, res) => {
 });
 
 router.delete("/users/:id", requireAuth, (req, res) => {
-  getDb().run("DELETE FROM users WHERE id=?", [req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: "Delete failed" });
+  getDb().run("UPDATE users SET is_active = 0 WHERE id=?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
 });
@@ -507,7 +509,7 @@ router.get("/employees", requireAuth, (req, res) => {
 
 // INV: Get Warehouses
 router.get("/warehouses", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM warehouses ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT * FROM warehouses WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -539,10 +541,10 @@ router.put("/warehouses/:id", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Warehouse
+// INV: Delete Warehouse (soft)
 router.delete("/warehouses/:id", requireAuth, (req, res) => {
   getDb().run(
-    `DELETE FROM warehouses WHERE id=?`,
+    `UPDATE warehouses SET is_active = 0 WHERE id=?`,
     [req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
@@ -583,7 +585,7 @@ router.post("/inventory/transactions", requireAuth, async (req, res) => {
     db.run("COMMIT", function (err) {
       if (err) {
         db.run("ROLLBACK");
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: "خطأ في قاعدة البيانات — يرجى المحاولة مرة أخرى" });
       }
       res.json({ success: true });
     });
@@ -600,7 +602,7 @@ router.get("/inventory/transactions", requireAuth, (req, res) => {
 
 // INV: Get Materials
 router.get("/materials", requireAuth, (req, res) => {
-  getDb().all("SELECT *, min_balance as minBalance FROM materials ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT *, min_balance as minBalance FROM materials WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -649,7 +651,7 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
   let skipped = 0;
 
   // Pre-load warehouse map: code → id
-  db.all("SELECT id, code FROM warehouses", [], (whErr, whRows: any[]) => {
+  db.all("SELECT id, code FROM warehouses WHERE is_active = 1", [], (whErr, whRows: any[]) => {
     if (whErr) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
 
     const warehouseMap: Record<string, number> = {};
@@ -713,19 +715,19 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
   });
 });
 
-// INV: Delete ALL Materials (admin only)
+// INV: Deactivate ALL Materials (admin only — soft delete)
 router.delete("/materials", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 1) return res.status(403).json({ error: "للمدير فقط" });
-  getDb().run(`DELETE FROM materials`, [], function (err) {
+  getDb().run(`UPDATE materials SET is_active = 0`, [], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
-    res.json({ success: true, deleted: this.changes });
+    res.json({ success: true, deactivated: this.changes });
   });
 });
 
-// INV: Delete Material
+// INV: Delete Material (soft)
 router.delete("/materials/:id", requireAuth, (req, res) => {
   getDb().run(
-    `DELETE FROM materials WHERE id=?`,
+    `UPDATE materials SET is_active = 0 WHERE id=?`,
     [req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
@@ -751,7 +753,7 @@ router.put("/materials/:id", requireAuth, (req, res) => {
 // INV: Get material by code (used by FP-001 for package size calculation)
 router.get("/materials/by-code/:code", requireAuth, (req, res) => {
   getDb().get(
-    "SELECT *, package_size as packageSize, package_size_unit as packageSizeUnit FROM materials WHERE code = ?",
+    "SELECT *, package_size as packageSize, package_size_unit as packageSizeUnit FROM materials WHERE code = ? AND is_active = 1",
     [req.params.code],
     (err, row) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -780,7 +782,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
 
   const db = getDb();
   db.all("SELECT * FROM forms_records WHERE status = 'approved' ORDER BY created_at ASC", [], (err, rows: any[]) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
 
     const balances: Record<string, number> = {};
 
@@ -914,7 +916,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
 router.get("/materials/search/:code", requireAuth, (req, res) => {
   const codeSearch = `%${req.params.code}%`;
   getDb().all(
-    "SELECT * FROM materials WHERE code LIKE ? OR name LIKE ?",
+    "SELECT * FROM materials WHERE is_active = 1 AND (code LIKE ? OR name LIKE ?)",
     [codeSearch, codeSearch],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -926,7 +928,7 @@ router.get("/materials/search/:code", requireAuth, (req, res) => {
 // INV: Get Products (From materials table)
 router.get("/products", requireAuth, (req, res) => {
   getDb().all(
-    "SELECT * FROM materials WHERE category = 'منتج نهائي' OR category = 'Finished Product' ORDER BY code ASC",
+    "SELECT * FROM materials WHERE is_active = 1 AND (category = 'منتج نهائي' OR category = 'Finished Product') ORDER BY code ASC",
     [],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -937,7 +939,7 @@ router.get("/products", requireAuth, (req, res) => {
 
 // INV: Get Suppliers
 router.get("/suppliers", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM suppliers ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT * FROM suppliers WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -956,10 +958,10 @@ router.post("/suppliers", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Supplier (level ≤ 2 only)
+// INV: Delete Supplier — soft delete (level ≤ 2 only)
 router.delete("/suppliers/:id", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
-  getDb().run(`DELETE FROM suppliers WHERE id=?`, [req.params.id], function (err) {
+  getDb().run(`UPDATE suppliers SET is_active = 0 WHERE id=?`, [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
@@ -983,7 +985,7 @@ router.put("/suppliers/:id", requireAuth, (req: any, res) => {
 router.get("/suppliers/search/:code", requireAuth, (req, res) => {
   const query = `%${req.params.code}%`;
   getDb().all(
-    "SELECT * FROM suppliers WHERE code LIKE ? OR name LIKE ?",
+    "SELECT * FROM suppliers WHERE is_active = 1 AND (code LIKE ? OR name LIKE ?)",
     [query, query],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -994,7 +996,7 @@ router.get("/suppliers/search/:code", requireAuth, (req, res) => {
 
 // INV: Get Customers
 router.get("/customers", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM customers ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT * FROM customers WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -1013,10 +1015,10 @@ router.post("/customers", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Customer (level ≤ 2 only)
+// INV: Delete Customer — soft delete (level ≤ 2 only)
 router.delete("/customers/:id", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
-  getDb().run(`DELETE FROM customers WHERE id=?`, [req.params.id], function (err) {
+  getDb().run(`UPDATE customers SET is_active = 0 WHERE id=?`, [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
@@ -1040,7 +1042,7 @@ router.put("/customers/:id", requireAuth, (req: any, res) => {
 router.get("/customers/search/:code", requireAuth, (req, res) => {
   const query = `%${req.params.code}%`;
   getDb().all(
-    "SELECT * FROM customers WHERE code LIKE ? OR name LIKE ?",
+    "SELECT * FROM customers WHERE is_active = 1 AND (code LIKE ? OR name LIKE ?)",
     [query, query],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -1263,18 +1265,18 @@ const validateFormData = (formId: string, data: any): string[] => {
 
 router.get("/forms", requireAuth, (req: any, res) => {
   const user: any = req.user;
-  let query = "SELECT * FROM forms_records ORDER BY id DESC";
+  let query = "SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC";
   let params: any[] = [];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
       params = [user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL") {
         query =
-          "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+          "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC";
         params = [user.department];
       }
     }
@@ -1475,11 +1477,11 @@ router.delete("/forms/record/:recordId", requireAuth, (req: any, res) => {
     if (user.level === 2 && row.department !== user.department && user.department !== "ALL") {
       return res.status(403).json({ error: "غير مصرح — خارج نطاق قسمك" });
     }
-    getDb().run("DELETE FROM forms_records WHERE record_id = ?", [req.params.recordId], function (e) {
+    getDb().run("UPDATE forms_records SET status = 'deleted' WHERE record_id = ?", [req.params.recordId], function (e) {
       if (e) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       getDb().run(
         `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, 'DELETE', ?, ?, ?, ?)`,
-        [user.id, row.form_id, req.params.recordId, new Date().toISOString(), `Deleted by level ${user.level}`]
+        [user.id, row.form_id, req.params.recordId, new Date().toISOString(), `Soft-deleted by level ${user.level}`]
       );
       res.json({ success: true });
     });
@@ -1505,7 +1507,7 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-  getDb().all("SELECT * FROM forms_records ORDER BY id DESC", [], (err, rows) => {
+  getDb().all("SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const records = rows.map((r: any) => ({
       ...r,
@@ -1739,13 +1741,13 @@ router.get("/forms/dept/:department", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
 
   let query =
-    "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
       // Can see all in department, but only if they are in this department
@@ -1771,13 +1773,13 @@ router.get("/forms/:department", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
 
   let query =
-    "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL" && user.department !== department) {
