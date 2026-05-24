@@ -107,12 +107,6 @@ const FIELD_LABELS: Record<string, string> = {
   clientName: "اسم العميل",
   productionManagerName: "مدير الإنتاج",
   requiredQuantity: "الكمية المطلوبة",
-  auditorName: "اسم المدقق",
-  checksBefore: "فحوصات ما قبل الإنتاج",
-  checksDuring: "فحوصات أثناء الإنتاج",
-  checksAfter: "فحوصات ما بعد الإنتاج",
-  readings: "القراءات",
-  parameter: "المعامل",
   time: "الوقت",
   // QM / DEV / CMP / NCR / CAPA
   issueDate: "تاريخ الإصدار",
