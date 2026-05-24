@@ -296,7 +296,7 @@ export default function INVIndex() {
                     .filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch))
                     .map((m, i) => {
                     const warehouse = warehouses.find((w) => w.id === m.warehouse_id);
-                    const isLow = m.minBalance && m.balance <= m.minBalance;
+                    const isLow = !!m.minBalance && m.balance <= m.minBalance;
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
                         <td className="px-3 py-2 font-mono font-bold text-sky-600 text-[12px]">{m.code}</td>
