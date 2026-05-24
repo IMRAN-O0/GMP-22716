@@ -1013,7 +1013,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
         d.items.forEach((item: any) => {
           const qty = parseFloat(item.quantity) || 0;
           if (item.materialCode && qty > 0) {
-            balances[item.materialCode] = Math.max(0, (balances[item.materialCode] || 0) + qty * mult);
+            balances[item.materialCode] = (balances[item.materialCode] || 0) + qty * mult;
           }
         });
       }
@@ -1025,7 +1025,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
           prd1.rawMaterials.forEach((mat: any) => {
             const qty = parseFloat(mat.quantity) || 0;
             if (mat.materialCode && qty > 0) {
-              balances[mat.materialCode] = Math.max(0, (balances[mat.materialCode] || 0) - qty);
+              balances[mat.materialCode] = (balances[mat.materialCode] || 0) - qty;
             }
           });
         }
@@ -1054,7 +1054,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
         const code = fpCode(d);
         const qty = parseFloat(d.shippedQuantity) || 0;
         if (code && qty > 0) {
-          balances[code] = Math.max(0, (balances[code] || 0) - qty);
+          balances[code] = (balances[code] || 0) - qty;
         }
       }
 
@@ -1071,7 +1071,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
       else if (fId === "F-FP-005" && d.batchOrCode) {
         const qty = parseFloat(d.quantity) || 0;
         if (qty > 0) {
-          balances[d.batchOrCode] = Math.max(0, (balances[d.batchOrCode] || 0) - qty);
+          balances[d.batchOrCode] = (balances[d.batchOrCode] || 0) - qty;
         }
       }
     }
@@ -1083,7 +1083,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       entries.forEach(([code, bal]) => {
-        db.run("UPDATE materials SET balance = ? WHERE code = ?", [Math.max(0, bal), code]);
+        db.run("UPDATE materials SET balance = ? WHERE code = ?", [bal, code]);
       });
       db.run("COMMIT", (commitErr) => {
         if (commitErr) { db.run("ROLLBACK"); return res.status(500).json({ error: "فشل تطبيق التحديثات" }); }

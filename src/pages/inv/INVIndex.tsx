@@ -337,11 +337,7 @@ export default function INVIndex() {
                               <span className="text-[10px] text-slate-400">Enter</span>
                             </div>
                           ) : (
-                            <span
-                              onClick={() => user?.level === 1 ? setEditingBalance({ id: m.id, val: String(m.balance ?? 0) }) : undefined}
-                              className={user?.level === 1 ? "cursor-pointer hover:bg-amber-50 hover:text-amber-700 px-1 rounded" : ""}
-                              title={user?.level === 1 ? "انقر لتعديل الرصيد" : ""}
-                            >
+                            <span className={m.balance < 0 ? "text-red-600 font-bold" : ""}>
                               {m.balance}
                             </span>
                           )}
