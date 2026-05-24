@@ -1213,7 +1213,7 @@ const FORM_REQUIRED_FIELDS: Record<string, { field: string; label: string }[]> =
   "F-HR-002": [
     { field: "employeeNumber",        label: "رقم الموظف" },
     { field: "fullNameAr",            label: "الاسم بالعربية" },
-    { field: "joiningDate",           label: "تاريخ الالتحاق" },
+    { field: "joinDate",              label: "تاريخ الالتحاق" },
   ],
   "F-HR-003": [
     { field: "employeeId",            label: "رقم الموظف" },
