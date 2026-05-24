@@ -84,7 +84,11 @@ export default function FormHR002() {
         .then((r) => r.json())
         .then((data) => {
           if (data && data.data) {
-            setFormData((prev) => ({ ...prev, ...data.data }));
+            setFormData((prev) => ({
+              ...prev,
+              ...data.data,
+              employeeNumber: data.data.employeeNumber || prev.employeeNumber,
+            }));
           }
         })
         .catch(console.error);
