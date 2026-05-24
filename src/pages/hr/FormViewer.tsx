@@ -22,6 +22,7 @@ const FIELD_LABELS: Record<string, string> = {
   responsiblePerson: "المسؤول",
   targetDate: "التاريخ المستهدف",
   department: "القسم",
+  category: "الفئة",
   // PRQ
   requestId: "رقم الطلب",
   requestDate: "تاريخ الطلب",
@@ -32,12 +33,12 @@ const FIELD_LABELS: Record<string, string> = {
   // PIN
   invoiceId: "رقم الفاتورة",
   invoiceDate: "تاريخ الفاتورة",
-  linkedPrqId: "رقم طلب الشراء",
+  linkedPrqId: "رقم طلب الشراء المرتبط",
   supplierCode: "كود المورد",
   taxRate: "نسبة الضريبة (%)",
   taxAmount: "مبلغ الضريبة",
-  subTotal: "المجموع الفرعي",
-  netTotal: "الإجمالي",
+  subTotal: "المجموع قبل الضريبة",
+  netTotal: "الإجمالي شامل الضريبة",
   // Items columns
   materialCode: "كود المادة",
   materialName: "اسم المادة",
@@ -46,7 +47,21 @@ const FIELD_LABELS: Record<string, string> = {
   unitPrice: "سعر الوحدة",
   expectedPrice: "السعر المتوقع",
   totalPrice: "الإجمالي",
-  // RM / Materials
+  // RM-001 (Material Receipt / Registration)
+  recordId: "رقم السجل",
+  code: "كود المادة",
+  name: "اسم المادة",
+  warehouse_id: "المستودع",
+  balance: "الرصيد الافتتاحي",
+  barcode: "الباركود",
+  scientificName: "الاسم العلمي",
+  purchasePrice: "سعر الشراء",
+  countryOfOrigin: "بلد المنشأ",
+  coaFileUrl: "شهادة المطابقة (CoA)",
+  msdsFileUrl: "بيانات السلامة (MSDS)",
+  tdsFileUrl: "المواصفات الفنية (TDS)",
+  allergyFileUrl: "تقرير الحساسية",
+  // RM / Materials common
   batchNumber: "رقم الدفعة",
   expiryDate: "تاريخ الانتهاء",
   manufacturingDate: "تاريخ التصنيع",
@@ -59,11 +74,20 @@ const FIELD_LABELS: Record<string, string> = {
   inspectionResult: "نتيجة الفحص",
   certificate: "شهادة المطابقة",
   poNumber: "رقم أمر الشراء",
-  // PRD
+  // FP-001 (Batch Release)
+  releaseId: "رقم سجل الإطلاق",
   productionOrderNo: "رقم أمر الإنتاج",
   productionOrderId: "رقم أمر الإنتاج",
   productName: "اسم المنتج",
   productCode: "كود المنتج",
+  releasedQuantity: "الكمية المُفرج عنها",
+  qcStatus: "حالة فحص الجودة",
+  releaseDate: "تاريخ الإطلاق",
+  productionQty: "كمية الإنتاج",
+  productionUnit: "وحدة الإنتاج",
+  itemNumber: "كود الصنف",
+  requiredBatchSize: "حجم الدفعة",
+  // PRD
   plannedQuantity: "الكمية المخططة",
   actualQuantity: "الكمية الفعلية",
   startDate: "تاريخ البدء",
@@ -159,6 +183,7 @@ const FIELD_LABELS: Record<string, string> = {
   actionTaken: "الإجراء المتخذ",
   // FP-005 (Disposal)
   disposalId: "رقم إذن الإتلاف",
+  itemType: "نوع الصنف",
   batchOrCode: "رقم الدفعة / كود المنتج",
   disposalDate: "تاريخ الإتلاف",
   disposalReason: "سبب الإتلاف",
@@ -172,12 +197,49 @@ const FIELD_LABELS: Record<string, string> = {
   reference: "المرجع",
   referenceDocument: "وثيقة المرجع",
   lowStockAlert: "تنبيه مخزون منخفض",
-  lowStockAlertTriggered: "تم تفعيل تنبيه المخزون",
+  lowStockAlertTriggered: "تم تفعيل تنبيه المخزون المنخفض",
+};
+
+// Fields that are internal/redundant and should NOT appear in print
+const HIDDEN_FIELDS = new Set([
+  "coaFileUrl", "msdsFileUrl", "tdsFileUrl", "allergyFileUrl",
+  "productionQty", "productionUnit", "itemNumber",
+]);
+
+// Translate known English values to Arabic
+const VALUE_MAP: Record<string, Record<string, string>> = {
+  qcStatus: { Approved: "معتمد — مطابق للمواصفات", Rejected: "مرفوض — غير مطابق" },
+  transactionType: { Receive: "استلام", Issue: "صرف / إصدار", Transfer: "نقل داخلي" },
+  priority: { Normal: "عادي", High: "عالي", Urgent: "عاجل", Low: "منخفض" },
+  category: {
+    "Raw Material": "مادة خام", "Finished Product": "منتج نهائي",
+    "Packaging": "مواد تعبئة", "مادة خام": "مادة خام", "منتج نهائي": "منتج نهائي",
+  },
+  itemType: { Product: "منتج نهائي", Material: "مادة خام" },
+  inspectionResult: { Pass: "مقبول", Fail: "مرفوض", "Approved": "معتمد", "Rejected": "مرفوض" },
+  condition: { سليم: "سليم", تالف: "تالف" },
+};
+
+const translateValue = (key: string, val: any): string => {
+  if (val === null || val === undefined) return "—";
+  if (typeof val === "boolean") return val ? "نعم" : "لا";
+  const str = String(val);
+  if (VALUE_MAP[key]?.[str]) return VALUE_MAP[key][str];
+  // Generic English-to-Arabic for common values
+  const generic: Record<string, string> = {
+    Approved: "معتمد", Rejected: "مرفوض", Pending: "قيد الانتظار",
+    Active: "نشط", Inactive: "غير نشط", Pass: "مقبول", Fail: "مرفوض",
+    Yes: "نعم", No: "لا", Normal: "عادي", High: "عالي", Low: "منخفض",
+    Receive: "استلام", Issue: "صرف", Transfer: "نقل",
+    Product: "منتج نهائي", Material: "مادة خام",
+  };
+  return generic[str] ?? str;
 };
 
 const translateKey = (key: string): string => {
   if (FIELD_LABELS[key]) return FIELD_LABELS[key];
-  return key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+  // Convert camelCase to spaced Arabic-friendly fallback
+  return key.replace(/([A-Z])/g, " $1").trim();
 };
 
 export default function FormViewer() {
@@ -276,6 +338,45 @@ export default function FormViewer() {
   // Determine print orientation based on form type
   const landscapeForms = ["F-INV-PIN-001", "F-INV-PRQ-001", "F-PRD-002", "F-LAB-003", "F-PRD-004"];
   const isLandscape = landscapeForms.includes(record.form_id);
+
+  const FORM_TITLES: Record<string, string> = {
+    "F-INV-RM-001":    "سجل استلام وتسجيل المواد الخام",
+    "F-INV-MAT":       "تسجيل مادة / صنف جديد",
+    "F-INV-WH":        "تسجيل مستودع",
+    "F-INV-PRQ-001":   "طلب الشراء",
+    "F-INV-PIN-001":   "فاتورة الشراء",
+    "F-INV-BOM":       "قائمة المكونات (BOM)",
+    "F-INV-RMT-001":   "حركة مخزون — صرف / استلام / نقل",
+    "F-FP-001":        "إطلاق الدفعة وتخزين المنتج النهائي",
+    "F-FP-002":        "تخزين المنتج النهائي",
+    "F-FP-003":        "شحن المنتج النهائي",
+    "F-FP-004":        "إرجاع المنتج النهائي",
+    "F-FP-005":        "إذن الإتلاف",
+    "F-FP-006":        "تسوية المخزون",
+    "F-PRD-001":       "أمر الإنتاج",
+    "F-PRD-002":       "سجل الدفعة",
+    "F-PRD-003":       "قائمة فحص الإنتاج",
+    "F-PRD-004":       "مراقبة العملية",
+    "F-QM-001":        "طلب عدم مطابقة (NCR)",
+    "F-QM-002":        "CAPA — إجراء تصحيحي ووقائي",
+    "F-QM-003":        "بلاغ انحراف",
+    "F-QM-004":        "بروتوكول تحقق",
+    "F-QM-005":        "مراجعة المستندات",
+    "F-QM-006":        "تدقيق جودة",
+    "F-HR-001":        "طلب موارد بشرية",
+    "F-HR-002":        "ملف الموظف",
+    "F-HR-003":        "الفحص الطبي",
+    "F-TRN-001":       "سجل التدريب",
+    "F-TRN-002":       "اختبار التدريب",
+    "F-TRN-003":       "خطة التدريب",
+    "F-TRN-004":       "تقييم التدريب",
+    "F-LAB-001":       "طلب فحص مختبري",
+    "F-LAB-002":       "سجل نتائج المختبر",
+    "F-LAB-003":       "سجل قراءات المعدات",
+    "F-EQP-001":       "سجل المعدة",
+    "F-MNT-001":       "طلب صيانة",
+  };
+  const formTitle = FORM_TITLES[record.form_id] || record.form_id;
 
   return (
     <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
@@ -447,27 +548,33 @@ export default function FormViewer() {
 
         {/* Section Label */}
         <div className="bg-slate-800 text-white text-center py-2 font-bold text-[15px] tracking-wide">
-          سجل إلكتروني
+          {formTitle}
         </div>
 
         {/* Form Data */}
         <div className="p-8">
           <div className="grid grid-cols-2 gap-y-5 gap-x-8">
             {Object.entries(data).map(([key, val], idx) => {
-              if (key === "attachmentUrl" && typeof val === "string" && val.startsWith("data:")) {
+              // Skip internal/file-only fields
+              if (HIDDEN_FIELDS.has(key)) return null;
+
+              // Attachment (image or PDF)
+              if ((key === "attachmentUrl" || key.endsWith("FileUrl") || key.endsWith("Url")) && typeof val === "string" && val.startsWith("data:")) {
                 return (
                   <div key={idx} className="col-span-2 border-b border-slate-100 pb-4">
                     <span className="block text-[12px] font-semibold text-slate-500 mb-2">{translateKey(key)}</span>
                     {val.startsWith("data:image/") ? (
                       <img src={val} alt="مرفق" className="max-h-48 object-contain border border-slate-200 rounded-lg" />
                     ) : (
-                      <a href={val} download="attachment.pdf" className="text-sky-600 hover:underline text-sm font-semibold">تحميل ملف PDF المرفق</a>
+                      <span className="text-sky-600 text-sm font-semibold">✓ مرفق موجود</span>
                     )}
                   </div>
                 );
               }
 
+              // Array of objects → table
               if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
+                const visibleKeys = Object.keys(val[0]).filter(k => !HIDDEN_FIELDS.has(k));
                 return (
                   <div key={idx} className="col-span-2 mt-2">
                     <div className="bg-slate-700 text-white px-4 py-2 font-bold text-[13px] rounded-t-lg">{translateKey(key)}</div>
@@ -475,7 +582,7 @@ export default function FormViewer() {
                       <table className="w-full text-right border-collapse text-[13px]">
                         <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
                           <tr>
-                            {Object.keys(val[0]).map((k) => (
+                            {visibleKeys.map((k) => (
                               <th key={k} className="p-2.5 font-semibold border-l border-slate-200 last:border-l-0">{translateKey(k)}</th>
                             ))}
                           </tr>
@@ -483,8 +590,8 @@ export default function FormViewer() {
                         <tbody>
                           {val.map((item: any, i: number) => (
                             <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                              {Object.values(item).map((v: any, j: number) => (
-                                <td key={j} className="p-2.5 border-l border-slate-100 last:border-l-0">{String(v ?? "—")}</td>
+                              {visibleKeys.map((k, j) => (
+                                <td key={j} className="p-2.5 border-l border-slate-100 last:border-l-0">{translateValue(k, item[k])}</td>
                               ))}
                             </tr>
                           ))}
@@ -495,6 +602,7 @@ export default function FormViewer() {
                 );
               }
 
+              // Nested object → key-value table
               if (typeof val === "object" && val !== null && !Array.isArray(val)) {
                 return (
                   <div key={idx} className="col-span-2 mt-2">
@@ -502,12 +610,14 @@ export default function FormViewer() {
                     <div className="border border-slate-200 rounded-b-lg overflow-hidden">
                       <table className="w-full text-right border-collapse text-[13px]">
                         <tbody>
-                          {Object.entries(val as Record<string, any>).map(([k, v], j) => (
-                            <tr key={j} className="border-b border-slate-100 last:border-0">
-                              <td className="p-2.5 font-semibold text-slate-600 border-l border-slate-100 w-1/2">{translateKey(k)}</td>
-                              <td className="p-2.5 font-bold text-slate-900">{typeof v === "boolean" ? (v ? "✓ نعم" : "✗ لا") : String(v ?? "—")}</td>
-                            </tr>
-                          ))}
+                          {Object.entries(val as Record<string, any>)
+                            .filter(([k]) => !HIDDEN_FIELDS.has(k))
+                            .map(([k, v], j) => (
+                              <tr key={j} className="border-b border-slate-100 last:border-0">
+                                <td className="p-2.5 font-semibold text-slate-600 border-l border-slate-100 w-1/2">{translateKey(k)}</td>
+                                <td className="p-2.5 font-bold text-slate-900">{translateValue(k, v)}</td>
+                              </tr>
+                            ))}
                         </tbody>
                       </table>
                     </div>
@@ -515,11 +625,14 @@ export default function FormViewer() {
                 );
               }
 
-              const displayVal = typeof val === "boolean" ? (val ? "نعم" : "لا") : String(val ?? "—");
+              // Skip empty values
+              const strVal = val === null || val === undefined ? "" : String(val);
+              if (strVal === "" || strVal === "—") return null;
+
               return (
                 <div key={idx} className="border-b border-slate-100 pb-3">
                   <span className="block text-[12px] font-semibold text-slate-500 mb-0.5">{translateKey(key)}</span>
-                  <span className="block text-[14px] font-semibold text-slate-900 break-words whitespace-pre-wrap">{displayVal}</span>
+                  <span className="block text-[14px] font-semibold text-slate-900 break-words whitespace-pre-wrap">{translateValue(key, val)}</span>
                 </div>
               );
             })}
