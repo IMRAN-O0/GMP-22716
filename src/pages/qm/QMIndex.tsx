@@ -29,9 +29,9 @@ export default function QMIndex() {
   const [records, setRecords] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/QM")
+    fetch("/api/forms/dept/QM", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((res) => res.json())
-      .then((data) => setRecords(data))
+      .then((data) => setRecords(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 

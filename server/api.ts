@@ -1959,34 +1959,30 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
 router.get("/forms/dept/:department", requireAuth, (req, res) => {
   const { department } = req.params;
   const user: any = getAuthUser(req);
-  const page = Math.max(1, parseInt(req.query.page as string) || 1);
-  const limit = Math.max(1, parseInt(req.query.limit as string) || 50);
-  const offset = (page - 1) * limit;
 
   let query =
-    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT ? OFFSET ?";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT 500";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT 500";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
-      // Can see all in department, but only if they are in this department
       if (user.department !== "ALL" && user.department !== department) {
-        return res.json({ data: [], page, limit, total: null }); // Empty if unauthorized
+        return res.json([]);
       }
     }
   }
 
-  getDb().all(query, [...params, limit, offset], (err, rows) => {
+  getDb().all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const mappedRows = rows.map((r: any) => ({
       ...r,
       data: JSON.parse(r.data_json || "{}"),
     }));
-    res.json({ data: mappedRows, page, limit, total: null });
+    res.json(mappedRows);
   });
 });
 
