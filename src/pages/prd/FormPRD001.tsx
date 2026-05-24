@@ -52,8 +52,9 @@ export default function FormPRD001() {
     fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
         setCompositions(
-          data.filter(
+          rows.filter(
             (f: any) => f.form_id === "F-INV-BOM" && f.status === "approved",
           ),
         );

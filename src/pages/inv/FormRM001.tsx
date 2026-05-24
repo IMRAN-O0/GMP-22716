@@ -67,7 +67,7 @@ export default function FormRM001() {
 
     fetch("/api/forms", { headers: h })
       .then(r => r.json())
-      .then(data => { setRmsForms(data.filter((f: any) => f.form_id === "F-INV-RM-001")); })
+      .then(data => { const rows = Array.isArray(data) ? data : []; setRmsForms(rows.filter((f: any) => f.form_id === "F-INV-RM-001")); })
       .catch(console.error);
 
     // Load ALL materials (no category filter — user may use any type)

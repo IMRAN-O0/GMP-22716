@@ -1446,34 +1446,31 @@ const validateFormData = (formId: string, data: any): string[] => {
 
 router.get("/forms", requireAuth, (req: any, res) => {
   const user: any = req.user;
-  const page = Math.max(1, parseInt(req.query.page as string) || 1);
-  const limit = Math.max(1, parseInt(req.query.limit as string) || 50);
-  const offset = (page - 1) * limit;
 
-  let query = "SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT ? OFFSET ?";
+  let query = "SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT 500";
   let params: any[] = [];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE status != 'deleted' AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT 500";
       params = [user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL") {
         query =
-          "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT ? OFFSET ?";
+          "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT 500";
         params = [user.department];
       }
     }
   }
 
-  getDb().all(query, [...params, limit, offset], (err, rows) => {
+  getDb().all(query, params, (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const mappedRows = rows.map((r: any) => ({
       ...r,
       data: JSON.parse(r.data_json || "{}"),
     }));
-    res.json({ data: mappedRows, page, limit, total: null });
+    res.json(mappedRows);
   });
 });
 

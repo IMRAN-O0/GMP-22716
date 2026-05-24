@@ -57,8 +57,9 @@ export default function FormPIN001() {
 
     fetch("/api/forms", { headers: h })
       .then((res) => res.json())
-      .then((data: any[]) => {
-        const prqs = data.filter((f) => f.form_id === "F-INV-PRQ-001" && f.status === "approved");
+      .then((data: any) => {
+        const rows = Array.isArray(data) ? data : [];
+        const prqs = rows.filter((f: any) => f.form_id === "F-INV-PRQ-001" && f.status === "approved");
         setPrqList(prqs);
       })
       .catch(console.error);
