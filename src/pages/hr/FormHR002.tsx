@@ -9,11 +9,6 @@ export default function FormHR002() {
   const navigate = useNavigate();
   // Generate employee number pseudo-randomly for demo, usually sequentially from DB
   const [loading, setLoading] = useState(false);
-  const [employeeId] = useState(
-    `EMP-${Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, "0")}`,
-  );
   const [formData, setFormData] = useState({
     fullNameAr: "",
     fullNameEn: "",
@@ -24,7 +19,7 @@ export default function FormHR002() {
     phone: "",
     email: "",
     address: "",
-    employeeNumber: "",
+    employeeNumber: `EMP-${Math.floor(Math.random() * 900 + 100)}`,
     joinDate: "",
     department: "",
     jobTitle: "",
