@@ -22,6 +22,8 @@ export default function INVIndex() {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [forms, setForms] = useState<any[]>([]);
+  const [balanceSearch, setBalanceSearch] = useState("");
+  const [editingBalance, setEditingBalance] = useState<{ id: number; val: string } | null>(null);
 
   const hasPerm = (id: string) => {
     if (!user) return false;
@@ -30,21 +32,21 @@ export default function INVIndex() {
   };
 
   useEffect(() => {
-    fetch("/api/warehouses")
+    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+    fetch("/api/warehouses", { headers })
       .then((r) => r.json())
-      .then((data) => setWarehouses(data))
+      .then((data) => setWarehouses(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/materials")
+    fetch("/api/materials", { headers })
       .then((r) => r.json())
-      .then((data) => setMaterials(data))
+      .then((data) => setMaterials(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/forms/dept/INV")
+    fetch("/api/forms/dept/INV", { headers })
       .then((r) => r.json())
-      .then((data) => {
-        setForms(data);
-      })
+      .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 
@@ -63,11 +65,11 @@ export default function INVIndex() {
         <div className="flex gap-2 flex-wrap justify-end">
           {hasPerm("F-INV-RM-001") && (
             <Link
-              to="/inv/create-material"
+              to="/inv/create-final-product"
               className="flex items-center px-4 py-2 bg-white text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[13px] transition-colors border border-slate-200 shadow-sm"
             >
               <PlusCircle className="w-4 h-4 ml-2 text-sky-500" />
-              إضافة / تعديل منتج نهائي
+              إضافة / تعديل منتج نهائي (FD)
             </Link>
           )}
           {hasPerm("F-INV-RM-001") && (
@@ -228,81 +230,147 @@ export default function INVIndex() {
         </div>
 
         {/* Data Table */}
-        <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col pt-2 lg:col-span-3">
-          <div className="px-6 py-4 flex justify-between items-center mb-2">
-            <span className="text-[16px] font-bold text-slate-900">
+        <div className="bg-white rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col lg:col-span-3" style={{maxHeight: "420px"}}>
+          <div className="px-4 py-3 flex justify-between items-center border-b border-slate-100 flex-shrink-0 gap-2 flex-wrap">
+            <span className="text-[15px] font-bold text-slate-900">
               أرصدة الأصناف
+              <span className="text-[12px] font-normal text-slate-400 mr-2">({materials.filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch)).length} صنف)</span>
             </span>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="بحث باسم أو كود المادة..."
-                className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-[14px] w-64 focus:ring-sky-400 focus:border-sky-400 text-slate-500"
-              />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <div className="flex gap-2 items-center">
+              {user?.level === 1 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm("سيتم مزامنة جميع الأرصدة من السجلات المعتمدة. هل تريد المتابعة؟")) return;
+                    const res = await fetch("/api/materials/sync-from-transactions", {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                    });
+                    const result = await res.json();
+                    if (result.success) {
+                      alert(`تمت المزامنة — تم تحديث ${result.updated} مادة.`);
+                      fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+                        .then(r => r.json()).then(d => setMaterials(Array.isArray(d) ? d : []));
+                    } else {
+                      alert("فشل: " + result.error);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-lg text-[12px] font-semibold hover:bg-sky-100"
+                >
+                  <RefreshCcw className="w-3.5 h-3.5" /> مزامنة الأرصدة
+                </button>
+              )}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="بحث باسم أو كود..."
+                  value={balanceSearch}
+                  onChange={(e) => setBalanceSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-[13px] w-48 focus:ring-sky-400 focus:border-sky-400 text-slate-600"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+              </div>
             </div>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto flex-1">
             <table className="w-full text-right border-collapse">
-              <thead className="bg-white text-slate-500 text-[13px] font-semibold">
+              <thead className="bg-slate-50 text-slate-500 text-[12px] font-semibold sticky top-0 z-10">
                 <tr>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    كود المادة
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    اسم ووصف المادة
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    موقع المستودع
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    الوحدة القياسية
-                  </th>
-                  <th className="px-6 py-4 font-semibold border-b border-slate-100">
-                    الرصيد الفعلي
-                  </th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">كود المادة</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">اسم المادة</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">المستودع</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">الوحدة</th>
+                  <th className="px-3 py-2.5 font-semibold border-b border-slate-100">الرصيد</th>
+                  {user?.level <= 2 && <th className="px-3 py-2.5 font-semibold border-b border-slate-100 text-center w-12">حذف</th>}
                 </tr>
               </thead>
-              <tbody className="text-[14px] text-slate-600">
+              <tbody className="text-[13px] text-slate-600">
                 {materials.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-8 text-center text-slate-400"
-                    >
+                    <td colSpan={user?.level <= 2 ? 6 : 5} className="px-4 py-6 text-center text-slate-400">
                       لا توجد مواد مسجلة حتى الآن
                     </td>
                   </tr>
                 ) : (
-                  materials.map((m, i) => {
-                    const warehouse = warehouses.find(
-                      (w) => w.id === m.warehouse_id,
-                    );
+                  materials
+                    .filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch))
+                    .map((m, i) => {
+                    const warehouse = warehouses.find((w) => w.id === m.warehouse_id);
+                    const isLow = m.minBalance && m.balance <= m.minBalance;
                     return (
-                      <tr
-                        key={i}
-                        className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
-                      >
-                        <td className="px-6 py-4 font-mono font-bold text-sky-600">
-                          {m.code}
+                      <tr key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
+                        <td className="px-3 py-2 font-mono font-bold text-sky-600 text-[12px]">{m.code}</td>
+                        <td className="px-3 py-2">
+                          <span className="font-semibold text-slate-800">{m.name}</span>
                         </td>
-                        <td className="px-6 py-4">
-                          <span className="font-bold text-slate-800 block">
-                            {m.name}
-                          </span>
-                          <span className="text-xs text-slate-400">
-                            {m.description}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[11px] font-bold">
+                        <td className="px-3 py-2">
+                          <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-bold">
                             {warehouse ? warehouse.name : "غير محدد"}
                           </span>
                         </td>
-                        <td className="px-6 py-4">{m.unit}</td>
-                        <td className="px-6 py-4 font-bold text-slate-900">
-                          {m.balance}
+                        <td className="px-3 py-2 text-slate-500">{m.unit}</td>
+                        <td className={`px-3 py-2 font-bold ${isLow ? "text-red-600" : "text-slate-900"}`}>
+                          {user?.level === 1 && editingBalance?.id === m.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number" step="0.01" min="0"
+                                value={editingBalance.val}
+                                autoFocus
+                                onChange={e => setEditingBalance({ id: m.id, val: e.target.value })}
+                                onKeyDown={async e => {
+                                  if (e.key === "Enter") {
+                                    const newBal = parseFloat(editingBalance.val);
+                                    if (isNaN(newBal) || newBal < 0) return;
+                                    await fetch(`/api/materials/${m.id}/balance`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+                                      body: JSON.stringify({ balance: newBal }),
+                                    });
+                                    setMaterials(prev => prev.map(x => x.id === m.id ? { ...x, balance: newBal } : x));
+                                    setEditingBalance(null);
+                                  } else if (e.key === "Escape") {
+                                    setEditingBalance(null);
+                                  }
+                                }}
+                                className="w-20 border border-amber-400 rounded px-1 py-0.5 text-[12px] font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                              />
+                              <span className="text-[10px] text-slate-400">Enter</span>
+                            </div>
+                          ) : (
+                            <span
+                              onClick={() => user?.level === 1 ? setEditingBalance({ id: m.id, val: String(m.balance ?? 0) }) : undefined}
+                              className={user?.level === 1 ? "cursor-pointer hover:bg-amber-50 hover:text-amber-700 px-1 rounded" : ""}
+                              title={user?.level === 1 ? "انقر لتعديل الرصيد" : ""}
+                            >
+                              {m.balance}
+                            </span>
+                          )}
+                          {isLow && <span className="text-[10px] text-red-500 block">منخفض</span>}
                         </td>
+                        {user?.level <= 2 && (
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                if (!window.confirm(`هل أنت متأكد من حذف المادة "${m.name}"؟`)) return;
+                                const res = await fetch(`/api/materials/${m.id}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                                });
+                                if (res.ok) {
+                                  setMaterials((prev) => prev.filter((x) => x.id !== m.id));
+                                } else {
+                                  const err = await res.json().catch(() => ({ error: "خطأ" }));
+                                  alert("فشل الحذف: " + err.error);
+                                }
+                              }}
+                              className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors"
+                              title="حذف المادة"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -331,18 +399,6 @@ export default function INVIndex() {
               <p className="text-sm text-slate-500 mt-1">
                 الإفراج عن دفعة (Batch Release)
               </p>
-            </Link>
-          )}
-          {hasPerm("F-FP-002") && (
-            <Link
-              to="/inv/fp-002"
-              className="bg-white border text-center border-slate-200 rounded-xl p-6 hover:shadow-md hover:border-sky-300 transition-all flex flex-col items-center group"
-            >
-              <div className="w-12 h-12 bg-sky-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                <Package className="text-sky-500 w-6 h-6" />
-              </div>
-              <h4 className="font-bold text-slate-800">F-FP-002</h4>
-              <p className="text-sm text-slate-500 mt-1">تخزين المنتجات</p>
             </Link>
           )}
           {hasPerm("F-FP-003") && (

@@ -16,6 +16,7 @@ import FormViewer from './pages/hr/FormViewer';
 import UsersManagement from './pages/UsersManagement';
 import AuditLog from './pages/AuditLog';
 import Reports from './pages/Reports';
+import CompanySettings from './pages/CompanySettings';
 
 import PRDIndex from './pages/prd/PRDIndex';
 import FormPRD001 from './pages/prd/FormPRD001';
@@ -28,12 +29,12 @@ import CreateWarehouse from './pages/inv/CreateWarehouse';
 import CreateMaterial from './pages/inv/CreateMaterial';
 import CreateSupplier from './pages/inv/CreateSupplier';
 import CreateCustomer from './pages/inv/CreateCustomer';
+import CreateFinalProduct from './pages/inv/CreateFinalProduct';
 import FormRM001 from './pages/inv/FormRM001';
 import FormPRQ001 from './pages/inv/FormPRQ001';
 import FormPIN001 from './pages/inv/FormPIN001';
 import FormRMT from './pages/inv/FormRMT';
 import FormFP001 from './pages/inv/FormFP001';
-import FormFP002 from './pages/inv/FormFP002';
 import FormFP003 from './pages/inv/FormFP003';
 import FormFP004 from './pages/inv/FormFP004';
 import FormFP005 from './pages/inv/FormFP005';
@@ -88,6 +89,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="users" element={<UsersManagement />} />
             <Route path="audit" element={<AuditLog />} />
+            <Route path="settings" element={<CompanySettings />} />
             <Route path="reports" element={<Reports />} />
             <Route path="hr" element={<HRIndex />} />
             <Route path="hr/new-request" element={<FormHR001 />} />
@@ -109,12 +111,12 @@ export default function App() {
             <Route path="inv/create-material" element={<CreateMaterial />} />
             <Route path="inv/create-supplier" element={<CreateSupplier />} />
             <Route path="inv/create-customer" element={<CreateCustomer />} />
+            <Route path="inv/create-final-product" element={<CreateFinalProduct />} />
             <Route path="inv/rm-001" element={<FormRM001 />} />
             <Route path="inv/prq-001" element={<FormPRQ001 />} />
             <Route path="inv/pin-001" element={<FormPIN001 />} />
             <Route path="inv/rmt" element={<FormRMT />} />
             <Route path="inv/fp-001" element={<FormFP001 />} />
-            <Route path="inv/fp-002" element={<FormFP002 />} />
             <Route path="inv/fp-003" element={<FormFP003 />} />
             <Route path="inv/fp-004" element={<FormFP004 />} />
             <Route path="inv/fp-005" element={<FormFP005 />} />

@@ -124,7 +124,8 @@ export default function FormPRD004() {
         alert(`تم الحفظ بنجاح. رقم المستند: ${recordId}`);
         navigate("/prd");
       } else {
-        alert("حدث خطأ أثناء الحفظ");
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
       console.error(err);
@@ -214,8 +215,8 @@ export default function FormPRD004() {
               <tr>
                 <th className="p-3 border-r border-slate-200">الوقت</th>
                 <th className="p-3 border-r border-slate-200 w-1/4">
-                  المعيار (Parameter)
-                </th>
+                  المعيار
+</th>
                 <th className="p-3 border-r border-slate-200">
                   القيمة المطلوبة
                 </th>

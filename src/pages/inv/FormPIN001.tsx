@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
 import { Save, CheckCircle, Plus, Trash2, Search } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormPIN001() {
   const navigate = useNavigate();
@@ -30,49 +31,41 @@ export default function FormPIN001() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [prqList, setPrqList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/materials")
+    const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+    fetch("/api/materials", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setMaterials(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setMaterials(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    fetch("/api/warehouses")
+    fetch("/api/warehouses", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setWarehouses(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setWarehouses(Array.isArray(data) ? data.filter((w: any) => w.id && w.name && w.name !== "0") : []); })
       .catch(console.error);
 
-    fetch("/api/suppliers")
+    fetch("/api/suppliers", { headers: h })
       .then((r) => r.json())
-      .then((data) => {
-        setSuppliers(Array.isArray(data) ? data : []);
-      })
+      .then((data) => { setSuppliers(Array.isArray(data) ? data : []); })
       .catch(console.error);
 
-    // Fetch approved PRQs
-    fetch("/api/forms")
+    fetch("/api/forms", { headers: h })
       .then((res) => res.json())
       .then((data: any[]) => {
-        const prqs = data.filter(
-          (f) => f.form_id === "F-INV-PRQ-001" && f.status === "approved",
-        );
+        const prqs = data.filter((f) => f.form_id === "F-INV-PRQ-001" && f.status === "approved");
         setPrqList(prqs);
       })
       .catch(console.error);
 
     const editId = new URLSearchParams(window.location.search).get("edit");
     if (editId) {
-      fetch(`/api/forms/record/${editId}`)
+      fetch(`/api/forms/record/${editId}`, { headers: h })
         .then((res) => res.json())
-        .then((data) => {
-          if (data && data.data) {
-            setFormData(data.data);
-          }
-        })
+        .then((data) => { if (data && data.data) setFormData(data.data); })
         .catch(console.error);
     }
   }, []);
@@ -148,6 +141,12 @@ export default function FormPIN001() {
     setFormData({ ...formData, items: newItems });
   };
 
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newItems = [...formData.items];
+    newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "" };
+    setFormData({ ...formData, items: newItems });
+  };
+
   const calculateSubtotal = () => {
     return formData.items.reduce(
       (sum, item) =>
@@ -205,7 +204,8 @@ export default function FormPIN001() {
       if (res.ok) {
         navigate("/inv");
       } else {
-        alert("حدث خطأ أثناء الحفظ");
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
       console.error(err);
@@ -294,27 +294,15 @@ export default function FormPIN001() {
               />
             </div>
             <div>
-              <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-                اسم المورد (الشركة) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                list="suppliers-list-pin"
+              <SearchField
+                label="اسم المورد (الشركة)"
                 required
-                placeholder="ابحث بكود أو اسم المورد..."
                 value={formData.supplierName}
-                onChange={(e) =>
-                  setFormData({ ...formData, supplierName: e.target.value })
-                }
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 text-sm py-2"
+                onChange={(v) => setFormData({ ...formData, supplierName: v })}
+                onF3={() => setShowSupplierModal(true)}
+                placeholder="اكتب أو اضغط F3 للبحث…"
+                hint="F3 للبحث في قائمة الموردين"
               />
-              <datalist id="suppliers-list-pin">
-                {suppliers.map((s, i) => (
-                  <option key={i} value={s.name}>
-                    {s.code}
-                  </option>
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -408,21 +396,24 @@ export default function FormPIN001() {
                         className="bg-white hover:bg-slate-50 transition-colors"
                       >
                         <td className="p-2 border-r border-slate-100">
-                          <input
-                            type="text"
-                            list="materials-list-pin"
-                            required
-                            placeholder="بحث بكود أو اسم..."
-                            value={item.materialCode}
-                            onChange={(e) =>
-                              updateItem(
-                                i,
-                                "materialCode",
-                                formatMaterialCode(e.target.value),
-                              )
-                            }
-                            className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
-                          />
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              required
+                              placeholder="الكود…"
+                              value={item.materialCode}
+                              onChange={(e) => {
+                                const code = formatMaterialCode(e.target.value);
+                                const mat = materials.find((m) => m.code === code);
+                                updateItem(i, "materialCode", code);
+                                if (mat) { updateItem(i, "materialName", mat.name); updateItem(i, "unit", mat.unit || ""); }
+                              }}
+                              className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
+                            />
+                            <button type="button" title="F3"
+                              onClick={() => { setEditingItemIdx(i); setShowMaterialModal(true); }}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0">F3</button>
+                          </div>
                         </td>
                         <td className="p-2 border-r border-slate-100">
                           <input
@@ -489,21 +480,6 @@ export default function FormPIN001() {
                   )}
                 </tbody>
               </table>
-              <datalist id="materials-list-pin">
-                {materials
-                  .filter(
-                    (m) =>
-                      m.category === "مادة خام" ||
-                      m.category === "مواد تعبئة وتغليف" ||
-                      m.code?.startsWith("RM") ||
-                      m.code?.startsWith("PKG") ||
-                      m.category === "Raw Material" ||
-                      m.category === "Packaging",
-                  )
-                  .map((m: any) => (
-                    <option key={m.id} value={`${m.code} - ${m.name}`} />
-                  ))}
-              </datalist>
             </div>
 
             {/* Totals Box */}
@@ -605,6 +581,49 @@ export default function FormPIN001() {
           </div>
         </form>
       </div>
+
+      {showSupplierModal && (
+        <SearchModal
+          title="بحث عن مورد (F3)"
+          items={suppliers}
+          columns={[
+            { key: "code", label: "كود المورد", className: "font-mono w-28" },
+            { key: "name", label: "اسم المورد" },
+            { key: "phone", label: "الهاتف", className: "w-32" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بكود أو اسم المورد…"
+          onSelect={(s) => setFormData({ ...formData, supplierName: s.name })}
+          onClose={() => setShowSupplierModal(false)}
+        />
+      )}
+
+      {/* Material search modal — filtered by selected supplier */}
+      {showMaterialModal && editingItemIdx !== null && (
+        <SearchModal
+          title={formData.supplierName ? `مواد المورد: ${formData.supplierName} (F3)` : "بحث عن مادة (F3)"}
+          items={formData.supplierName
+            ? materials.filter((m: any) =>
+                m.supplier_name === formData.supplierName ||
+                m.supplierName === formData.supplierName
+              )
+            : materials}
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+            { key: "balance", label: "الرصيد", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            selectMaterialForRow(editingItemIdx!, m);
+            setShowMaterialModal(false);
+            setEditingItemIdx(null);
+          }}
+          onClose={() => { setShowMaterialModal(false); setEditingItemIdx(null); }}
+        />
+      )}
     </div>
   );
 }

@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { formatMaterialCode } from "../../lib/utils";
+import { formatMaterialCode, formatProductCode, formatBOMCode } from "../../lib/utils";
 import { Save, ArrowRight, PlusCircle, Trash2, Beaker } from "lucide-react";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormComposition() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [finalProducts, setFinalProducts] = useState<any[]>([]);
   const [rawMaterialsList, setRawMaterialsList] = useState<any[]>([]);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
-    compositionNo: `BOM-${Math.floor(Date.now() / 1000)}`,
+    compositionNo: `AH-${String(Math.floor(Math.random() * 9000) + 1000)}`,
     productCode: "",
     productName: "",
     version: "1.0",
@@ -26,7 +30,7 @@ export default function FormComposition() {
   });
 
   useEffect(() => {
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setFinalProducts(data.filter((m: any) => m.category === "منتج نهائي"));
@@ -60,6 +64,12 @@ export default function FormComposition() {
     setFormData((prev) => ({ ...prev, materials: newMaterials }));
   };
 
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newMaterials = [...formData.materials];
+    newMaterials[idx] = { ...newMaterials[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "%" };
+    setFormData((prev) => ({ ...prev, materials: newMaterials }));
+  };
+
   const handleSubmit = async (e: React.FormEvent, status: any) => {
     e.preventDefault();
     const recordId = formData.compositionNo;
@@ -90,12 +100,16 @@ export default function FormComposition() {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
+        return;
+      }
       alert("تم حفظ التركيبة بنجاح!");
       navigate("/inv");
     } catch (err) {
       console.error(err);
-      alert("حدث خطأ أثناء الحفظ");
+      alert("حدث خطأ في الاتصال");
     }
   };
 
@@ -143,10 +157,21 @@ export default function FormComposition() {
             </div>
           </div>
         </div>
-        <div className="text-left">
-          <p className="text-[12px] font-bold text-slate-500">
-            رقم السجل: {formData.compositionNo}
-          </p>
+        <div className="flex items-center gap-2 text-left">
+          <span className="text-[12px] font-bold text-slate-500">رقم التركيبة:</span>
+          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+            <span className="bg-emerald-50 text-emerald-700 font-bold text-[12px] px-2 py-1 border-l border-slate-200">AH-</span>
+            <input
+              type="text"
+              maxLength={4}
+              value={formData.compositionNo.replace(/^AH-/i, "")}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+                setFormData({ ...formData, compositionNo: `AH-${digits}` });
+              }}
+              className="w-14 text-center font-mono font-bold text-[13px] text-slate-800 border-0 focus:ring-0 py-1 bg-white"
+            />
+          </div>
         </div>
       </div>
 
@@ -164,30 +189,22 @@ export default function FormComposition() {
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
                 اسم المنتج <span className="text-red-500">*</span>
               </label>
-              <input
+              <SearchField
+                label=""
                 required
-                type="text"
-                list="final-products-list"
-                placeholder="ابحث باسم المنتج أو الكود..."
                 value={formData.productCode}
-                onChange={(e) => {
-                  const currentVal = e.target.value;
-                  const codeMatch = currentVal.match(/^([A-Za-z0-9-]+) - /);
-                  const code = codeMatch ? codeMatch[1] : currentVal;
-                  const found = finalProducts.find((p: any) => p.code === code);
-                  setFormData({
-                    ...formData,
-                    productCode: formatMaterialCode(code),
-                    productName: found ? found.name : "",
-                  });
+                onChange={(v) => {
+                  const formatted = formatProductCode(v);
+                  const found = finalProducts.find((p: any) => p.code === formatted);
+                  setFormData({ ...formData, productCode: formatted, productName: found ? found.name : "" });
                 }}
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:border-emerald-500 focus:ring-emerald-500 text-sm py-2"
+                onF3={() => setShowProductModal(true)}
+                placeholder="FD-0001 أو اضغط F3…"
+                hint="F3 للبحث في المنتجات النهائية (FD-XXXX)"
               />
-              <datalist id="final-products-list">
-                {finalProducts.map((p: any) => (
-                  <option key={p.id} value={`${p.code} - ${p.name}`} />
-                ))}
-              </datalist>
+              {formData.productName && (
+                <p className="text-xs text-emerald-600 mt-1 font-semibold">{formData.productName}</p>
+              )}
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -263,39 +280,33 @@ export default function FormComposition() {
                   formData.materials.map((material, i) => (
                     <tr key={i} className="hover:bg-slate-50">
                       <td className="p-2 border-r border-slate-100">
-                        <input
-                          required
-                          type="text"
-                          list="raw-mat-list"
-                          placeholder="ابحث..."
-                          value={material.materialCode}
-                          onChange={(e) => {
-                            const currentVal = e.target.value;
-                            const codeMatch =
-                              currentVal.match(/^([A-Za-z0-9-]+) - /);
-                            const code = codeMatch ? codeMatch[1] : currentVal;
-                            const found = rawMaterialsList.find(
-                              (m) => m.code === code,
-                            );
-                            const newMaterials = [...formData.materials];
-                            newMaterials[i] = {
-                              ...newMaterials[i],
-                              materialCode: formatMaterialCode(code),
-                              materialName: found
-                                ? found.name
-                                : material.materialName,
-                              unit:
-                                found && found.unit
-                                  ? found.unit
-                                  : material.unit,
-                            };
-                            setFormData((prev) => ({
-                              ...prev,
-                              materials: newMaterials,
-                            }));
-                          }}
-                          className="w-full bg-transparent border border-slate-200 focus:ring-1 focus:ring-emerald-500 rounded-lg text-sm py-1.5 px-2"
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            required
+                            type="text"
+                            placeholder="الكود…"
+                            value={material.materialCode}
+                            onChange={(e) => {
+                              const code = e.target.value;
+                              const found = rawMaterialsList.find((m) => m.code === code);
+                              const newMaterials = [...formData.materials];
+                              newMaterials[i] = {
+                                ...newMaterials[i],
+                                materialCode: code,
+                                materialName: found ? found.name : material.materialName,
+                                unit: found && found.unit ? found.unit : material.unit,
+                              };
+                              setFormData((prev) => ({ ...prev, materials: newMaterials }));
+                            }}
+                            className="w-full bg-transparent border border-slate-200 focus:ring-1 focus:ring-emerald-500 rounded-lg text-sm py-1.5 px-2"
+                          />
+                          <button
+                            type="button"
+                            title="F3 — بحث عن مادة"
+                            onClick={() => { setEditingMatIdx(i); setShowMaterialModal(true); }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
+                          >F3</button>
+                        </div>
                       </td>
                       <td className="p-2 border-r border-slate-100">
                         <input
@@ -373,14 +384,6 @@ export default function FormComposition() {
                   </tfoot>
                 )}
             </table>
-            <datalist id="raw-mat-list">
-              {rawMaterialsList.map((invMat) => (
-                <option
-                  key={invMat.id}
-                  value={`${invMat.code} - ${invMat.name}`}
-                />
-              ))}
-            </datalist>
           </div>
         </div>
 
@@ -437,6 +440,43 @@ export default function FormComposition() {
           </button>
         </div>
       </form>
+      {showProductModal && (
+        <SearchModal
+          title="بحث عن منتج نهائي (F3)"
+          items={finalProducts}
+          columns={[
+            { key: "code", label: "كود المنتج", className: "font-mono w-28" },
+            { key: "name", label: "اسم المنتج" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(p) => {
+            setFormData({ ...formData, productCode: p.code, productName: p.name });
+            setShowProductModal(false);
+          }}
+          onClose={() => setShowProductModal(false)}
+        />
+      )}
+      {showMaterialModal && editingMatIdx !== null && (
+        <SearchModal
+          title="بحث عن مادة خام (F3)"
+          items={rawMaterialsList}
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            selectMaterialForRow(editingMatIdx!, m);
+            setShowMaterialModal(false);
+            setEditingMatIdx(null);
+          }}
+          onClose={() => { setShowMaterialModal(false); setEditingMatIdx(null); }}
+        />
+      )}
     </div>
   );
 }

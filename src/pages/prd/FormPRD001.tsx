@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, formatProductCode } from "../../lib/utils";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormPRD001() {
   const { user } = useAuth();
@@ -23,9 +24,13 @@ export default function FormPRD001() {
   const [compositions, setCompositions] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [lastAppliedBOM, setLastAppliedBOM] = useState({ item: "", batch: "" });
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setInventoryMaterials(
@@ -35,14 +40,14 @@ export default function FormPRD001() {
       })
       .catch(console.error);
 
-    fetch("/api/customers")
+    fetch("/api/customers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setCustomers(Array.isArray(data) ? data : []);
       })
       .catch(console.error);
 
-    fetch("/api/forms")
+    fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setCompositions(
@@ -114,6 +119,12 @@ export default function FormPRD001() {
   const updateRawMaterial = (index: number, field: string, value: string) => {
     const newMaterials = [...formData.rawMaterials];
     newMaterials[index] = { ...newMaterials[index], [field]: value };
+    setFormData((prev) => ({ ...prev, rawMaterials: newMaterials }));
+  };
+
+  const selectRawMaterialForRow = (idx: number, m: any) => {
+    const newMaterials = [...formData.rawMaterials];
+    newMaterials[idx] = { ...newMaterials[idx], materialCode: m.code, materialName: m.name, unit: m.unit || "كجم" };
     setFormData((prev) => ({ ...prev, rawMaterials: newMaterials }));
   };
 
@@ -230,7 +241,8 @@ export default function FormPRD001() {
         alert(`تم الحفظ بنجاح. رقم المستند: ${recordId}`);
         navigate("/prd");
       } else {
-        alert("حدث خطأ أثناء الحفظ");
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
       console.error(err);
@@ -292,32 +304,19 @@ export default function FormPRD001() {
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
               كود المنتج (Item Number) <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              list="products-list-prd001"
+            <SearchField
+              label=""
               required
-              placeholder="ابحث بكود أو اسم المنتج..."
               value={formData.itemNumber}
-              onChange={(e) => {
-                const currentVal = e.target.value;
-                const codeMatch = currentVal.match(/^([A-Za-z0-9-]+) - /);
-                const code = codeMatch ? codeMatch[1] : currentVal;
-                const foundProduct = products.find((p: any) => p.code === code);
-                setFormData({
-                  ...formData,
-                  itemNumber: formatMaterialCode(code),
-                  productName: foundProduct
-                    ? foundProduct.name
-                    : formData.productName,
-                });
+              onChange={(v) => {
+                const formatted = formatProductCode(v);
+                const foundProduct = products.find((p: any) => p.code === formatted);
+                setFormData({ ...formData, itemNumber: formatted, productName: foundProduct ? foundProduct.name : formData.productName });
               }}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
+              onF3={() => setShowProductModal(true)}
+              placeholder="FD-0001 أو اضغط F3…"
+              hint="F3 للبحث في المنتجات النهائية (FD-XXXX)"
             />
-            <datalist id="products-list-prd001">
-              {products.map((p: any) => (
-                <option key={p.id} value={`${p.code} - ${p.name}`} />
-              ))}
-            </datalist>
           </div>
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -457,37 +456,33 @@ export default function FormPRD001() {
                         className="border-b border-slate-100 bg-white last:border-0"
                       >
                         <td className="p-1.5 border-r border-slate-100">
-                          <select
-                            required
-                            value={material.materialCode}
-                            onChange={(e) => {
-                              const code = e.target.value;
-                              const found = inventoryMaterials.find(
-                                (m) => m.code === code,
-                              );
-                              const newMaterials = [...formData.rawMaterials];
-                              newMaterials[i] = {
-                                ...newMaterials[i],
-                                materialCode: formatMaterialCode(code),
-                                materialName: found
-                                  ? found.name
-                                  : material.materialName,
-                                unit: found ? found.unit : material.unit,
-                              };
-                              setFormData((prev) => ({
-                                ...prev,
-                                rawMaterials: newMaterials,
-                              }));
-                            }}
-                            className="w-full bg-transparent border-0 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1"
-                          >
-                            <option value="">-- كود المادة --</option>
-                            {inventoryMaterials.map((invMat) => (
-                              <option key={invMat.id} value={invMat.code}>
-                                {invMat.code} ({invMat.name})
-                              </option>
-                            ))}
-                          </select>
+                          <div className="flex gap-1">
+                            <input
+                              required
+                              type="text"
+                              placeholder="الكود…"
+                              value={material.materialCode}
+                              onChange={(e) => {
+                                const code = e.target.value;
+                                const found = inventoryMaterials.find((m) => m.code === code);
+                                const newMaterials = [...formData.rawMaterials];
+                                newMaterials[i] = {
+                                  ...newMaterials[i],
+                                  materialCode: code,
+                                  materialName: found ? found.name : material.materialName,
+                                  unit: found ? found.unit : material.unit,
+                                };
+                                setFormData((prev) => ({ ...prev, rawMaterials: newMaterials }));
+                              }}
+                              className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
+                            />
+                            <button
+                              type="button"
+                              title="F3 — بحث عن مادة"
+                              onClick={() => { setEditingMatIdx(i); setShowMaterialModal(true); }}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
+                            >F3</button>
+                          </div>
                         </td>
                         <td className="p-1.5 border-r border-slate-100">
                           <input
@@ -560,23 +555,14 @@ export default function FormPRD001() {
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
                 اسم العميل (اختياري)
               </label>
-              <input
-                type="text"
-                list="customers-list-prd001"
+              <SearchField
+                label=""
                 value={formData.clientName}
-                onChange={(e) =>
-                  setFormData({ ...formData, clientName: e.target.value })
-                }
-                placeholder="ابحث بكود أو اسم العميل..."
-                className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
+                onChange={(v) => setFormData({ ...formData, clientName: v })}
+                onF3={() => setShowCustomerModal(true)}
+                placeholder="اكتب أو اضغط F3 للبحث…"
+                hint="F3 للبحث في قائمة العملاء"
               />
-              <datalist id="customers-list-prd001">
-                {customers.map((c, i) => (
-                  <option key={i} value={c.name}>
-                    {c.code}
-                  </option>
-                ))}
-              </datalist>
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">
@@ -670,6 +656,62 @@ export default function FormPRD001() {
           </button>
         </div>
       </form>
+      {showProductModal && (
+        <SearchModal
+          title="بحث عن منتج نهائي (F3)"
+          items={products}
+          columns={[
+            { key: "code", label: "كود المنتج", className: "font-mono w-28" },
+            { key: "name", label: "اسم المنتج" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(p) => {
+            setFormData({ ...formData, itemNumber: p.code, productName: p.name });
+            setShowProductModal(false);
+          }}
+          onClose={() => setShowProductModal(false)}
+        />
+      )}
+      {showMaterialModal && editingMatIdx !== null && (
+        <SearchModal
+          title="بحث عن مادة خام (F3)"
+          items={inventoryMaterials}
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+            { key: "balance", label: "الرصيد", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            selectRawMaterialForRow(editingMatIdx!, m);
+            setShowMaterialModal(false);
+            setEditingMatIdx(null);
+          }}
+          onClose={() => { setShowMaterialModal(false); setEditingMatIdx(null); }}
+        />
+      )}
+      {showCustomerModal && (
+        <SearchModal
+          title="بحث عن عميل (F3)"
+          items={customers}
+          columns={[
+            { key: "code", label: "كود العميل", className: "font-mono w-28" },
+            { key: "name", label: "اسم العميل" },
+            { key: "phone", label: "الهاتف", className: "w-32" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بكود أو اسم العميل…"
+          onSelect={(c) => {
+            setFormData({ ...formData, clientName: c.name });
+            setShowCustomerModal(false);
+          }}
+          onClose={() => setShowCustomerModal(false)}
+        />
+      )}
     </div>
   );
 }

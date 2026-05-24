@@ -68,7 +68,8 @@ export default function FormHR001() {
         alert(`تم الحفظ بنجاح. رقم المستند: ${recordId}`);
         navigate("/hr");
       } else {
-        alert("حدث خطأ أثناء الحفظ");
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
       console.error(err);

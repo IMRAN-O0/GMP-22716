@@ -118,7 +118,7 @@ export default function FormPRM003() {
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">
-                المنطقة (Area)
+                المنطقة
               </label>
               <select
                 className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg"

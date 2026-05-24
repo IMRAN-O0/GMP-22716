@@ -47,6 +47,14 @@ import ReportExpiryWatch from "./reports/ReportExpiryWatch";
 export default function Reports() {
   const { user } = useAuth();
   const [activeReport, setActiveReport] = useState<string | null>(null);
+  const [company, setCompany] = useState<any>({});
+
+  useEffect(() => {
+    fetch("/api/company", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      .then((r) => r.json())
+      .then((d) => setCompany(d || {}))
+      .catch(() => {});
+  }, []);
 
   // Only show reports to authorized departments
   const isAuthorized =
@@ -292,16 +300,24 @@ export default function Reports() {
         </div>
 
         {/* Print Header */}
-        <div className="hidden print:block text-center border-b pb-4 mb-4">
-          <h1 className="text-2xl font-bold mb-2">
-            النظام المتكامل لإدارة الجودة والمخزون
-          </h1>
-          <h2 className="text-xl text-slate-700">
-            {reportTypes.find((r) => r.id === activeReport)?.title}
-          </h2>
-          <p className="text-sm text-slate-500 mt-2">
-            تاريخ الطباعة: {new Date().toLocaleDateString("ar-SA")}
-          </p>
+        <div className="hidden print:flex items-start justify-between border-b-2 border-slate-700 pb-4 mb-4 gap-4">
+          <div className="flex items-center gap-3">
+            {company.logo_url ? (
+              <img src={company.logo_url} alt="شعار" className="h-16 w-16 object-contain border border-slate-200 rounded-lg p-0.5" />
+            ) : (
+              <div className="h-16 w-16 border-2 border-slate-300 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold">شعار</div>
+            )}
+            <div>
+              <div className="font-bold text-xl text-slate-900">{company.name_ar || "الشركة"}</div>
+              {company.name_en && <div className="text-sm text-slate-500">{company.name_en}</div>}
+              {company.license_number && <div className="text-xs text-slate-400">رقم الترخيص: {company.license_number}</div>}
+            </div>
+          </div>
+          <div className="text-left">
+            <div className="font-bold text-lg text-slate-800">{reportTypes.find((r) => r.id === activeReport)?.title}</div>
+            <div className="text-sm text-slate-500 mt-1">تاريخ الطباعة: {new Date().toLocaleDateString("ar-SA")}</div>
+            <div className="text-xs text-slate-400 mt-0.5">نظام الجودة ISO 22716</div>
+          </div>
         </div>
 
         <div className="print:text-sm">

@@ -235,9 +235,7 @@ export default function FormLAB003() {
                 >
                   <option value="Physico-Chemical">فيزيائي-كيميائي</option>
                   <option value="Microbiological">مايكروبيولوجي</option>
-                  <option value="Packaging">
-                    فحص التعبئة والتغليف (Packaging)
-                  </option>
+                  <option value="Packaging">فحص التعبئة والتغليف</option>
                 </select>
               </div>
             </div>
@@ -256,7 +254,7 @@ export default function FormLAB003() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  رقم التشغيلة / الدفعة (Batch/Lot)
+                  رقم التشغيلة / الدفعة
                 </label>
                 <input
                   type="text"
@@ -270,14 +268,14 @@ export default function FormLAB003() {
 
           <div>
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">
-              سجل نتائج الفحوصات (Parameters)
+              سجل نتائج الفحوصات
             </h3>
 
             <div className="bg-slate-50 p-4 border border-slate-200 rounded-lg mb-4">
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    معامل الفحص (Parameter)
+                    معامل الفحص
                   </label>
                   <input
                     type="text"
@@ -291,7 +289,7 @@ export default function FormLAB003() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    المواصفة المقررة (Spec limit)
+                    المواصفة المقررة
                   </label>
                   <input
                     type="text"
@@ -308,7 +306,7 @@ export default function FormLAB003() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    النتيجة المسجلة (Result)
+                    النتيجة المسجلة
                   </label>
                   <input
                     type="text"
@@ -324,7 +322,7 @@ export default function FormLAB003() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    التقييم (Pass/Fail)
+                    التقييم
                   </label>
                   <select
                     className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
@@ -333,9 +331,9 @@ export default function FormLAB003() {
                       setTestInput({ ...testInput, passFail: e.target.value })
                     }
                   >
-                    <option value="Pass">مطابق (Pass)</option>
-                    <option value="Fail">غير مطابق (Fail)</option>
-                    <option value="OOS">خارج المواصفة (OOS)</option>
+                    <option value="Pass">مطابق</option>
+                    <option value="Fail">غير مطابق</option>
+                    <option value="OOS">خارج المواصفة</option>
                   </select>
                 </div>
               </div>

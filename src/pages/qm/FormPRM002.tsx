@@ -9,25 +9,22 @@ export default function FormPRM002() {
   const [formData, setFormData] = useState({
     logDate: new Date().toISOString().split("T")[0],
     logTime: new Date().toTimeString().split(" ")[0].substring(0, 5),
-    monitoredArea: "Raw Material Warehouse",
+    monitoredArea: "مستودع المواد الخام",
     recordedTemp: "",
-    tempStatus: "Within Limits", // Within Limits, Out of Spec
+    tempStatus: "ضمن الحدود",
     recordedHumidity: "",
-    humidityStatus: "Within Limits",
+    humidityStatus: "ضمن الحدود",
     remarks: "",
     recordedBy: user?.name || "",
   });
 
   const checkLimits = () => {
-    let t_stat = "Within Limits";
-    let h_stat = "Within Limits";
-    // basic dummy limits: Temp 15-25 C, Hum 40-60%
+    let t_stat = "ضمن الحدود";
+    let h_stat = "ضمن الحدود";
     const t = parseFloat(formData.recordedTemp);
     const h = parseFloat(formData.recordedHumidity);
-
-    if (!isNaN(t) && (t < 10 || t > 30)) t_stat = "Out of Spec"; // Loose limit for demo
-    if (!isNaN(h) && (h < 30 || h > 70)) h_stat = "Out of Spec";
-
+    if (!isNaN(t) && (t < 10 || t > 30)) t_stat = "خارج الحدود";
+    if (!isNaN(h) && (h < 30 || h > 70)) h_stat = "خارج الحدود";
     setFormData({ ...formData, tempStatus: t_stat, humidityStatus: h_stat });
   };
 
@@ -91,7 +88,7 @@ export default function FormPRM002() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-slate-800">
-            مراقبة الحرارة والرطوبة (Temp & Humidity Log)
+            مراقبة الحرارة والرطوبة
           </h1>
           <p className="text-slate-500">
             النموذج: F-PRM-002 | قسم الجودة - السيطرة البيئية
@@ -149,7 +146,7 @@ export default function FormPRM002() {
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              المنطقة المراقبة (Area)
+              المنطقة المراقبة
             </label>
             <select
               className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg"
@@ -158,15 +155,11 @@ export default function FormPRM002() {
                 setFormData({ ...formData, monitoredArea: e.target.value })
               }
             >
-              <option value="Raw Material Warehouse">
-                مستودع المواد الخام (15-25°C)
-              </option>
-              <option value="Cold Room">الغرفة المبردة (2-8°C)</option>
-              <option value="Production Area">
-                منطقة الإنتاج (Controlled)
-              </option>
-              <option value="Finished Goods">مستودع المنتج النهائي</option>
-              <option value="QC Lab">مختبر الجودة</option>
+              <option value="مستودع المواد الخام">مستودع المواد الخام (15-25°C)</option>
+              <option value="الغرفة المبردة">الغرفة المبردة (2-8°C)</option>
+              <option value="منطقة الإنتاج">منطقة الإنتاج (20-25°C)</option>
+              <option value="مستودع المنتج النهائي">مستودع المنتج النهائي</option>
+              <option value="مختبر الجودة">مختبر الجودة</option>
             </select>
           </div>
 
@@ -179,15 +172,15 @@ export default function FormPRM002() {
                 type="number"
                 step="0.1"
                 required
-                className={`w-full px-4 py-3 border rounded-lg font-bold text-lg focus:ring-2 ${formData.tempStatus === "Out of Spec" ? "bg-rose-50 border-rose-300 text-rose-700 focus:ring-rose-500" : "bg-white border-slate-300 text-slate-900 focus:ring-sky-500"}`}
-                placeholder="Ex: 22.5"
+                className={`w-full px-4 py-3 border rounded-lg font-bold text-lg focus:ring-2 ${formData.tempStatus === "خارج الحدود" ? "bg-rose-50 border-rose-300 text-rose-700 focus:ring-rose-500" : "bg-white border-slate-300 text-slate-900 focus:ring-sky-500"}`}
+                placeholder="مثال: 22.5"
                 value={formData.recordedTemp}
                 onChange={(e) =>
                   setFormData({ ...formData, recordedTemp: e.target.value })
                 }
                 onBlur={checkLimits}
               />
-              {formData.tempStatus === "Out of Spec" && (
+              {formData.tempStatus === "خارج الحدود" && (
                 <p className="text-xs font-bold text-rose-600 mt-2">
                   خارج النطاق المسموح! يجب الإبلاغ الفوري.
                 </p>
@@ -201,15 +194,15 @@ export default function FormPRM002() {
                 type="number"
                 step="0.1"
                 required
-                className={`w-full px-4 py-3 border rounded-lg font-bold text-lg focus:ring-2 ${formData.humidityStatus === "Out of Spec" ? "bg-rose-50 border-rose-300 text-rose-700 focus:ring-rose-500" : "bg-white border-slate-300 text-slate-900 focus:ring-sky-500"}`}
-                placeholder="Ex: 45.0"
+                className={`w-full px-4 py-3 border rounded-lg font-bold text-lg focus:ring-2 ${formData.humidityStatus === "خارج الحدود" ? "bg-rose-50 border-rose-300 text-rose-700 focus:ring-rose-500" : "bg-white border-slate-300 text-slate-900 focus:ring-sky-500"}`}
+                placeholder="مثال: 45.0"
                 value={formData.recordedHumidity}
                 onChange={(e) =>
                   setFormData({ ...formData, recordedHumidity: e.target.value })
                 }
                 onBlur={checkLimits}
               />
-              {formData.humidityStatus === "Out of Spec" && (
+              {formData.humidityStatus === "خارج الحدود" && (
                 <p className="text-xs font-bold text-rose-600 mt-2">
                   خارج النطاق المسموح! يجب الإبلاغ الفوري.
                 </p>
@@ -219,7 +212,7 @@ export default function FormPRM002() {
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              ملاحظات وإجراءات (Remarks / Actions Taken)
+              ملاحظات وإجراءات
             </label>
             <textarea
               rows={2}

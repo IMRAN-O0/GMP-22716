@@ -1,290 +1,170 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { CheckCircle, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { Plus, Pencil, Trash2, X, CheckCircle } from "lucide-react";
+
+const EMPTY = { code: "", name: "", name_en: "", contact_person: "", phone: "", email: "", address: "" };
 
 export default function CreateCustomer() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-
+  const canEdit = (user?.level ?? 9) <= 2;
   const [customers, setCustomers] = useState<any[]>([]);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    fetch("/api/customers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+  const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+  const load = () =>
+    fetch("/api/customers", { headers: h })
       .then((r) => r.json())
-      .then((data) => setCustomers(Array.isArray(data) ? data : []))
+      .then((d) => setCustomers(Array.isArray(d) ? d : []))
       .catch(console.error);
-  }, []);
+
+  useEffect(() => { load(); }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const isNew = !editing?.id;
+    const url = isNew ? "/api/customers" : `/api/customers/${editing.id}`;
+    const method = isNew ? "POST" : "PUT";
+    try {
+      const res = await fetch(url, { method, headers: h, body: JSON.stringify(editing) });
+      if (res.ok) { await load(); setEditing(null); }
+      else { const err = await res.json().catch(() => ({})); alert("خطأ: " + (err.error || "فشل الحفظ")); }
+    } catch { alert("خطأ في الاتصال"); }
+    setSaving(false);
+  };
 
   const handleDelete = async (id: number, name: string) => {
     if (!window.confirm(`هل أنت متأكد من حذف العميل "${name}"؟`)) return;
-    try {
-      const res = await fetch(`/api/customers/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      if (res.ok) {
-        setCustomers((prev) => prev.filter((c) => c.id !== id));
-        alert("تم حذف العميل بنجاح");
-      } else {
-        const err = await res.json().catch(() => ({ error: "خطأ غير معروف" }));
-        alert("فشل الحذف: " + err.error);
-      }
-    } catch (e) {
-      console.error(e);
-      alert("حدث خطأ في الاتصال");
-    }
+    const res = await fetch(`/api/customers/${id}`, { method: "DELETE", headers: h });
+    if (res.ok) setCustomers((p) => p.filter((c) => c.id !== id));
+    else { const e = await res.json().catch(() => ({})); alert("فشل: " + (e.error || "")); }
   };
 
-  const [formData, setFormData] = useState({
-    code: "",
-    name: "",
-    name_en: "",
-    contact_person: "",
-    phone: "",
-    email: "",
-    address: "",
-  });
-
-  const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
-    e.preventDefault();
-    if (status === "draft") {
-      try {
-        const formPayload = {
-          recordId: `INV-DRAFT-${Date.now()}`,
-          formId: "F-INV-GENERIC",
-          department: "INV",
-          creatorId: user?.id || 1,
-          status: "draft",
-          data: formData,
-        };
-        const editIdPatch = new URLSearchParams(window.location.search).get("edit");
-        const fetchUrl = editIdPatch ? `/api/forms/record/${editIdPatch}` : "/api/forms";
-        const fetchMethod = editIdPatch ? "PUT" : "POST";
-        const res = await fetch(fetchUrl, {
-          method: fetchMethod,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify(formPayload),
-        });
-        if (res.ok) {
-          alert("تم حفظ المسودة بنجاح");
-          window.location.reload();
-        } else {
-          const err = await res.json().catch(()=>({error: "Unknown"}));
-          alert("حدث خطأ: " + err.error);
-        }
-      } catch(err) { console.error(err); }
-      return;
-    }
-    try {
-      const res = await fetch("/api/customers", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        body: JSON.stringify(formData),
-      });
-      if (res.ok) {
-        const saved = await res.json();
-        setCustomers((prev) => [...prev, { ...formData, id: saved.id }]);
-        alert("تم تسجيل العميل بنجاح");
-        setFormData({ code: "", name: "", name_en: "", contact_person: "", phone: "", email: "", address: "" });
-      } else {
-        const err = await res.json();
-        alert("حدث خطأ: " + err.error);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  const filtered = customers.filter(
+    (c) => !search || c.name?.includes(search) || c.code?.includes(search)
+  );
 
   return (
-    <div className="max-w-4xl mx-auto bg-white border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] rounded-2xl overflow-hidden">
-      <div className="border-b border-slate-200 p-6 flex justify-between items-center bg-slate-50">
+    <div className="max-w-5xl mx-auto py-6 px-4 space-y-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            الشركة الحديثة للتجميل
-          </h1>
-          <p className="text-sm font-semibold text-slate-500 mt-1">
-            إضافة عميل جديد
-          </p>
+          <h1 className="text-xl font-bold text-slate-900">إدارة العملاء</h1>
+          <p className="text-sm text-slate-500">{customers.length} عميل مسجّل</p>
         </div>
+        {canEdit && (
+          <button
+            onClick={() => setEditing({ ...EMPTY })}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> إضافة عميل جديد
+          </button>
+        )}
       </div>
 
-      <form className="p-8" onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              كود العميل <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="مثال: CUS-001"
-              value={formData.code}
-              onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 font-mono"
-            />
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              اسم العميل <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="مثال: شركة العميل الذهبي"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              الاسم باللغة الإنجليزية
-            </label>
-            <input
-              type="text"
-              placeholder="Example: Golden Customer Co."
-              value={formData.name_en}
-              onChange={(e) => setFormData({ ...formData, name_en: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 text-left"
-              dir="ltr"
-            />
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              الشخص المسؤول
-            </label>
-            <input
-              type="text"
-              placeholder="مثال: أحمد محمد"
-              value={formData.contact_person}
-              onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              رقم الهاتف
-            </label>
-            <input
-              type="text"
-              placeholder="مثال: +966..."
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 text-left"
-              dir="ltr"
-            />
-          </div>
-          <div>
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              البريد الإلكتروني
-            </label>
-            <input
-              type="email"
-              placeholder="مثال: contact@domain.com"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2 text-left"
-              dir="ltr"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-              العنوان
-            </label>
-            <textarea
-              rows={2}
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
-            ></textarea>
-          </div>
-        </div>
+      <input
+        type="text"
+        placeholder="ابحث بالاسم أو الكود…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
+      />
 
-        <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
-          <button
-            type="button"
-            onClick={(e) => handleSubmit(e, "draft")}
-            className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
-          >
-            حفظ كمسودة
-          </button>
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <table className="w-full text-right text-sm">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">كود العميل</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">اسم العميل</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">الاسم الإنجليزي</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">المسؤول</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">الهاتف</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-[12px]">البريد</th>
+              {canEdit && <th className="px-4 py-3 w-24" />}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filtered.length === 0 ? (
+              <tr><td colSpan={canEdit ? 7 : 6} className="px-4 py-10 text-center text-slate-400">لا يوجد عملاء مسجّلون</td></tr>
+            ) : filtered.map((c) => (
+              <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-3 font-mono font-bold text-emerald-700">{c.code}</td>
+                <td className="px-4 py-3 font-medium text-slate-800">{c.name}</td>
+                <td className="px-4 py-3 text-slate-500">{c.name_en || "—"}</td>
+                <td className="px-4 py-3 text-slate-600">{c.contact_person || "—"}</td>
+                <td className="px-4 py-3 text-slate-600 ltr">{c.phone || "—"}</td>
+                <td className="px-4 py-3 text-slate-500 text-xs">{c.email || "—"}</td>
+                {canEdit && (
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-end">
+                      <button onClick={() => setEditing({ ...c })}
+                        className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors" title="تعديل">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(c.id, c.name)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="حذف">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-          {user?.level <= 2 ? (
-            <button
-              type="button"
-              onClick={(e) => handleSubmit(e, "approved")}
-              className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
-            >
-              <CheckCircle className="w-4 h-4 ml-2" />
-              حفظ واعتماد
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={(e) => handleSubmit(e, user?.level === 3 ? "pending_approval" : "pending_review")}
-              className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
-            >
-              إرسال للمراجعة
-            </button>
-          )}
-
-          <div className="flex-1"></div>
-          <button
-            type="button"
-            onClick={() => {
-              if (window.history.length > 1) navigate(-1);
-              else navigate("/");
-            }}
-            className="text-slate-500 hover:text-slate-700 font-semibold text-[14px]"
-          >
-            إغلاق والعودة
-          </button>
-        </div>
-      </form>
-
-      {/* Existing Customers List */}
-      {customers.length > 0 && (
-        <div className="border-t border-slate-200 px-8 py-6">
-          <h3 className="text-[15px] font-bold text-slate-700 mb-3">العملاء المسجلون</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-sm border-collapse">
-              <thead>
-                <tr className="bg-slate-50 text-slate-500 text-[13px]">
-                  <th className="p-3 border-b font-semibold">الكود</th>
-                  <th className="p-3 border-b font-semibold">الاسم</th>
-                  <th className="p-3 border-b font-semibold">الهاتف</th>
-                  {user?.level <= 2 && <th className="p-3 border-b font-semibold text-center w-20">حذف</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="p-3 font-mono text-sky-700 font-bold">{c.code}</td>
-                    <td className="p-3 text-slate-800">{c.name}</td>
-                    <td className="p-3 text-slate-500">{c.phone || "—"}</td>
-                    {user?.level <= 2 && (
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(c.id, c.name)}
-                          className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
-                          title="حذف العميل"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    )}
-                  </tr>
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditing(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+              <h2 className="font-bold text-slate-800">{editing.id ? "تعديل عميل" : "إضافة عميل جديد"}</h2>
+              <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-full"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleSave} className="p-6">
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { key: "code", label: "كود العميل", required: true, placeholder: "مثال: CUS-001", mono: true },
+                  { key: "name", label: "اسم العميل", required: true, placeholder: "شركة العميل" },
+                  { key: "name_en", label: "الاسم بالإنجليزية", placeholder: "Customer Co." },
+                  { key: "contact_person", label: "الشخص المسؤول", placeholder: "محمد أحمد" },
+                  { key: "phone", label: "رقم الهاتف", placeholder: "+966..." },
+                  { key: "email", label: "البريد الإلكتروني", placeholder: "contact@domain.com" },
+                ].map(({ key, label, required, placeholder, mono }) => (
+                  <div key={key}>
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1">
+                      {label} {required && <span className="text-red-500">*</span>}
+                    </label>
+                    <input
+                      type="text"
+                      required={required}
+                      placeholder={placeholder}
+                      value={(editing as any)[key] || ""}
+                      onChange={(e) => setEditing({ ...editing, [key]: e.target.value })}
+                      className={`w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400 ${mono ? "font-mono" : ""}`}
+                    />
+                  </div>
                 ))}
-              </tbody>
-            </table>
+                <div className="col-span-2">
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1">العنوان</label>
+                  <input type="text" placeholder="المدينة، المنطقة"
+                    value={editing.address || ""}
+                    onChange={(e) => setEditing({ ...editing, address: e.target.value })}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400" />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6 pt-4 border-t border-slate-100">
+                <button type="submit" disabled={saving}
+                  className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                  <CheckCircle className="w-4 h-4" />
+                  {saving ? "جاري الحفظ…" : editing.id ? "حفظ التعديلات" : "إضافة العميل"}
+                </button>
+                <button type="button" onClick={() => setEditing(null)}
+                  className="px-5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50">إلغاء</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

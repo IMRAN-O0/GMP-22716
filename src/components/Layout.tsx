@@ -57,6 +57,7 @@ export default function Layout() {
   if (user?.level === 1) {
       navItems.push({ title: 'إدارة المستخدمين', path: '/users', icon: <Settings className="w-5 h-5" /> });
       navItems.push({ title: 'سجل التدقيق', path: '/audit', icon: <FileText className="w-5 h-5" /> });
+      navItems.push({ title: 'إعدادات الشركة', path: '/settings', icon: <Building2 className="w-5 h-5" /> });
   }
 
   const filteredNavItems = navItems.filter(item => {

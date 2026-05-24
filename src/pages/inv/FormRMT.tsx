@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormRMT() {
   const { user } = useAuth();
@@ -10,8 +11,11 @@ export default function FormRMT() {
 
   const [materials, setMaterials] = useState<any[]>([]);
   const [issueRequests, setIssueRequests] = useState<any[]>([]);
+  const [pinForms, setPinForms] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [sysDate] = useState(new Date().toLocaleDateString("ar-EG"));
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
+  const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     transactionId: generateSerialNumber(
@@ -25,12 +29,12 @@ export default function FormRMT() {
   });
 
   useEffect(() => {
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
 
-    fetch("/api/forms")
+    fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         setIssueRequests(
@@ -40,9 +44,18 @@ export default function FormRMT() {
               f.status === "approved",
           ),
         );
+        setPinForms(
+          data.filter((f: any) => f.form_id === "F-INV-PIN-001" && f.status === "approved"),
+        );
       })
       .catch(console.error);
   }, []);
+
+  const selectMaterialForRow = (idx: number, m: any) => {
+    const newItems = [...formData.items];
+    newItems[idx] = { ...newItems[idx], materialCode: m.code, materialName: m.name };
+    setFormData({ ...formData, items: newItems });
+  };
 
   const addItem = () => {
     setFormData({
@@ -117,7 +130,8 @@ export default function FormRMT() {
         alert(`تم الحفظ بنجاح. رقم الحركة: ${formData.transactionId}`);
         navigate("/inv");
       } else {
-        alert("حدث خطأ أثناء الحفظ");
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
       console.error(err);
@@ -257,19 +271,43 @@ export default function FormRMT() {
             ) : (
               <>
                 <label className="block text-[13px] font-semibold text-slate-600 mb-1">
-                  المستند المرجعي (فاتورة، أمر إنتاج...)
+                  ربط بفاتورة شراء (PIN) — اختياري
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.referenceDocument}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      referenceDocument: e.target.value,
-                    })
-                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setFormData((prev: any) => ({ ...prev, referenceDocument: "" }));
+                      return;
+                    }
+                    const pin = pinForms.find((f: any) => f.record_id === val);
+                    if (pin) {
+                      const pinData = pin.data || {};
+                      const newItems = Array.isArray(pinData.items) && pinData.items.length > 0
+                        ? pinData.items.map((itm: any) => ({
+                            materialCode: itm.materialCode || "",
+                            materialName: itm.materialName || "",
+                            quantity: itm.quantity || itm.receivedQuantity || "",
+                          }))
+                        : [{ materialCode: "", materialName: "", quantity: "" }];
+                      setFormData((prev: any) => ({ ...prev, referenceDocument: val, items: newItems }));
+                    } else {
+                      setFormData((prev: any) => ({ ...prev, referenceDocument: val }));
+                    }
+                  }}
                   className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
-                />
+                >
+                  <option value="">-- بدون ربط بفاتورة شراء --</option>
+                  {pinForms.map((f: any) => {
+                    const d = f.data || {};
+                    return (
+                      <option key={f.record_id} value={f.record_id}>
+                        {f.record_id} — {d.supplierName || ""}
+                      </option>
+                    );
+                  })}
+                </select>
               </>
             )}
           </div>
@@ -310,21 +348,22 @@ export default function FormRMT() {
                       className="border-b border-slate-100 bg-white last:border-0"
                     >
                       <td className="p-2 border-r border-slate-100">
-                        <input
-                          type="text"
-                          list="materials-list-rmt"
-                          required
-                          placeholder="ابحث بكود أو اسم المادة..."
-                          value={item.materialCode}
-                          onChange={(e) =>
-                            updateItem(
-                              i,
-                              "materialCode",
-                              formatMaterialCode(e.target.value),
-                            )
-                          }
-                          className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
-                        />
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            required
+                            placeholder="الكود…"
+                            value={item.materialCode}
+                            onChange={(e) => updateItem(i, "materialCode", formatMaterialCode(e.target.value))}
+                            className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
+                          />
+                          <button
+                            type="button"
+                            title="F3 — بحث عن مادة"
+                            onClick={() => { setEditingItemIdx(i); setShowMaterialModal(true); }}
+                            className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
+                          >F3</button>
+                        </div>
                       </td>
                       <td className="p-2 border-r border-slate-100">
                         <input
@@ -364,11 +403,6 @@ export default function FormRMT() {
                   ))}
                 </tbody>
               </table>
-              <datalist id="materials-list-rmt">
-                {materials.map((m: any) => (
-                  <option key={m.id} value={`${m.code} - ${m.name}`} />
-                ))}
-              </datalist>
             </div>
           </div>
 
@@ -458,6 +492,26 @@ export default function FormRMT() {
           </button>
         </div>
       </form>
+      {showMaterialModal && editingItemIdx !== null && (
+        <SearchModal
+          title="بحث عن مادة (F3)"
+          items={materials}
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+            { key: "balance", label: "الرصيد", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            selectMaterialForRow(editingItemIdx!, m);
+            setShowMaterialModal(false);
+            setEditingItemIdx(null);
+          }}
+          onClose={() => { setShowMaterialModal(false); setEditingItemIdx(null); }}
+        />
+      )}
     </div>
   );
 }

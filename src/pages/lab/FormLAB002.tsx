@@ -212,7 +212,7 @@ export default function FormLAB002() {
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  رقم التشغيلة / الدفعة (Batch/Lot){" "}
+                  رقم التشغيلة / الدفعة{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input

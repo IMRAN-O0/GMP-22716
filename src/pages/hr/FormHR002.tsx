@@ -9,11 +9,6 @@ export default function FormHR002() {
   const navigate = useNavigate();
   // Generate employee number pseudo-randomly for demo, usually sequentially from DB
   const [loading, setLoading] = useState(false);
-  const [employeeId] = useState(
-    `EMP-${Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, "0")}`,
-  );
   const [formData, setFormData] = useState({
     fullNameAr: "",
     fullNameEn: "",
@@ -24,7 +19,7 @@ export default function FormHR002() {
     phone: "",
     email: "",
     address: "",
-    employeeNumber: "",
+    employeeNumber: `EMP-${Math.floor(Math.random() * 900 + 100)}`,
     joinDate: "",
     department: "",
     jobTitle: "",
@@ -72,7 +67,8 @@ export default function FormHR002() {
         alert(`تم الحفظ بنجاح. رقم المستند: ${recordId}`);
         navigate("/hr");
       } else {
-        alert("حدث خطأ أثناء الحفظ");
+        const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
+        alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
       console.error(err);
@@ -88,7 +84,11 @@ export default function FormHR002() {
         .then((r) => r.json())
         .then((data) => {
           if (data && data.data) {
-            setFormData((prev) => ({ ...prev, ...data.data }));
+            setFormData((prev) => ({
+              ...prev,
+              ...data.data,
+              employeeNumber: data.data.employeeNumber || prev.employeeNumber,
+            }));
           }
         })
         .catch(console.error);

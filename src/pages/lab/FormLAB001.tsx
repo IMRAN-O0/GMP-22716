@@ -3,20 +3,27 @@ import { useNavigate } from "react-router-dom";
 import { Save, FileText, FlaskConical } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { generateSerialNumber } from "../../lib/utils";
+import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormLAB001() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const [materials, setMaterials] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [productionOrders, setProductionOrders] = useState<any[]>([]);
+  const [showMaterialModal, setShowMaterialModal] = useState(false);
 
   useEffect(() => {
-    fetch("/api/materials")
+    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
-    fetch("/api/forms/dept/PRD")
+    fetch("/api/warehouses", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      .then((r) => r.json())
+      .then((data) => setWarehouses(data))
+      .catch(console.error);
+    fetch("/api/forms/dept/PRD", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
         const orders = data.filter(
@@ -44,18 +51,6 @@ export default function FormLAB001() {
     requestedBy: user?.name || "",
     notes: "",
   });
-
-  const handleItemSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const currentVal = e.target.value;
-    const codeMatch = currentVal.match(/^([A-Za-z0-9-]+) - /);
-    const code = codeMatch ? codeMatch[1] : currentVal;
-    const mat = materials.find((m) => m.code === code);
-    setFormData((prev) => ({
-      ...prev,
-      itemCode: code,
-      itemName: mat ? mat.name : "",
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
     e.preventDefault();
@@ -176,7 +171,7 @@ export default function FormLAB001() {
                 >
                   <option value="Raw Material">مادة خام</option>
                   <option value="Finished Product">منتج نهائي</option>
-                  <option value="In-Process">قيد التصنيع (WIP)</option>
+                  <option value="In-Process">قيد التصنيع</option>
                   <option value="Packaging">مواد تعبئة وتغليف</option>
                 </select>
               </div>
@@ -184,78 +179,28 @@ export default function FormLAB001() {
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
                   اسم المادة / المنتج <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  list="materials-list-lab001"
+                <SearchField
+                  label=""
                   required
-                  placeholder="ابحث بكود أو اسم العنصر..."
-                  className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-700"
                   value={formData.itemCode}
-                  onChange={handleItemSelect}
+                  onChange={(v) => {
+                    const mat = materials.find((m) => m.code === v || m.name === v);
+                    setFormData({ ...formData, itemCode: v, itemName: mat ? mat.name : "" });
+                  }}
+                  onF3={() => setShowMaterialModal(true)}
+                  placeholder="اكتب أو اضغط F3 للبحث…"
+                  hint="F3 للبحث في قائمة المواد"
                 />
-                <datalist id="materials-list-lab001">
-                  {formData.sampleType === "Raw Material"
-                    ? materials
-                        .filter(
-                          (m) =>
-                            (m.category === "Raw Material" ||
-                              m.category === "مادة خام" ||
-                              m.code?.startsWith("RM")) &&
-                            !m.code?.startsWith("PKG"),
-                        )
-                        .map((m) => (
-                          <option key={m.id} value={`${m.code} - ${m.name}`} />
-                        ))
-                    : formData.sampleType === "Packaging"
-                      ? materials
-                          .filter(
-                            (m) =>
-                              m.category === "Packaging" ||
-                              m.category === "مواد تعبئة وتغليف" ||
-                              m.category === "مواد تعبئة" ||
-                              m.code?.startsWith("PKG"),
-                          )
-                          .map((m) => (
-                            <option
-                              key={m.id}
-                              value={`${m.code} - ${m.name}`}
-                            />
-                          ))
-                      : formData.sampleType === "In-Process"
-                        ? materials
-                            .filter(
-                              (m) =>
-                                m.category === "In-Process" ||
-                                m.category === "قيد التصنيع (WIP)" ||
-                                m.category === "قيد التصنيع",
-                            )
-                            .map((m) => (
-                              <option
-                                key={m.id}
-                                value={`${m.code} - ${m.name}`}
-                              />
-                            ))
-                        : materials
-                            .filter(
-                              (m) =>
-                                m.category === "منتج نهائي" ||
-                                m.category === "Finished Product" ||
-                                m.code?.startsWith("PRD"),
-                            )
-                            .map((m) => (
-                              <option
-                                key={m.id}
-                                value={`${m.code} - ${m.name}`}
-                              />
-                            ))}
-                </datalist>
+                {formData.itemName && (
+                  <p className="text-xs text-emerald-600 mt-1 font-semibold">{formData.itemName}</p>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  رقم التشغيلة / الدفعة (Batch/Lot){" "}
+                  رقم التشغيلة / الدفعة{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -275,12 +220,26 @@ export default function FormLAB001() {
                 <select
                   className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   value={formData.productionOrderNo}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      productionOrderNo: e.target.value,
-                    })
-                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (!val) {
+                      setFormData({ ...formData, productionOrderNo: "" });
+                      return;
+                    }
+                    const order = productionOrders.find((o) => o.record_id === val);
+                    if (order) {
+                      const oData = JSON.parse(order.data_json);
+                      setFormData({
+                        ...formData,
+                        productionOrderNo: val,
+                        itemCode: oData.itemNumber || oData.productCode || formData.itemCode,
+                        itemName: oData.productName || formData.itemName,
+                        batchNumber: oData.batchNumber || formData.batchNumber,
+                      });
+                    } else {
+                      setFormData({ ...formData, productionOrderNo: val });
+                    }
+                  }}
                 >
                   <option value="">-- بدون أمر إنتاج --</option>
                   {productionOrders.map((o) => {
@@ -408,6 +367,42 @@ export default function FormLAB001() {
           </button>
         </div>
       </form>
+      {showMaterialModal && (
+        <SearchModal
+          title="بحث عن مادة (F3)"
+          items={
+            formData.sampleType === "Raw Material"
+              ? (() => {
+                  const rawWhIds = new Set(
+                    warehouses
+                      .filter((w: any) => w.name && (w.name.includes("خام") || /raw/i.test(w.name)))
+                      .map((w: any) => w.id)
+                  );
+                  return materials.filter((m: any) =>
+                    (m.category === "مادة خام" || m.category === "Raw Material") &&
+                    (rawWhIds.size === 0 || rawWhIds.has(m.warehouse_id))
+                  );
+                })()
+              : formData.sampleType === "Packaging"
+              ? materials.filter((m: any) => m.category === "مواد تعبئة وتغليف" || m.category === "Packaging")
+              : formData.sampleType === "Finished Product"
+              ? materials.filter((m: any) => m.category === "منتج نهائي" || m.category === "Finished Product")
+              : materials
+          }
+          columns={[
+            { key: "code", label: "كود المادة", className: "font-mono w-28" },
+            { key: "name", label: "اسم المادة" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(m) => {
+            setFormData({ ...formData, itemCode: m.code, itemName: m.name });
+            setShowMaterialModal(false);
+          }}
+          onClose={() => setShowMaterialModal(false)}
+        />
+      )}
     </div>
   );
 }

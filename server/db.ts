@@ -52,6 +52,31 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 3,
           name: "add_name_en_to_materials",
           up: `ALTER TABLE materials ADD COLUMN name_en TEXT;`
+        },
+        {
+          version: 4,
+          name: "add_min_balance_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN min_balance REAL DEFAULT 0;`
+        },
+        {
+          version: 5,
+          name: "add_supplier_name_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN supplier_name TEXT DEFAULT '';`
+        },
+        {
+          version: 6,
+          name: "add_tax_number_to_suppliers",
+          up: `ALTER TABLE suppliers ADD COLUMN tax_number TEXT;`
+        },
+        {
+          version: 7,
+          name: "add_package_size_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN package_size REAL DEFAULT NULL;`
+        },
+        {
+          version: 8,
+          name: "add_package_size_unit_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN package_size_unit TEXT DEFAULT NULL;`
         }
       ];
 
@@ -170,6 +195,7 @@ const createTables = async () => {
       phone TEXT,
       email TEXT,
       address TEXT,
+      tax_number TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE TABLE IF NOT EXISTS customers (
@@ -254,10 +280,7 @@ const seedInitialData = async () => {
      db.run(`INSERT INTO warehouses (code, name, type, parent_id) VALUES ('WH-RAW-LIQ', 'مواد خام سائلة', 'SUB', 1)`);
      db.run(`INSERT INTO warehouses (code, name, type, parent_id) VALUES ('WH-RAW-PKG', 'مواد تغليف وتعبئة', 'SUB', 1)`);
 
-     // Insert some dummy materials for testing
-     db.run(`INSERT INTO materials (code, name, description, unit, warehouse_id, balance) VALUES ('RM-001', 'كحول إيثيلي 70%', 'مادة سائلة قابلة للاشتعال', 'لتر', 5, 200)`);
-     db.run(`INSERT INTO materials (code, name, description, unit, warehouse_id, balance) VALUES ('RM-002', 'جلسرين طبي', 'سائل للترطيب', 'لتر', 5, 500)`);
-     db.run(`INSERT INTO materials (code, name, description, unit, warehouse_id, balance) VALUES ('PKG-001', 'عبوات بلاستيكية 100 مل', 'مادة تعبئة للمنتج', 'قطعة', 6, 10000)`);
+
    });
 
    console.log('Seed data inserted.');

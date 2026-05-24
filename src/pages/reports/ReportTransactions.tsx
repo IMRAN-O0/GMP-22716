@@ -84,61 +84,85 @@ export default function ReportTransactions() {
                     : "TRANSFER",
                   material_code: getMaterialName(m.materialCode || "N/A"),
                   quantity: m.quantity || 0,
-                  warehouse: "N/A", // RMT doesn't define warehouse plainly without looking at type, will leave N/A for now
-                  reference: "نموذج نقل أو صرف/سحب مواد",
+                  warehouse: "—",
+                  reference: fd.transactionType === "Receive" ? `استلام${fd.referenceDocument ? " — " + fd.referenceDocument : ""}` : `صرف${fd.referenceDocument ? " — " + fd.referenceDocument : ""}`,
                   createdBy: record.creator_id,
                 });
+              });
+            }
+          } else if (record.form_id === "F-FP-001" && fd.qcStatus !== "Rejected") {
+            const code = getMaterialName(fd.productCode || fd.batchNumber || "—");
+            const qty = parseFloat(fd.releasedQuantity || fd.actualQuantity || fd.plannedQuantity) || 0;
+            if (qty > 0) {
+              rows.push({
+                id: record.record_id,
+                date: fd.releaseDate || (record.created_at ? record.created_at.split("T")[0] : "—"),
+                type: "RECEIVE",
+                material_code: code,
+                quantity: qty,
+                warehouse: fd.warehouseId || "—",
+                reference: `إطلاق دفعة — ${fd.batchNumber || ""}`,
+                createdBy: record.creator_id,
               });
             }
           } else if (record.form_id === "F-FP-002") {
             rows.push({
               id: record.record_id,
-              date: record.created_at ? record.created_at.split("T")[0] : "N/A",
+              date: record.created_at ? record.created_at.split("T")[0] : "—",
               type: "RECEIVE",
-              material_code: getMaterialName(fd.batchNumber || "منتج تام"),
+              material_code: getMaterialName(fd.productCode || fd.batchNumber || "—"),
               quantity: fd.quantityStored || 0,
-              warehouse: getWarehouseName(fd.warehouseLocation || "N/A"),
+              warehouse: fd.warehouseLocation || "—",
               reference: "تخزين منتج نهائي",
               createdBy: record.creator_id,
             });
           } else if (record.form_id === "F-FP-003") {
             rows.push({
               id: record.record_id,
-              date:
-                fd.shipmentDate ||
-                (record.created_at ? record.created_at.split("T")[0] : "N/A"),
+              date: fd.shipmentDate || (record.created_at ? record.created_at.split("T")[0] : "—"),
               type: "ISSUE",
-              material_code: getMaterialName(fd.batchNumber || "منتج تام"),
+              material_code: getMaterialName(fd.productCode || fd.batchNumber || "—"),
               quantity: fd.shippedQuantity || 0,
-              warehouse: "N/A",
-              reference: "شحن للعميل",
+              warehouse: "—",
+              reference: `شحن للعميل — ${fd.customerName || ""}`,
               createdBy: record.creator_id,
             });
           } else if (record.form_id === "F-FP-004") {
             rows.push({
               id: record.record_id,
-              date:
-                fd.returnDate ||
-                (record.created_at ? record.created_at.split("T")[0] : "N/A"),
+              date: fd.returnDate || (record.created_at ? record.created_at.split("T")[0] : "—"),
               type: "RECEIVE",
-              material_code: getMaterialName(fd.batchNumber || "منتج تام"),
+              material_code: getMaterialName(fd.productCode || fd.batchNumber || "—"),
               quantity: fd.returnedQuantity || 0,
-              warehouse: "N/A",
-              reference: "تسجيل مرتجع",
+              warehouse: "—",
+              reference: `مرتجع من عميل — ${fd.customerName || ""}`,
               createdBy: record.creator_id,
             });
           } else if (record.form_id === "F-FP-005") {
             rows.push({
               id: record.record_id,
-              date:
-                fd.destructionDate ||
-                (record.created_at ? record.created_at.split("T")[0] : "N/A"),
+              date: fd.disposalDate || (record.created_at ? record.created_at.split("T")[0] : "—"),
               type: "ISSUE",
-              material_code: getMaterialName(fd.batchNumber || "منتج تام"),
+              material_code: getMaterialName(fd.batchOrCode || "—"),
               quantity: fd.quantity || 0,
-              warehouse: "N/A",
-              reference: "إتلاف",
+              warehouse: "—",
+              reference: "إتلاف منتج",
               createdBy: record.creator_id,
+            });
+          } else if (record.form_id === "F-PRD-002") {
+            // PRD-002 deducts raw materials — show each material
+            const rawMats = fd.rawMaterials || [];
+            rawMats.forEach((mat: any, i: number) => {
+              rows.push({
+                id: `${record.record_id}-${i + 1}`,
+                date: record.created_at ? record.created_at.split("T")[0] : "—",
+                type: "ISSUE",
+                material_code: getMaterialName(mat.materialCode || "—"),
+                quantity: mat.quantity || 0,
+                warehouse: "—",
+                reference: `صرف إنتاج — ${fd.productionOrderNo || record.record_id}`,
+                createdBy: record.creator_id,
+              });
             });
           }
         });
@@ -191,9 +215,9 @@ export default function ReportTransactions() {
             className="border border-slate-300 rounded-lg p-2 outline-none focus:border-blue-500 w-full md:w-auto"
           >
             <option value="ALL">جميع الحركات</option>
-            <option value="RECEIVE">استلام (Receive)</option>
-            <option value="ISSUE">صرف (Issue)</option>
-            <option value="TRANSFER">تحويل (Transfer)</option>
+            <option value="RECEIVE">وارد (استلام)</option>
+            <option value="ISSUE">منصرف (صرف)</option>
+            <option value="TRANSFER">تحويل داخلي</option>
           </select>
         </div>
         <div className="overflow-x-auto">

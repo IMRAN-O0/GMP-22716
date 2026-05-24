@@ -78,7 +78,7 @@ export default function FormQM004() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-slate-800">
-            مؤشرات أداء الجودة (KPIs)
+            مؤشرات أداء الجودة
           </h1>
           <p className="text-slate-500">
             النموذج: F-QM-004 | قسم الجودة - قياس ومراقبة الأداء
@@ -152,13 +152,13 @@ export default function FormQM004() {
                 }
               >
                 <option value="On Target" className="text-emerald-600">
-                  على الهدف (On Target)
+                  على الهدف
                 </option>
                 <option value="Needs Attention" className="text-amber-600">
-                  يتطلب اهتمام (Needs Attention)
+                  يتطلب اهتمام
                 </option>
                 <option value="Critical" className="text-rose-600">
-                  حرج - أقل بوضوح من الهدف (Critical)
+                  حرج - أقل من الهدف
                 </option>
               </select>
             </div>
@@ -166,7 +166,7 @@ export default function FormQM004() {
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-2">
-              اسم مؤشر الأداء (Metric Name)
+              اسم مؤشر الأداء
             </label>
             <input
               type="text"
