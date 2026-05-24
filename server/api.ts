@@ -2046,4 +2046,114 @@ router.get("/reports/all", requireAuth, (req, res) => {
   });
 });
 
+// ─── Archive Endpoint ─────────────────────────────────────────────────────────
+// GET /api/archive?search=&department=&status=&formId=&dateFrom=&dateTo=&page=1&limit=50
+router.get("/archive", requireAuth, (req: any, res) => {
+  const user = req.user as any;
+  const db = getDb();
+
+  const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 50));
+  const offset = (page - 1) * limit;
+
+  const search     = (req.query.search     as string || "").trim();
+  const department = (req.query.department as string || "").trim();
+  const status     = (req.query.status     as string || "").trim();
+  const formId     = (req.query.formId     as string || "").trim();
+  const dateFrom   = (req.query.dateFrom   as string || "").trim();
+  const dateTo     = (req.query.dateTo     as string || "").trim();
+
+  const conditions: string[] = ["fr.status != 'deleted'"];
+  const params: any[] = [];
+
+  // ── Access control ──────────────────────────────────────────────────────────
+  if (user.level === 4) {
+    conditions.push("(fr.creator_id = ? OR fr.creator_id IS NULL)");
+    params.push(user.id);
+  } else if ((user.level === 3 || user.level === 2) && user.department !== "ALL") {
+    conditions.push("fr.department = ?");
+    params.push(user.department);
+  }
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+  if (department) { conditions.push("fr.department = ?");  params.push(department); }
+  if (status)     { conditions.push("fr.status = ?");      params.push(status); }
+  if (formId)     { conditions.push("fr.form_id = ?");     params.push(formId); }
+  if (dateFrom)   { conditions.push("DATE(fr.created_at) >= ?"); params.push(dateFrom); }
+  if (dateTo)     { conditions.push("DATE(fr.created_at) <= ?"); params.push(dateTo); }
+  if (search)     {
+    conditions.push("(fr.record_id LIKE ? OR fr.form_id LIKE ? OR u.name LIKE ?)");
+    const like = `%${search}%`;
+    params.push(like, like, like);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const baseQuery = `
+    FROM forms_records fr
+    LEFT JOIN users u ON fr.creator_id = u.id
+    ${where}
+  `;
+
+  // Count first
+  db.get(`SELECT COUNT(*) as total ${baseQuery}`, params, (err, countRow: any) => {
+    if (err) return res.status(500).json({ error: "DB Error: count" });
+    const total = countRow?.total ?? 0;
+    const pages = Math.ceil(total / limit);
+
+    db.all(
+      `SELECT fr.id, fr.record_id, fr.form_id, fr.department,
+              fr.creator_id, fr.created_at, fr.status,
+              u.name as creator_name, u.user_id as creator_user_id
+       ${baseQuery}
+       ORDER BY fr.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+      (err2, rows: any[]) => {
+        if (err2) return res.status(500).json({ error: "DB Error: rows" });
+        res.json({ data: rows, total, page, pages, limit });
+      }
+    );
+  });
+});
+
+// Archive stats — counts by department and status for the current user's scope
+router.get("/archive/stats", requireAuth, (req: any, res) => {
+  const user = req.user as any;
+  const db = getDb();
+
+  const conditions: string[] = ["status != 'deleted'"];
+  const params: any[] = [];
+
+  if (user.level === 4) {
+    conditions.push("(creator_id = ? OR creator_id IS NULL)");
+    params.push(user.id);
+  } else if ((user.level === 3 || user.level === 2) && user.department !== "ALL") {
+    conditions.push("department = ?");
+    params.push(user.department);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  db.all(
+    `SELECT
+       department,
+       COUNT(*) as total,
+       SUM(CASE WHEN status='approved'        THEN 1 ELSE 0 END) as approved,
+       SUM(CASE WHEN status='pending_review'  THEN 1 ELSE 0 END) as pending_review,
+       SUM(CASE WHEN status='pending_approval'THEN 1 ELSE 0 END) as pending_approval,
+       SUM(CASE WHEN status='draft'           THEN 1 ELSE 0 END) as draft,
+       SUM(CASE WHEN status='rejected'        THEN 1 ELSE 0 END) as rejected
+     FROM forms_records
+     ${where}
+     GROUP BY department
+     ORDER BY department`,
+    params,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows);
+    }
+  );
+});
+
 export default router;
