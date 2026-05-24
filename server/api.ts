@@ -96,32 +96,64 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     );
   }
 
-  // Helper: log to inventory_transactions
-  const logTxn = (type: string, materialCode: string, qty: number, unit: string, batchNo: string, refId: string) => {
+  // Helper: log to inventory_transactions (including warehouse and expiry when available)
+  const logTxn = (type: string, materialCode: string, qty: number, unit: string, batchNo: string, refId: string, warehouseId?: number | null, expiryDate?: string | null) => {
     const txnId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     getDb().run(
-      `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, reference_record_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
-      [txnId, type, materialCode, qty, unit, batchNo, refId]
+      `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, reference_record_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+      [txnId, type, materialCode, qty, unit, batchNo || null, expiryDate || null, warehouseId || null, refId]
     );
   };
 
-  // 1. PIN (Purchase Invoice) - Add to balance
+  // Helper: FIFO deduction from material_batches (oldest expiry first)
+  const deductBatches = (db: any, materialCode: string, qty: number) => {
+    db.all(
+      `SELECT id, quantity_remaining FROM material_batches
+       WHERE material_code = ? AND quantity_remaining > 0
+       ORDER BY COALESCE(expiry_date, '9999-12-31') ASC, received_date ASC`,
+      [materialCode],
+      (err: any, batches: any[]) => {
+        if (err || !batches || batches.length === 0) return;
+        let remaining = qty;
+        db.serialize(() => {
+          for (const batch of batches) {
+            if (remaining <= 0) break;
+            const deduct = Math.min(remaining, batch.quantity_remaining);
+            db.run(
+              `UPDATE material_batches SET quantity_remaining = quantity_remaining - ? WHERE id = ?`,
+              [deduct, batch.id]
+            );
+            remaining -= deduct;
+          }
+        });
+      }
+    );
+  };
+
+  // 1. PIN (Purchase Invoice) - Add to balance + create batch records
   if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
     const db = getDb();
+    const warehouseId = data.warehouseId ? parseInt(data.warehouseId) : null;
+    const receivedDate = data.invoiceDate || new Date().toISOString().split('T')[0];
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       data.items.forEach((item: any) => {
         const qty = parseFloat(item.quantity) || 0;
         if (item.materialCode && qty > 0) {
           db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty, item.materialCode]);
+          db.run(
+            `INSERT INTO material_batches (material_code, batch_number, quantity_received, quantity_remaining, expiry_date, received_date, warehouse_id, reference_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [item.materialCode, item.batchNumber || null, qty, qty, item.expiryDate || null, receivedDate, warehouseId, fId]
+          );
         }
       });
       db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
     });
-    // Log each item
     data.items.forEach((item: any) => {
       const qty = parseFloat(item.quantity) || 0;
-      if (item.materialCode && qty > 0) logTxn('RECEIVE', item.materialCode, qty, item.unit || '', '', fId);
+      if (item.materialCode && qty > 0)
+        logTxn('RECEIVE', item.materialCode, qty, item.unit || '', item.batchNumber || '', fId, warehouseId, item.expiryDate || null);
     });
   }
 
@@ -138,15 +170,55 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
       });
       return;
     }
-    const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
-    const txnType = data.transactionType === "Receive" ? "RECEIVE" : "ISSUE";
+    const isIssue = data.transactionType !== "Receive";
+    const qtyMultiplier = isIssue ? -1 : 1;
+    const txnType = isIssue ? "ISSUE" : "RECEIVE";
     const db = getDb();
+
+    // For ISSUE: validate all balances before deducting anything
+    if (isIssue) {
+      const issuedItems = data.items.filter((i: any) => i.materialCode && (parseFloat(i.quantity) || 0) > 0);
+      const codes = issuedItems.map((i: any) => i.materialCode);
+      if (codes.length > 0) {
+        const placeholders = codes.map(() => '?').join(',');
+        db.all(
+          `SELECT code, balance FROM materials WHERE code IN (${placeholders}) AND is_active = 1`,
+          codes,
+          (bErr: any, bRows: any[]) => {
+            if (bErr) { console.error("RMT balance check error:", bErr); return; }
+            const balMap: Record<string, number> = {};
+            (bRows || []).forEach((r: any) => { balMap[r.code] = r.balance || 0; });
+            const deficits = issuedItems.filter((i: any) => (parseFloat(i.quantity) || 0) > (balMap[i.materialCode] || 0));
+            if (deficits.length > 0) {
+              console.warn("RMT ISSUE skipped — insufficient balance for:", deficits.map((i: any) => i.materialCode));
+              return;
+            }
+            // All OK — proceed
+            db.serialize(() => {
+              db.run("BEGIN TRANSACTION");
+              issuedItems.forEach((item: any) => {
+                const qty = parseFloat(item.quantity) || 0;
+                db.run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [qty, item.materialCode]);
+                deductBatches(db, item.materialCode, qty);
+              });
+              db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
+            });
+            issuedItems.forEach((item: any) => {
+              const qty = parseFloat(item.quantity) || 0;
+              logTxn(txnType, item.materialCode, qty, item.unit || '', '', data.referenceDocument || fId);
+            });
+          }
+        );
+        return;
+      }
+    }
+    // RECEIVE path (no balance check needed)
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       data.items.forEach((item: any) => {
         const qty = parseFloat(item.quantity) || 0;
         if (item.materialCode && qty > 0) {
-          db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty * qtyMultiplier, item.materialCode]);
+          db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty, item.materialCode]);
         }
       });
       db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
@@ -163,7 +235,7 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
       const db = getDb();
       const sql = direction > 0
         ? `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`
-        : `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`;
+        : `UPDATE materials SET balance = COALESCE(balance, 0) - ? WHERE code = ?`;
       db.serialize(() => {
         db.run("BEGIN TRANSACTION");
         db.run(sql, [qty, code]);
@@ -226,7 +298,8 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
             rawMaterials.forEach((mat: any) => {
               const qty = parseFloat(mat.quantity) || 0;
               if (mat.materialCode && qty > 0) {
-                db.run(`UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`, [qty, mat.materialCode]);
+                db.run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [qty, mat.materialCode]);
+                deductBatches(db, mat.materialCode, qty);
               }
             });
             db.run("COMMIT");
@@ -260,7 +333,7 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     if (qty > 0) {
       getDb().get(`SELECT code FROM materials WHERE code = ?`, [data.batchOrCode], (err, row: any) => {
         if (row) {
-          getDb().run(`UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`, [qty, data.batchOrCode]);
+          getDb().run(`UPDATE materials SET balance = COALESCE(balance, 0) - ? WHERE code = ?`, [qty, data.batchOrCode]);
           logTxn('DISPOSAL', data.batchOrCode, qty, '', data.batchOrCode, data.disposalId || fId);
         }
       });
@@ -1433,10 +1506,12 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
         }
       }
 
-      getDb().run(
-        `UPDATE forms_records SET status = ?, data_json = ? WHERE record_id = ?`,
-        [status, finalDataJson, recordId],
-        function (errUpdate) {
+      // Pre-approval balance check for PRD-002 raw material deductions
+      const doUpdate = () => {
+        getDb().run(
+          `UPDATE forms_records SET status = ?, data_json = ? WHERE record_id = ?`,
+          [status, finalDataJson, recordId],
+          function (errUpdate) {
           if (errUpdate) {
             console.error(errUpdate);
             return res.status(500).json({ error: "Failed to update record" });
@@ -1460,6 +1535,39 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
           res.json({ success: true, recordId });
         },
       );
+      }; // end doUpdate
+
+      // For PRD-002 approval: check raw material balances before committing
+      if (status === "approved" && row.status !== "approved" && row.form_id === "F-PRD-002") {
+        const prdFormData = JSON.parse(finalDataJson || "{}");
+        const rawMaterials: any[] = (prdFormData.rawMaterials || []).filter((m: any) => m.materialCode && (parseFloat(m.quantity) || 0) > 0);
+        if (rawMaterials.length > 0) {
+          const codes = rawMaterials.map((m: any) => m.materialCode);
+          const placeholders = codes.map(() => '?').join(',');
+          getDb().all(
+            `SELECT code, balance FROM materials WHERE code IN (${placeholders}) AND is_active = 1`,
+            codes,
+            (balErr: any, balRows: any[]) => {
+              if (balErr) return res.status(500).json({ error: "خطأ في التحقق من أرصدة المواد الخام" });
+              const balMap: Record<string, number> = {};
+              (balRows || []).forEach((r: any) => { balMap[r.code] = r.balance || 0; });
+              const deficits = rawMaterials
+                .filter((m: any) => (parseFloat(m.quantity) || 0) > (balMap[m.materialCode] || 0))
+                .map((m: any) =>
+                  `• ${m.materialName || m.materialCode}: الرصيد المتوفر ${(balMap[m.materialCode] || 0).toFixed(2)}، المطلوب ${parseFloat(m.quantity).toFixed(2)}`
+                );
+              if (deficits.length > 0) {
+                return res.status(400).json({
+                  error: `لا يمكن اعتماد أمر التصنيع — رصيد غير كافٍ للمواد التالية:\n${deficits.join('\n')}`
+                });
+              }
+              doUpdate();
+            }
+          );
+          return;
+        }
+      }
+      doUpdate();
     },
   );
 });

@@ -102,6 +102,21 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 13,
           name: "soft_delete_warehouses",
           up: `ALTER TABLE warehouses ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
+        },
+        {
+          version: 14,
+          name: "create_material_batches",
+          up: `CREATE TABLE IF NOT EXISTS material_batches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            material_code TEXT NOT NULL,
+            batch_number TEXT,
+            quantity_received REAL NOT NULL,
+            quantity_remaining REAL NOT NULL,
+            expiry_date TEXT,
+            received_date TEXT NOT NULL DEFAULT (date('now')),
+            warehouse_id INTEGER,
+            reference_id TEXT
+          );`
         }
       ];
 
