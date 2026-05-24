@@ -23,7 +23,9 @@ export default function FormPRD001() {
   const [products, setProducts] = useState<any[]>([]);
   const [compositions, setCompositions] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [lastAppliedBOM, setLastAppliedBOM] = useState({ item: "", batch: "" });
+  const [availableBOMs, setAvailableBOMs] = useState<any[]>([]);
+  const [selectedBOMId, setSelectedBOMId] = useState<string>("");
+  const [lastAppliedBOM, setLastAppliedBOM] = useState({ item: "", batch: "", bomId: "" });
   const [showProductModal, setShowProductModal] = useState(false);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -128,65 +130,75 @@ export default function FormPRD001() {
     setFormData((prev) => ({ ...prev, rawMaterials: newMaterials }));
   };
 
+  // Update available BOMs list when product changes
+  useEffect(() => {
+    const { itemNumber } = formData;
+    if (!itemNumber || compositions.length === 0) {
+      setAvailableBOMs([]);
+      setSelectedBOMId("");
+      return;
+    }
+    const bomsForProduct = compositions.filter(
+      (c) => c.data?.productCode === itemNumber,
+    );
+    setAvailableBOMs(bomsForProduct);
+    if (bomsForProduct.length === 1) {
+      setSelectedBOMId(bomsForProduct[0].record_id);
+    } else {
+      // Multiple or zero BOMs — require user to pick
+      setSelectedBOMId("");
+    }
+  }, [formData.itemNumber, compositions]);
+
+  // Auto-populate materials table from selected BOM + batch size
   useEffect(() => {
     const { itemNumber, requiredBatchSize, unit } = formData;
-    if (itemNumber && requiredBatchSize) {
-      if (
-        lastAppliedBOM.item !== itemNumber ||
-        lastAppliedBOM.batch !== requiredBatchSize
-      ) {
-        const batchSize = parseFloat(requiredBatchSize);
-        if (!isNaN(batchSize) && batchSize > 0 && compositions.length > 0) {
-          const bomsForProduct = compositions.filter(
-            (c) => c.data?.productCode === itemNumber,
-          );
-          if (bomsForProduct.length > 0) {
-            const bom = bomsForProduct[bomsForProduct.length - 1].data;
-            const totalParts = bom.materials.reduce(
-              (sum: number, m: any) => sum + (parseFloat(m.percentage) || 0),
-              0,
-            );
+    if (!itemNumber || !requiredBatchSize || !selectedBOMId) return;
+    if (
+      lastAppliedBOM.item === itemNumber &&
+      lastAppliedBOM.batch === requiredBatchSize &&
+      lastAppliedBOM.bomId === selectedBOMId
+    ) return;
 
-            if (totalParts > 0) {
-              const newRawMaterials = bom.materials.map((m: any) => {
-                const part = parseFloat(m.percentage) || 0;
-                let requiredQty = 0;
-                if (m.unit === "%") {
-                  requiredQty = (batchSize * part) / 100;
-                } else {
-                  // Divide required batch by composition total and multiply by part
-                  requiredQty = (batchSize / totalParts) * part;
-                }
+    const batchSize = parseFloat(requiredBatchSize);
+    if (isNaN(batchSize) || batchSize <= 0) return;
 
-                const invItem = inventoryMaterials.find(
-                  (inv) => inv.code === m.materialCode,
-                );
-                const outUnit =
-                  m.unit === "%" ? (invItem ? invItem.unit : unit) : m.unit;
+    const bomRecord = compositions.find((c) => c.record_id === selectedBOMId);
+    if (!bomRecord) return;
 
-                return {
-                  materialCode: m.materialCode,
-                  materialName: m.materialName,
-                  requiredQuantity: requiredQty.toFixed(3),
-                  unit: outUnit || unit,
-                };
-              });
-              setFormData((prev) => ({
-                ...prev,
-                rawMaterials: newRawMaterials,
-              }));
-            }
-          }
+    const bom = bomRecord.data;
+    const totalParts = bom.materials.reduce(
+      (sum: number, m: any) => sum + (parseFloat(m.percentage) || 0),
+      0,
+    );
+    if (totalParts > 0) {
+      const newRawMaterials = bom.materials.map((m: any) => {
+        const part = parseFloat(m.percentage) || 0;
+        let requiredQty = 0;
+        if (m.unit === "%") {
+          requiredQty = (batchSize * part) / 100;
+        } else {
+          requiredQty = (batchSize / totalParts) * part;
         }
-        setLastAppliedBOM({ item: itemNumber, batch: requiredBatchSize });
-      }
+        const invItem = inventoryMaterials.find((inv) => inv.code === m.materialCode);
+        const outUnit = m.unit === "%" ? (invItem ? invItem.unit : unit) : m.unit;
+        return {
+          materialCode: m.materialCode,
+          materialName: m.materialName,
+          requiredQuantity: requiredQty.toFixed(3),
+          unit: outUnit || unit,
+        };
+      });
+      setFormData((prev) => ({ ...prev, rawMaterials: newRawMaterials }));
     }
+    setLastAppliedBOM({ item: itemNumber, batch: requiredBatchSize, bomId: selectedBOMId });
   }, [
     formData.itemNumber,
     formData.requiredBatchSize,
+    formData.unit,
+    selectedBOMId,
     compositions,
     inventoryMaterials,
-    formData.unit,
   ]);
 
   const handleSubmit = async (e: React.FormEvent, status: any) => {
@@ -335,6 +347,40 @@ export default function FormPRD001() {
               className="w-full border-slate-300 bg-slate-50 text-slate-600 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
             />
           </div>
+          {/* BOM selector — shown when product has multiple compositions */}
+          {availableBOMs.length > 1 && (
+            <div className="md:col-span-2">
+              <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+                رقم التركيبة (BOM) <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedBOMId}
+                onChange={(e) => setSelectedBOMId(e.target.value)}
+                className="w-full border-amber-300 rounded-lg shadow-sm focus:border-amber-500 focus:ring-amber-500 text-sm py-2 bg-amber-50"
+              >
+                <option value="">-- اختر التركيبة المطلوبة --</option>
+                {availableBOMs.map((bom) => (
+                  <option key={bom.record_id} value={bom.record_id}>
+                    {bom.record_id} — إصدار {bom.data?.version || "1.0"}
+                    {bom.data?.notes ? ` — ${bom.data.notes}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-amber-600 mt-1">
+                يوجد {availableBOMs.length} تركيبات لهذا المنتج — اختر التركيبة لملء جدول المواد تلقائياً
+              </p>
+            </div>
+          )}
+          {availableBOMs.length === 1 && (
+            <div className="md:col-span-2">
+              <p className="text-[12px] text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200">
+                تم تحميل التركيبة تلقائياً:{" "}
+                <span className="font-bold">{availableBOMs[0].record_id}</span>
+                {" — إصدار "}{availableBOMs[0].data?.version || "1.0"}
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
               رقم الدفعة (تلقائي)
