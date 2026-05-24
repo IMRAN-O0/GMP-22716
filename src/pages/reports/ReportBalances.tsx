@@ -21,27 +21,21 @@ export default function ReportBalances() {
     })
       .then((res) => res.json())
       .then((mats) => setMaterials(Array.isArray(mats) ? mats : []))
+      .catch(() => setMaterials([]))
       .finally(() => setLoading(false));
   }, []);
 
-  // Initial load: fetch materials + warehouses in parallel
+  // Initial load: fetch warehouses once, then let filter effect handle materials
   useEffect(() => {
-    Promise.all([
-      fetch("/api/materials", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      }).then((res) => res.json()),
-      fetch("/api/warehouses", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      }).then((res) => res.json()),
-    ])
-      .then(([mats, whs]) => {
-        setMaterials(Array.isArray(mats) ? mats : []);
-        setWarehouses(Array.isArray(whs) ? whs : []);
-      })
-      .finally(() => setLoading(false));
+    fetch("/api/warehouses", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    })
+      .then((res) => res.json())
+      .then((whs) => setWarehouses(Array.isArray(whs) ? whs : []))
+      .catch(() => setWarehouses([]));
   }, []);
 
-  // Re-fetch when filters change
+  // Fetch materials on mount and whenever filters change
   useEffect(() => {
     fetchMaterials(filterCategory, filterWarehouse, filterLowStock);
   }, [filterCategory, filterWarehouse, filterLowStock, fetchMaterials]);
