@@ -17,11 +17,9 @@ export default function LABIndex() {
   const [forms, setForms] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/LAB")
+    fetch("/api/forms/dept/LAB", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
-      .then((data) => {
-        setForms(data);
-      })
+      .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 

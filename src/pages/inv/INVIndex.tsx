@@ -296,7 +296,7 @@ export default function INVIndex() {
                     .filter(m => !balanceSearch || m.name?.includes(balanceSearch) || m.code?.includes(balanceSearch))
                     .map((m, i) => {
                     const warehouse = warehouses.find((w) => w.id === m.warehouse_id);
-                    const isLow = m.minBalance && m.balance <= m.minBalance;
+                    const isLow = !!m.minBalance && m.balance <= m.minBalance;
                     return (
                       <tr key={i} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0">
                         <td className="px-3 py-2 font-mono font-bold text-sky-600 text-[12px]">{m.code}</td>
@@ -337,11 +337,7 @@ export default function INVIndex() {
                               <span className="text-[10px] text-slate-400">Enter</span>
                             </div>
                           ) : (
-                            <span
-                              onClick={() => user?.level === 1 ? setEditingBalance({ id: m.id, val: String(m.balance ?? 0) }) : undefined}
-                              className={user?.level === 1 ? "cursor-pointer hover:bg-amber-50 hover:text-amber-700 px-1 rounded" : ""}
-                              title={user?.level === 1 ? "انقر لتعديل الرصيد" : ""}
-                            >
+                            <span className={m.balance < 0 ? "text-red-600 font-bold" : ""}>
                               {m.balance}
                             </span>
                           )}

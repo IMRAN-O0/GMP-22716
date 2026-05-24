@@ -23,6 +23,8 @@ export default function FormPIN001() {
       unit: string;
       quantity: string;
       unitPrice: string;
+      batchNumber: string;
+      expiryDate: string;
     }[],
   });
 
@@ -55,8 +57,9 @@ export default function FormPIN001() {
 
     fetch("/api/forms", { headers: h })
       .then((res) => res.json())
-      .then((data: any[]) => {
-        const prqs = data.filter((f) => f.form_id === "F-INV-PRQ-001" && f.status === "approved");
+      .then((data: any) => {
+        const rows = Array.isArray(data) ? data : [];
+        const prqs = rows.filter((f: any) => f.form_id === "F-INV-PRQ-001" && f.status === "approved");
         setPrqList(prqs);
       })
       .catch(console.error);
@@ -103,6 +106,8 @@ export default function FormPIN001() {
           unit: "",
           quantity: "1",
           unitPrice: "0",
+          batchNumber: "",
+          expiryDate: "",
         },
       ],
     });
@@ -373,6 +378,8 @@ export default function FormPIN001() {
                       الكمية <span className="text-red-500">*</span>
                     </th>
                     <th className="p-3 font-semibold w-28">سعر الوحدة</th>
+                    <th className="p-3 font-semibold w-28">رقم الدفعة</th>
+                    <th className="p-3 font-semibold w-32">تاريخ الانتهاء</th>
                     <th className="p-3 font-semibold w-28 text-left">
                       الإجمالي
                     </th>
@@ -383,7 +390,7 @@ export default function FormPIN001() {
                   {formData.items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={9}
                         className="p-6 text-center text-slate-400 text-sm bg-white"
                       >
                         لا توجد مواد مضافة.
@@ -458,6 +465,23 @@ export default function FormPIN001() {
                               updateItem(i, "unitPrice", e.target.value)
                             }
                             className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2 text-center"
+                          />
+                        </td>
+                        <td className="p-2 border-r border-slate-100">
+                          <input
+                            type="text"
+                            placeholder="LOT-001"
+                            value={item.batchNumber || ""}
+                            onChange={(e) => updateItem(i, "batchNumber", e.target.value)}
+                            className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2 text-center"
+                          />
+                        </td>
+                        <td className="p-2 border-r border-slate-100">
+                          <input
+                            type="date"
+                            value={item.expiryDate || ""}
+                            onChange={(e) => updateItem(i, "expiryDate", e.target.value)}
+                            className="w-full bg-transparent border-slate-200 focus:ring-1 focus:ring-sky-400 rounded text-sm py-1.5 px-2"
                           />
                         </td>
                         <td className="p-2 border-r border-slate-100 text-left font-semibold text-slate-700 bg-slate-50">

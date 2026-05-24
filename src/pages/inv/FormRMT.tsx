@@ -37,15 +37,16 @@ export default function FormRMT() {
     fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
       .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
         setIssueRequests(
-          data.filter(
+          rows.filter(
             (f: any) =>
               (f.form_id === "F-PRD-001" || f.form_id === "F-LAB-007") &&
               f.status === "approved",
           ),
         );
         setPinForms(
-          data.filter((f: any) => f.form_id === "F-INV-PIN-001" && f.status === "approved"),
+          rows.filter((f: any) => f.form_id === "F-INV-PIN-001" && f.status === "approved"),
         );
       })
       .catch(console.error);

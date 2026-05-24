@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function ReportBalances() {
@@ -9,37 +9,41 @@ export default function ReportBalances() {
   const [filterWarehouse, setFilterWarehouse] = useState("ALL");
   const [filterLowStock, setFilterLowStock] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/materials", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      }).then((res) => res.json()),
-      fetch("/api/warehouses", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      }).then((res) => res.json()),
-    ])
-      .then(([mats, whs]) => {
-        setMaterials(mats);
-        setWarehouses(whs);
-      })
+  const fetchMaterials = useCallback((category: string, warehouse_id: string, low_stock: boolean) => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (category !== "ALL") params.set("category", category);
+    if (warehouse_id !== "ALL") params.set("warehouse_id", warehouse_id);
+    if (low_stock) params.set("low_stock", "true");
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    fetch(`/api/materials${qs}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    })
+      .then((res) => res.json())
+      .then((mats) => setMaterials(Array.isArray(mats) ? mats : []))
+      .catch(() => setMaterials([]))
       .finally(() => setLoading(false));
   }, []);
+
+  // Initial load: fetch warehouses once, then let filter effect handle materials
+  useEffect(() => {
+    fetch("/api/warehouses", {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    })
+      .then((res) => res.json())
+      .then((whs) => setWarehouses(Array.isArray(whs) ? whs : []))
+      .catch(() => setWarehouses([]));
+  }, []);
+
+  // Fetch materials on mount and whenever filters change
+  useEffect(() => {
+    fetchMaterials(filterCategory, filterWarehouse, filterLowStock);
+  }, [filterCategory, filterWarehouse, filterLowStock, fetchMaterials]);
 
   const getWarehouseName = (id: number) => {
     const wh = warehouses.find((w) => w.id === id);
     return wh ? wh.name : "غير محدد";
   };
-
-  const filtered = materials.filter((m) => {
-    if (filterCategory !== "ALL" && m.category !== filterCategory) return false;
-    if (
-      filterWarehouse !== "ALL" &&
-      m.warehouse_id?.toString() !== filterWarehouse
-    )
-      return false;
-    if (filterLowStock && m.balance > 10) return false; // Define logic for low stock
-    return true;
-  });
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -101,14 +105,14 @@ export default function ReportBalances() {
                   جاري التحميل...
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : materials.length === 0 ? (
               <tr>
                 <td colSpan={7} className="p-4 text-center text-slate-500">
                   لا توجد سجلات مطابقة
                 </td>
               </tr>
             ) : (
-              filtered.map((m) => {
+              materials.map((m) => {
                 const isZero = m.balance <= 0;
                 const isLow = m.balance > 0 && m.balance <= 10;
                 const isGood = m.balance > 10;

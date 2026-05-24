@@ -23,9 +23,11 @@ const matchesReference = (formData: any, targetId: string): boolean => {
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET environment variable is missing and is required in production.");
 } else if (!process.env.JWT_SECRET) {
-  console.warn("WARNING: JWT_SECRET environment variable is missing. Using dynamic fallback secret. Existing tokens will be invalidated on server restart.");
+  console.warn("WARNING: JWT_SECRET is not set. Using a fixed development fallback. Set JWT_SECRET in production.");
 }
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+// In production the line above throws, so reaching here without JWT_SECRET is dev-only.
+// We use a fixed dev secret so sessions survive server restarts during development.
+const JWT_SECRET = process.env.JWT_SECRET || "dev-only-jwt-secret-do-not-use-in-production";
 
 const getAuthUser = (req: any) => {
   const authHeader = req.headers.authorization;
@@ -94,32 +96,64 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     );
   }
 
-  // Helper: log to inventory_transactions
-  const logTxn = (type: string, materialCode: string, qty: number, unit: string, batchNo: string, refId: string) => {
+  // Helper: log to inventory_transactions (including warehouse and expiry when available)
+  const logTxn = (type: string, materialCode: string, qty: number, unit: string, batchNo: string, refId: string, warehouseId?: number | null, expiryDate?: string | null) => {
     const txnId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     getDb().run(
-      `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, reference_record_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
-      [txnId, type, materialCode, qty, unit, batchNo, refId]
+      `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, reference_record_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
+      [txnId, type, materialCode, qty, unit, batchNo || null, expiryDate || null, warehouseId || null, refId]
     );
   };
 
-  // 1. PIN (Purchase Invoice) - Add to balance
+  // Helper: FIFO deduction from material_batches (oldest expiry first)
+  const deductBatches = (db: any, materialCode: string, qty: number) => {
+    db.all(
+      `SELECT id, quantity_remaining FROM material_batches
+       WHERE material_code = ? AND quantity_remaining > 0
+       ORDER BY COALESCE(expiry_date, '9999-12-31') ASC, received_date ASC`,
+      [materialCode],
+      (err: any, batches: any[]) => {
+        if (err || !batches || batches.length === 0) return;
+        let remaining = qty;
+        db.serialize(() => {
+          for (const batch of batches) {
+            if (remaining <= 0) break;
+            const deduct = Math.min(remaining, batch.quantity_remaining);
+            db.run(
+              `UPDATE material_batches SET quantity_remaining = quantity_remaining - ? WHERE id = ?`,
+              [deduct, batch.id]
+            );
+            remaining -= deduct;
+          }
+        });
+      }
+    );
+  };
+
+  // 1. PIN (Purchase Invoice) - Add to balance + create batch records
   if (fId === "F-INV-PIN-001" && Array.isArray(data.items)) {
     const db = getDb();
+    const warehouseId = data.warehouseId ? parseInt(data.warehouseId) : null;
+    const receivedDate = data.invoiceDate || new Date().toISOString().split('T')[0];
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       data.items.forEach((item: any) => {
         const qty = parseFloat(item.quantity) || 0;
         if (item.materialCode && qty > 0) {
           db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty, item.materialCode]);
+          db.run(
+            `INSERT INTO material_batches (material_code, batch_number, quantity_received, quantity_remaining, expiry_date, received_date, warehouse_id, reference_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [item.materialCode, item.batchNumber || null, qty, qty, item.expiryDate || null, receivedDate, warehouseId, fId]
+          );
         }
       });
       db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
     });
-    // Log each item
     data.items.forEach((item: any) => {
       const qty = parseFloat(item.quantity) || 0;
-      if (item.materialCode && qty > 0) logTxn('RECEIVE', item.materialCode, qty, item.unit || '', '', fId);
+      if (item.materialCode && qty > 0)
+        logTxn('RECEIVE', item.materialCode, qty, item.unit || '', item.batchNumber || '', fId, warehouseId, item.expiryDate || null);
     });
   }
 
@@ -136,15 +170,38 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
       });
       return;
     }
-    const qtyMultiplier = data.transactionType === "Receive" ? 1 : -1;
-    const txnType = data.transactionType === "Receive" ? "RECEIVE" : "ISSUE";
+    const isIssue = data.transactionType !== "Receive";
+    const qtyMultiplier = isIssue ? -1 : 1;
+    const txnType = isIssue ? "ISSUE" : "RECEIVE";
     const db = getDb();
+
+    // For ISSUE: deduct from all items (allow negative balances)
+    if (isIssue) {
+      const issuedItems = data.items.filter((i: any) => i.materialCode && (parseFloat(i.quantity) || 0) > 0);
+      if (issuedItems.length > 0) {
+        db.serialize(() => {
+          db.run("BEGIN TRANSACTION");
+          issuedItems.forEach((item: any) => {
+            const qty = parseFloat(item.quantity) || 0;
+            db.run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [qty, item.materialCode]);
+            deductBatches(db, item.materialCode, qty);
+          });
+          db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
+        });
+        issuedItems.forEach((item: any) => {
+          const qty = parseFloat(item.quantity) || 0;
+          logTxn(txnType, item.materialCode, qty, item.unit || '', '', data.referenceDocument || fId);
+        });
+        return;
+      }
+    }
+    // RECEIVE path (no balance check needed)
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       data.items.forEach((item: any) => {
         const qty = parseFloat(item.quantity) || 0;
         if (item.materialCode && qty > 0) {
-          db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty * qtyMultiplier, item.materialCode]);
+          db.run(`UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`, [qty, item.materialCode]);
         }
       });
       db.run("COMMIT", (err) => { if (err) db.run("ROLLBACK"); });
@@ -161,7 +218,7 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
       const db = getDb();
       const sql = direction > 0
         ? `UPDATE materials SET balance = COALESCE(balance, 0) + ? WHERE code = ?`
-        : `UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`;
+        : `UPDATE materials SET balance = COALESCE(balance, 0) - ? WHERE code = ?`;
       db.serialize(() => {
         db.run("BEGIN TRANSACTION");
         db.run(sql, [qty, code]);
@@ -175,22 +232,19 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
       applyUpdate(productCode);
       return;
     }
-    // Fallback: lookup via PRD-001 batchNumber
+    // Fallback: targeted lookup via PRD-001 batchNumber (LIKE index scan, not full scan)
     if (!batchNumber) return;
-    getDb().all(
-      "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved'",
-      [],
-      (err, rows: any[]) => {
-        if (err || !rows) return;
-        for (const row of rows) {
-          try {
-            const prd = JSON.parse(row.data_json || "{}");
-            if (prd.batchNumber === batchNumber && prd.itemNumber) {
-              applyUpdate(prd.itemNumber);
-              break;
-            }
-          } catch { /* ignore */ }
-        }
+    getDb().get(
+      "SELECT data_json FROM forms_records WHERE form_id = 'F-PRD-001' AND status = 'approved' AND data_json LIKE ?",
+      [`%"batchNumber":"${batchNumber}"%`],
+      (err, row: any) => {
+        if (err || !row) return;
+        try {
+          const prd = JSON.parse(row.data_json || "{}");
+          if (prd.batchNumber === batchNumber && prd.itemNumber) {
+            applyUpdate(prd.itemNumber);
+          }
+        } catch { /* skip */ }
       }
     );
   };
@@ -224,7 +278,8 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
             rawMaterials.forEach((mat: any) => {
               const qty = parseFloat(mat.quantity) || 0;
               if (mat.materialCode && qty > 0) {
-                db.run(`UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`, [qty, mat.materialCode]);
+                db.run(`UPDATE materials SET balance = balance - ? WHERE code = ?`, [qty, mat.materialCode]);
+                deductBatches(db, mat.materialCode, qty);
               }
             });
             db.run("COMMIT");
@@ -258,7 +313,7 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
     if (qty > 0) {
       getDb().get(`SELECT code FROM materials WHERE code = ?`, [data.batchOrCode], (err, row: any) => {
         if (row) {
-          getDb().run(`UPDATE materials SET balance = MAX(0, COALESCE(balance, 0) - ?) WHERE code = ?`, [qty, data.batchOrCode]);
+          getDb().run(`UPDATE materials SET balance = COALESCE(balance, 0) - ? WHERE code = ?`, [qty, data.batchOrCode]);
           logTxn('DISPOSAL', data.batchOrCode, qty, '', data.batchOrCode, data.disposalId || fId);
         }
       });
@@ -435,7 +490,7 @@ router.get("/users", requireAuth, (req: any, res) => {
   const caller = req.user;
   if (!caller || caller.level > 2) return res.status(403).json({ error: "غير مصرح" });
   getDb().all(
-    "SELECT id, user_id, name, department, level, status, permissions FROM users ORDER BY level ASC",
+    "SELECT id, user_id, name, department, level, status, permissions FROM users WHERE is_active = 1 ORDER BY level ASC",
     [],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -491,8 +546,8 @@ router.put("/users/:id", requireAuth, async (req, res) => {
 });
 
 router.delete("/users/:id", requireAuth, (req, res) => {
-  getDb().run("DELETE FROM users WHERE id=?", [req.params.id], (err) => {
-    if (err) return res.status(500).json({ error: "Delete failed" });
+  getDb().run("UPDATE users SET is_active = 0 WHERE id=?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
 });
@@ -507,7 +562,7 @@ router.get("/employees", requireAuth, (req, res) => {
 
 // INV: Get Warehouses
 router.get("/warehouses", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM warehouses ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT * FROM warehouses WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -539,10 +594,10 @@ router.put("/warehouses/:id", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Warehouse
+// INV: Delete Warehouse (soft)
 router.delete("/warehouses/:id", requireAuth, (req, res) => {
   getDb().run(
-    `DELETE FROM warehouses WHERE id=?`,
+    `UPDATE warehouses SET is_active = 0 WHERE id=?`,
     [req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
@@ -583,7 +638,7 @@ router.post("/inventory/transactions", requireAuth, async (req, res) => {
     db.run("COMMIT", function (err) {
       if (err) {
         db.run("ROLLBACK");
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: "خطأ في قاعدة البيانات — يرجى المحاولة مرة أخرى" });
       }
       res.json({ success: true });
     });
@@ -600,7 +655,14 @@ router.get("/inventory/transactions", requireAuth, (req, res) => {
 
 // INV: Get Materials
 router.get("/materials", requireAuth, (req, res) => {
-  getDb().all("SELECT *, min_balance as minBalance FROM materials ORDER BY code ASC", [], (err, rows) => {
+  const { category, warehouse_id, low_stock } = req.query;
+  const conditions: string[] = ["is_active = 1"];
+  const params: any[] = [];
+  if (category && category !== "ALL") { conditions.push("category = ?"); params.push(category); }
+  if (warehouse_id && warehouse_id !== "ALL") { conditions.push("warehouse_id = ?"); params.push(warehouse_id); }
+  if (low_stock === "true") { conditions.push("balance <= min_balance"); }
+  const where = conditions.join(" AND ");
+  getDb().all(`SELECT *, min_balance as minBalance FROM materials WHERE ${where} ORDER BY code ASC`, params, (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -649,7 +711,7 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
   let skipped = 0;
 
   // Pre-load warehouse map: code → id
-  db.all("SELECT id, code FROM warehouses", [], (whErr, whRows: any[]) => {
+  db.all("SELECT id, code FROM warehouses WHERE is_active = 1", [], (whErr, whRows: any[]) => {
     if (whErr) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
 
     const warehouseMap: Record<string, number> = {};
@@ -713,19 +775,19 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
   });
 });
 
-// INV: Delete ALL Materials (admin only)
+// INV: Deactivate ALL Materials (admin only — soft delete)
 router.delete("/materials", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 1) return res.status(403).json({ error: "للمدير فقط" });
-  getDb().run(`DELETE FROM materials`, [], function (err) {
+  getDb().run(`UPDATE materials SET is_active = 0`, [], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
-    res.json({ success: true, deleted: this.changes });
+    res.json({ success: true, deactivated: this.changes });
   });
 });
 
-// INV: Delete Material
+// INV: Delete Material (soft)
 router.delete("/materials/:id", requireAuth, (req, res) => {
   getDb().run(
-    `DELETE FROM materials WHERE id=?`,
+    `UPDATE materials SET is_active = 0 WHERE id=?`,
     [req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
@@ -751,7 +813,7 @@ router.put("/materials/:id", requireAuth, (req, res) => {
 // INV: Get material by code (used by FP-001 for package size calculation)
 router.get("/materials/by-code/:code", requireAuth, (req, res) => {
   getDb().get(
-    "SELECT *, package_size as packageSize, package_size_unit as packageSizeUnit FROM materials WHERE code = ?",
+    "SELECT *, package_size as packageSize, package_size_unit as packageSizeUnit FROM materials WHERE code = ? AND is_active = 1",
     [req.params.code],
     (err, row) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -780,7 +842,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
 
   const db = getDb();
   db.all("SELECT * FROM forms_records WHERE status = 'approved' ORDER BY created_at ASC", [], (err, rows: any[]) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
 
     const balances: Record<string, number> = {};
 
@@ -830,7 +892,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
         d.items.forEach((item: any) => {
           const qty = parseFloat(item.quantity) || 0;
           if (item.materialCode && qty > 0) {
-            balances[item.materialCode] = Math.max(0, (balances[item.materialCode] || 0) + qty * mult);
+            balances[item.materialCode] = (balances[item.materialCode] || 0) + qty * mult;
           }
         });
       }
@@ -842,7 +904,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
           prd1.rawMaterials.forEach((mat: any) => {
             const qty = parseFloat(mat.quantity) || 0;
             if (mat.materialCode && qty > 0) {
-              balances[mat.materialCode] = Math.max(0, (balances[mat.materialCode] || 0) - qty);
+              balances[mat.materialCode] = (balances[mat.materialCode] || 0) - qty;
             }
           });
         }
@@ -871,7 +933,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
         const code = fpCode(d);
         const qty = parseFloat(d.shippedQuantity) || 0;
         if (code && qty > 0) {
-          balances[code] = Math.max(0, (balances[code] || 0) - qty);
+          balances[code] = (balances[code] || 0) - qty;
         }
       }
 
@@ -888,7 +950,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
       else if (fId === "F-FP-005" && d.batchOrCode) {
         const qty = parseFloat(d.quantity) || 0;
         if (qty > 0) {
-          balances[d.batchOrCode] = Math.max(0, (balances[d.batchOrCode] || 0) - qty);
+          balances[d.batchOrCode] = (balances[d.batchOrCode] || 0) - qty;
         }
       }
     }
@@ -900,7 +962,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       entries.forEach(([code, bal]) => {
-        db.run("UPDATE materials SET balance = ? WHERE code = ?", [Math.max(0, bal), code]);
+        db.run("UPDATE materials SET balance = ? WHERE code = ?", [bal, code]);
       });
       db.run("COMMIT", (commitErr) => {
         if (commitErr) { db.run("ROLLBACK"); return res.status(500).json({ error: "فشل تطبيق التحديثات" }); }
@@ -914,7 +976,7 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
 router.get("/materials/search/:code", requireAuth, (req, res) => {
   const codeSearch = `%${req.params.code}%`;
   getDb().all(
-    "SELECT * FROM materials WHERE code LIKE ? OR name LIKE ?",
+    "SELECT * FROM materials WHERE is_active = 1 AND (code LIKE ? OR name LIKE ?)",
     [codeSearch, codeSearch],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -926,7 +988,7 @@ router.get("/materials/search/:code", requireAuth, (req, res) => {
 // INV: Get Products (From materials table)
 router.get("/products", requireAuth, (req, res) => {
   getDb().all(
-    "SELECT * FROM materials WHERE category = 'منتج نهائي' OR category = 'Finished Product' ORDER BY code ASC",
+    "SELECT * FROM materials WHERE is_active = 1 AND (category = 'منتج نهائي' OR category = 'Finished Product') ORDER BY code ASC",
     [],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -937,7 +999,7 @@ router.get("/products", requireAuth, (req, res) => {
 
 // INV: Get Suppliers
 router.get("/suppliers", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM suppliers ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT * FROM suppliers WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -956,10 +1018,10 @@ router.post("/suppliers", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Supplier (level ≤ 2 only)
+// INV: Delete Supplier — soft delete (level ≤ 2 only)
 router.delete("/suppliers/:id", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
-  getDb().run(`DELETE FROM suppliers WHERE id=?`, [req.params.id], function (err) {
+  getDb().run(`UPDATE suppliers SET is_active = 0 WHERE id=?`, [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
@@ -983,7 +1045,7 @@ router.put("/suppliers/:id", requireAuth, (req: any, res) => {
 router.get("/suppliers/search/:code", requireAuth, (req, res) => {
   const query = `%${req.params.code}%`;
   getDb().all(
-    "SELECT * FROM suppliers WHERE code LIKE ? OR name LIKE ?",
+    "SELECT * FROM suppliers WHERE is_active = 1 AND (code LIKE ? OR name LIKE ?)",
     [query, query],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -994,7 +1056,7 @@ router.get("/suppliers/search/:code", requireAuth, (req, res) => {
 
 // INV: Get Customers
 router.get("/customers", requireAuth, (req, res) => {
-  getDb().all("SELECT * FROM customers ORDER BY code ASC", [], (err, rows) => {
+  getDb().all("SELECT * FROM customers WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     res.json(rows || []);
   });
@@ -1013,10 +1075,10 @@ router.post("/customers", requireAuth, (req, res) => {
   );
 });
 
-// INV: Delete Customer (level ≤ 2 only)
+// INV: Delete Customer — soft delete (level ≤ 2 only)
 router.delete("/customers/:id", requireAuth, (req: any, res) => {
   if (!req.user || req.user.level > 2) return res.status(403).json({ error: "غير مصرح" });
-  getDb().run(`DELETE FROM customers WHERE id=?`, [req.params.id], function (err) {
+  getDb().run(`UPDATE customers SET is_active = 0 WHERE id=?`, [req.params.id], function (err) {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     res.json({ success: true });
   });
@@ -1040,7 +1102,7 @@ router.put("/customers/:id", requireAuth, (req: any, res) => {
 router.get("/customers/search/:code", requireAuth, (req, res) => {
   const query = `%${req.params.code}%`;
   getDb().all(
-    "SELECT * FROM customers WHERE code LIKE ? OR name LIKE ?",
+    "SELECT * FROM customers WHERE is_active = 1 AND (code LIKE ? OR name LIKE ?)",
     [query, query],
     (err, rows) => {
       if (err) return res.status(500).json({ error: "DB Error" });
@@ -1263,18 +1325,19 @@ const validateFormData = (formId: string, data: any): string[] => {
 
 router.get("/forms", requireAuth, (req: any, res) => {
   const user: any = req.user;
-  let query = "SELECT * FROM forms_records ORDER BY id DESC";
+
+  let query = "SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT 500";
   let params: any[] = [];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT 500";
       params = [user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL") {
         query =
-          "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+          "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT 500";
         params = [user.department];
       }
     }
@@ -1431,10 +1494,12 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
         }
       }
 
-      getDb().run(
-        `UPDATE forms_records SET status = ?, data_json = ? WHERE record_id = ?`,
-        [status, finalDataJson, recordId],
-        function (errUpdate) {
+      // Pre-approval balance check for PRD-002 raw material deductions
+      const doUpdate = () => {
+        getDb().run(
+          `UPDATE forms_records SET status = ?, data_json = ? WHERE record_id = ?`,
+          [status, finalDataJson, recordId],
+          function (errUpdate) {
           if (errUpdate) {
             console.error(errUpdate);
             return res.status(500).json({ error: "Failed to update record" });
@@ -1458,6 +1523,39 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
           res.json({ success: true, recordId });
         },
       );
+      }; // end doUpdate
+
+      // For PRD-002 approval: check raw material balances before committing
+      if (status === "approved" && row.status !== "approved" && row.form_id === "F-PRD-002") {
+        const prdFormData = JSON.parse(finalDataJson || "{}");
+        const rawMaterials: any[] = (prdFormData.rawMaterials || []).filter((m: any) => m.materialCode && (parseFloat(m.quantity) || 0) > 0);
+        if (rawMaterials.length > 0) {
+          const codes = rawMaterials.map((m: any) => m.materialCode);
+          const placeholders = codes.map(() => '?').join(',');
+          getDb().all(
+            `SELECT code, balance FROM materials WHERE code IN (${placeholders}) AND is_active = 1`,
+            codes,
+            (balErr: any, balRows: any[]) => {
+              if (balErr) return res.status(500).json({ error: "خطأ في التحقق من أرصدة المواد الخام" });
+              const balMap: Record<string, number> = {};
+              (balRows || []).forEach((r: any) => { balMap[r.code] = r.balance || 0; });
+              const deficits = rawMaterials
+                .filter((m: any) => (parseFloat(m.quantity) || 0) > (balMap[m.materialCode] || 0))
+                .map((m: any) =>
+                  `• ${m.materialName || m.materialCode}: الرصيد المتوفر ${(balMap[m.materialCode] || 0).toFixed(2)}، المطلوب ${parseFloat(m.quantity).toFixed(2)}`
+                );
+              if (deficits.length > 0) {
+                return res.status(400).json({
+                  error: `لا يمكن اعتماد أمر التصنيع — رصيد غير كافٍ للمواد التالية:\n${deficits.join('\n')}`
+                });
+              }
+              doUpdate();
+            }
+          );
+          return;
+        }
+      }
+      doUpdate();
     },
   );
 });
@@ -1475,11 +1573,11 @@ router.delete("/forms/record/:recordId", requireAuth, (req: any, res) => {
     if (user.level === 2 && row.department !== user.department && user.department !== "ALL") {
       return res.status(403).json({ error: "غير مصرح — خارج نطاق قسمك" });
     }
-    getDb().run("DELETE FROM forms_records WHERE record_id = ?", [req.params.recordId], function (e) {
+    getDb().run("UPDATE forms_records SET status = 'deleted' WHERE record_id = ?", [req.params.recordId], function (e) {
       if (e) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       getDb().run(
         `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, 'DELETE', ?, ?, ?, ?)`,
-        [user.id, row.form_id, req.params.recordId, new Date().toISOString(), `Deleted by level ${user.level}`]
+        [user.id, row.form_id, req.params.recordId, new Date().toISOString(), `Soft-deleted by level ${user.level}`]
       );
       res.json({ success: true });
     });
@@ -1505,7 +1603,7 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-  getDb().all("SELECT * FROM forms_records ORDER BY id DESC", [], (err, rows) => {
+  getDb().all("SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT 200", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const records = rows.map((r: any) => ({
       ...r,
@@ -1739,18 +1837,17 @@ router.get("/forms/dept/:department", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
 
   let query =
-    "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT 500";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT 500";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
-      // Can see all in department, but only if they are in this department
       if (user.department !== "ALL" && user.department !== department) {
-        return res.json([]); // Empty if unauthorized
+        return res.json([]);
       }
     }
   }
@@ -1769,31 +1866,34 @@ router.get("/forms/dept/:department", requireAuth, (req, res) => {
 router.get("/forms/:department", requireAuth, (req, res) => {
   const { department } = req.params;
   const user: any = getAuthUser(req);
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit as string) || 50);
+  const offset = (page - 1) * limit;
 
   let query =
-    "SELECT * FROM forms_records WHERE department = ? ORDER BY id DESC";
+    "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? ORDER BY id DESC LIMIT ? OFFSET ?";
   let params: any[] = [department];
 
   if (user && user.level) {
     if (user.level === 4) {
       query =
-        "SELECT * FROM forms_records WHERE department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC";
+        "SELECT * FROM forms_records WHERE status != 'deleted' AND department = ? AND (creator_id = ? OR creator_id IS NULL) ORDER BY id DESC LIMIT ? OFFSET ?";
       params = [department, user.id];
     } else if (user.level === 3 || user.level === 2) {
       if (user.department !== "ALL" && user.department !== department) {
-        return res.json([]);
+        return res.json({ data: [], page, limit, total: null });
       }
     }
   }
 
-  getDb().all(query, params, (err, rows) => {
+  getDb().all(query, [...params, limit, offset], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
 
     const mappedRows = rows.map((r: any) => ({
       ...r,
       data: JSON.parse(r.data_json || "{}"),
     }));
-    res.json(mappedRows);
+    res.json({ data: mappedRows, page, limit, total: null });
   });
 });
 

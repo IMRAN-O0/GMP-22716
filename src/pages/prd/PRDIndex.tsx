@@ -8,9 +8,9 @@ export default function PRDIndex() {
   const [forms, setForms] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/PRD")
+    fetch("/api/forms/dept/PRD", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
-      .then((data) => setForms(data))
+      .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 

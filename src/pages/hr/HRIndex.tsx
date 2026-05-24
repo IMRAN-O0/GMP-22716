@@ -8,9 +8,9 @@ export default function HRIndex() {
   const [forms, setForms] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/HR")
+    fetch("/api/forms/dept/HR", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
       .then((r) => r.json())
-      .then((data) => setForms(data))
+      .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);
   }, []);
 
