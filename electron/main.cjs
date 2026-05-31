@@ -8,7 +8,7 @@ const fs     = require('fs');
 const crypto = require('crypto');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const PORT    = parseInt(process.env.PORT || '3000', 10);
+const PORT    = parseInt(process.env.PORT || '3009', 10);
 const IS_DEV  = !app.isPackaged;
 const APP_DIR = IS_DEV
   ? path.join(__dirname, '..')
@@ -157,7 +157,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     dialog.showErrorBox(
       'تعذّر تشغيل البرنامج',
-      'لم يستجب السيرفر خلال المهلة المحددة.\nتأكد من أن المنفذ 3000 غير مستخدم ثم أعد المحاولة.'
+      'لم يستجب السيرفر خلال المهلة المحددة.\nتأكد من أن المنفذ 3009 غير مستخدم ثم أعد المحاولة.'
     );
     app.quit();
   }

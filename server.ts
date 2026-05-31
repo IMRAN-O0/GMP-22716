@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 async function startServer() {
   const app = express();
   app.set('trust proxy', 1);
-  const PORT = parseInt(process.env.PORT || '3000');
+  const PORT = parseInt(process.env.PORT || '3009');
 
   // Security Headers (Helmet)
   app.use(helmet({
@@ -35,7 +35,7 @@ async function startServer() {
   // CORS — only allow same origin (localhost in dev, server IP in prod)
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+    : ['http://localhost:3009', 'http://127.0.0.1:3009'];
 
   app.use(cors({
     origin: (origin, callback) => {
