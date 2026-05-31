@@ -1,14 +1,25 @@
 {
-  "name": "react-example",
+  "name": "gmp-qms",
+  "productName": "نظام GMP لإدارة الجودة",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "نظام إدارة الجودة GMP للصناعات الدوائية والتجميلية",
+  "author": "Modern Cosmetics Co.",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "preview": "vite preview",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "dev":              "tsx server.ts",
+    "start":            "NODE_ENV=production node server-bundle.cjs",
+    "build":            "vite build",
+    "build:server":     "node scripts/build-server.mjs",
+    "build:all":        "npm run build && npm run build:server",
+    "preview":          "vite preview",
+    "clean":            "rm -rf dist server-bundle.cjs",
+    "lint":             "tsc --noEmit",
+    "electron:dev":     "npm run build:server && electron .",
+    "electron:build":   "npm run build:all && electron-builder --win --publish never",
+    "electron:build:linux": "npm run build:all && electron-builder --linux --publish never",
+    "postinstall":      "electron-builder install-app-deps"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
@@ -41,6 +52,7 @@
     "yup": "^1.7.1"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
@@ -48,9 +60,60 @@
     "@types/node": "^22.14.0",
     "@types/sqlite3": "^3.1.11",
     "autoprefixer": "^10.4.21",
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.moderncosmetics.gmp",
+    "productName": "نظام GMP",
+    "copyright": "Modern Cosmetics Co.",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "node_modules/sqlite3/**/*",
+      "node_modules/bcryptjs/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "server-bundle.cjs",
+        "to":   "server-bundle.cjs"
+      },
+      {
+        "from": "dist",
+        "to":   "dist"
+      },
+      {
+        "from": "node_modules/sqlite3",
+        "to":   "node_modules/sqlite3"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick":           false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon":      "electron/icon.ico",
+      "installerHeaderIcon":"electron/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName":       "نظام GMP"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon":   "electron/icon.png",
+      "category": "Office"
+    },
+    "asar": true
   }
 }

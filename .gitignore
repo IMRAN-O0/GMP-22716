@@ -1,9 +1,25 @@
 node_modules/
 build/
 dist/
+dist-electron/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
 .claude/
+
+# ─── قاعدة البيانات — لا تُرفع لـ git (تُنشأ تلقائياً عند التشغيل) ───────────
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# ─── ملفات بناء Electron ────────────────────────────────────────────────────
+server-bundle.cjs
+server-electron-entry.ts
+
+# ─── ملفات مؤقتة ────────────────────────────────────────────────────────────
+*.corrupt_backup
+fix_*.js

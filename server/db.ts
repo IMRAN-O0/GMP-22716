@@ -6,7 +6,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dbPath = path.join(__dirname, '..', 'QForm_Data.db');
+// Allow Electron to override DB location to app userData (persists across updates)
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'QForm_Data.db');
 
 export let db: sqlite3.Database;
 

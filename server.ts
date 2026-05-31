@@ -98,4 +98,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// When bundled for Electron, startServer is imported directly by the bundle entry.
+// When run normally (npm run dev / npm start), call it here.
+if (process.env.ELECTRON_APP !== '1') {
+  startServer();
+}
+
+export { startServer };
