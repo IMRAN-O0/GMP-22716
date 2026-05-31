@@ -72,9 +72,16 @@ function startServer() {
   const jwtSecret = getOrCreateSecret();
   const dbPath    = getDbPath();
 
+  // Log server output to a file so we can diagnose startup failures in production
+  const logPath = path.join(app.getPath('userData'), 'server.log');
+  const logFd   = fs.openSync(logPath, 'a');
+
   serverProcess = childProcess.spawn(process.execPath, [bundlePath], {
     env: {
       ...process.env,
+      // Run the bundled Electron binary as plain Node.js — without this the
+      // packaged .exe tries to open a window instead of executing the server.
+      ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV:         'production',
       PORT:             String(PORT),
       JWT_SECRET:       jwtSecret,
@@ -82,12 +89,23 @@ function startServer() {
       ALLOWED_ORIGINS:  `http://localhost:${PORT}`,
       ELECTRON_APP:     '1',
     },
-    stdio: IS_DEV ? 'inherit' : 'ignore',
+    stdio: IS_DEV ? 'inherit' : ['ignore', logFd, logFd],
   });
 
   serverProcess.on('error', (err) => {
     dialog.showErrorBox('خطأ في السيرفر', err.message);
     app.quit();
+  });
+
+  serverProcess.on('exit', (code) => {
+    if (code && code !== 0 && !mainWindow) {
+      let tail = '';
+      try { tail = fs.readFileSync(logPath, 'utf8').split('\n').slice(-15).join('\n'); } catch (_) {}
+      dialog.showErrorBox(
+        'توقف السيرفر',
+        `توقف السيرفر بشكل غير متوقع (الرمز ${code}).\n\nآخر سطور السجل:\n${tail}\n\nالسجل الكامل:\n${logPath}`
+      );
+    }
   });
 }
 
