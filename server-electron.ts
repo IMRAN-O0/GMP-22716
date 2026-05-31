@@ -78,8 +78,9 @@ async function startServer() {
 
   app.use('/api', apiRouter);
 
-  // Serve built frontend from dist/ (relative to the bundle)
-  const distPath = path.join(__dirname, 'dist');
+  // Serve built frontend — use DIST_PATH env var when running inside Electron
+  // (express.static cannot read from inside app.asar, so main.cjs passes the real path)
+  const distPath = process.env.DIST_PATH || path.join(__dirname, 'dist');
   app.use(express.static(distPath));
   app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
 
