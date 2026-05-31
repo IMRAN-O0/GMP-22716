@@ -4,6 +4,7 @@
  * Used only when building server-bundle.cjs for Electron packaging.
  */
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
@@ -80,9 +81,24 @@ async function startServer() {
 
   // Serve built frontend — use DIST_PATH env var when running inside Electron
   // (express.static cannot read from inside app.asar, so main.cjs passes the real path)
-  const distPath = process.env.DIST_PATH || path.join(__dirname, 'dist');
+  const distPath   = process.env.DIST_PATH || path.join(__dirname, 'dist');
+  const indexFile  = path.join(distPath, 'index.html');
+  console.log(`[GMP Server] dist path: ${distPath} (exists: ${fs.existsSync(distPath)}, index: ${fs.existsSync(indexFile)})`);
+
   app.use(express.static(distPath));
-  app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+
+  // SPA fallback — only for navigation requests, NOT for missing static assets.
+  // Returning index.html for a missing .js/.css would break with wrong MIME type.
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/assets/') || path.extname(req.path)) {
+      const wanted = path.join(distPath, req.path);
+      return res.status(404).send(
+        `Asset not found.\npath: ${req.path}\nlooked in: ${wanted}\nexists: ${fs.existsSync(wanted)}\ndist exists: ${fs.existsSync(distPath)}`
+      );
+    }
+    if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
+    res.status(500).send('Frontend not built. dist path: ' + distPath);
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[GMP Server] Running on http://localhost:${PORT}`);
