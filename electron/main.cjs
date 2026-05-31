@@ -1,6 +1,7 @@
 'use strict';
 
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron');
+const { spawn } = require('child_process');
 const { spawn, execSync } = require('child_process');
 const path   = require('path');
 const http   = require('http');
@@ -148,7 +149,6 @@ function createWindow() {
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  freePort(PORT);
   startServer();
 
   try {
