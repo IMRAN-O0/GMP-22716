@@ -51,9 +51,9 @@ function freePort(port) {
 
 // ─── Start server in-process (avoids native-module issues in child process) ──
 function startServer() {
-  const bundlePath = IS_DEV
-    ? path.join(APP_DIR, 'server-bundle.cjs')
-    : path.join(process.resourcesPath, 'server-bundle.cjs');
+  // server-bundle.cjs is packed inside app.asar at the project root,
+  // i.e. one level up from this electron/ folder — same in dev and prod.
+  const bundlePath = path.join(__dirname, '..', 'server-bundle.cjs');
 
   if (!fs.existsSync(bundlePath)) {
     dialog.showErrorBox(
