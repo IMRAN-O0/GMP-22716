@@ -17,7 +17,7 @@
     "clean": "rm -rf dist server-bundle.cjs",
     "lint": "tsc --noEmit",
     "electron:dev": "npm run build:server && electron .",
-    "electron:build": "npm run build:all && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --publish never",
+    "electron:build": "npm run build:all && electron-builder --win --publish never",
     "electron:build:linux": "npm run build:all && electron-builder --linux --publish never",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -97,12 +97,8 @@
     ],
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
+        { "target": "portable", "arch": ["x64"] },
+        { "target": "zip",      "arch": ["x64"] }
       ],
       "icon": "electron/icon.png",
       "sign": null,
@@ -110,12 +106,8 @@
       "certificateSubjectName": null,
       "certificateSha1": null
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "نظام GMP"
+    "portable": {
+      "artifactName": "نظام-GMP-${version}-portable.exe"
     },
     "linux": {
       "target": [
