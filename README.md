@@ -10,7 +10,7 @@
 ```bash
 cp .env.example .env        # انسخ ملف البيئة وغيّر JWT_SECRET
 npm install                 # ثبّت الحزم
-npm run dev                 # شغّل على http://localhost:3000
+npm run dev                 # شغّل على http://localhost:3009
 # المستخدم الافتراضي: admin  |  كلمة المرور: admin123
 ```
 
@@ -36,13 +36,13 @@ npm run electron:dev
 **على جهاز السيرفر:**
 
 1. عيّن IP ثابتاً (مثال: `192.168.1.10`) من إعدادات الشبكة
-2. اسمح للمنفذ 3000 في جدار الحماية (Windows Firewall → Inbound Rule → Port 3000)
+2. اسمح للمنفذ 3009 في جدار الحماية (Windows Firewall → Inbound Rule → Port 3009)
 3. عدّل `.env`:
 ```env
-PORT=3000
+PORT=3009
 NODE_ENV=production
 JWT_SECRET=سلسلة_عشوائية_طويلة_50_حرف_على_الأقل
-ALLOWED_ORIGINS=http://192.168.1.10:3000,http://localhost:3000
+ALLOWED_ORIGINS=http://192.168.1.10:3009,http://localhost:3009
 ```
 4. شغّل:
 ```bash
@@ -50,7 +50,7 @@ npm run build:all
 npm start
 ```
 
-**على الأجهزة الأخرى:** افتح المتصفح على `http://192.168.1.10:3000`
+**على الأجهزة الأخرى:** افتح المتصفح على `http://192.168.1.10:3009`
 
 ---
 
@@ -84,9 +84,9 @@ pm2 logs gmp-server          # عرض السجلات
 | المتغير | الوصف | مثال |
 |---|---|---|
 | `JWT_SECRET` | مفتاح تشفير التوكن **(مطلوب)** | سلسلة عشوائية 48+ حرف |
-| `PORT` | منفذ السيرفر | `3000` |
+| `PORT` | منفذ السيرفر | `3009` |
 | `NODE_ENV` | بيئة التشغيل | `production` |
-| `ALLOWED_ORIGINS` | العناوين المسموح بها (CORS) | `http://192.168.1.10:3000` |
+| `ALLOWED_ORIGINS` | العناوين المسموح بها (CORS) | `http://192.168.1.10:3009` |
 | `DB_PATH` | مسار قاعدة البيانات | `/data/QForm_Data.db` |
 | `SMTP_HOST` | سيرفر البريد (اختياري) | `smtp.gmail.com` |
 
