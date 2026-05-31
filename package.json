@@ -78,21 +78,17 @@
     "files": [
       "electron/**/*",
       "dist/**/*",
+      "server-bundle.cjs",
       "node_modules/sqlite3/**/*",
       "node_modules/bcryptjs/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/sqlite3/**/*"
+    ],
     "extraResources": [
-      {
-        "from": "server-bundle.cjs",
-        "to": "server-bundle.cjs"
-      },
       {
         "from": "dist",
         "to": "dist"
-      },
-      {
-        "from": "node_modules/sqlite3",
-        "to": "node_modules/sqlite3"
       }
     ],
     "win": {
