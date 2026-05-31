@@ -70,6 +70,11 @@ function startServer() {
   process.env.DB_PATH         = getDbPath();
   process.env.ALLOWED_ORIGINS = `http://localhost:${PORT}`;
   process.env.ELECTRON_APP    = '1';
+  // dist is in extraResources → resources/dist (real filesystem, not inside asar)
+  // express.static cannot read from inside the asar, so we pass the real path explicitly
+  process.env.DIST_PATH       = IS_DEV
+    ? path.join(app.getAppPath(), 'dist')
+    : path.join(process.resourcesPath, 'dist');
 
   try {
     require(bundlePath);
