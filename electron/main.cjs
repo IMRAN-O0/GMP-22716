@@ -35,26 +35,21 @@ function getDbPath() {
 function freePort(port) {
   try {
     if (process.platform === 'win32') {
-      const output = childProcess.execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
-      const lines = output.split('\n').filter(l => l.includes(`0.0.0.0:${port}`) || l.includes(`127.0.0.1:${port}`));
-      const pids = [...new Set(lines.map(l => l.trim().split(/\s+/).pop()).filter(p => /^\d+$/.test(p) && p !== '0'))];
-      pids.forEach(pid => {
-        try { childProcess.execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch (_) {}
-      });
+      const out = childProcess.execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
+      const pids = [...new Set(
+        out.split('\n')
+          .filter(l => l.includes(`0.0.0.0:${port}`) || l.includes(`127.0.0.1:${port}`))
+          .map(l => l.trim().split(/\s+/).pop())
+          .filter(p => /^\d+$/.test(p) && p !== '0')
+      )];
+      pids.forEach(pid => { try { childProcess.execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch (_) {} });
     } else {
-      const output = childProcess.execSync(`lsof -ti:${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
-      output.trim().split('\n').filter(Boolean).forEach(pid => {
-        try { childProcess.execSync(`kill -9 ${pid}`, { stdio: 'ignore' }); } catch (_) {}
-      });
+      childProcess.execSync(`lsof -ti:${port} | xargs kill -9`, { stdio: 'ignore' });
     }
-  } catch (_) {
-    // port is free — nothing to kill
-  }
+  } catch (_) {}
 }
 
-// ─── Server process ───────────────────────────────────────────────────────────
-let serverProcess = null;
-
+// ─── Start server in-process (avoids native-module issues in child process) ──
 function startServer() {
   const bundlePath = IS_DEV
     ? path.join(APP_DIR, 'server-bundle.cjs')
@@ -66,56 +61,32 @@ function startServer() {
       `ملف السيرفر غير موجود:\n${bundlePath}\n\nقم بتشغيل: npm run electron:build أولاً`
     );
     app.quit();
-    return;
+    return false;
   }
 
-  const jwtSecret = getOrCreateSecret();
-  const dbPath    = getDbPath();
+  // Set env vars before requiring the bundle (it reads them at module load time)
+  process.env.NODE_ENV        = 'production';
+  process.env.PORT            = String(PORT);
+  process.env.JWT_SECRET      = getOrCreateSecret();
+  process.env.DB_PATH         = getDbPath();
+  process.env.ALLOWED_ORIGINS = `http://localhost:${PORT}`;
+  process.env.ELECTRON_APP    = '1';
 
-  // Log server output to a file so we can diagnose startup failures in production
-  const logPath = path.join(app.getPath('userData'), 'server.log');
-  const logFd   = fs.openSync(logPath, 'a');
-
-  serverProcess = childProcess.spawn(process.execPath, [bundlePath], {
-    env: {
-      ...process.env,
-      // Run the bundled Electron binary as plain Node.js — without this the
-      // packaged .exe tries to open a window instead of executing the server.
-      ELECTRON_RUN_AS_NODE: '1',
-      NODE_ENV:         'production',
-      PORT:             String(PORT),
-      JWT_SECRET:       jwtSecret,
-      DB_PATH:          dbPath,
-      ALLOWED_ORIGINS:  `http://localhost:${PORT}`,
-      ELECTRON_APP:     '1',
-    },
-    stdio: IS_DEV ? 'inherit' : ['ignore', logFd, logFd],
-  });
-
-  serverProcess.on('error', (err) => {
-    dialog.showErrorBox('خطأ في السيرفر', err.message);
+  try {
+    require(bundlePath);
+  } catch (err) {
+    dialog.showErrorBox('خطأ في تحميل السيرفر', err.message + '\n\n' + (err.stack || ''));
     app.quit();
-  });
-
-  serverProcess.on('exit', (code) => {
-    if (code && code !== 0 && !mainWindow) {
-      let tail = '';
-      try { tail = fs.readFileSync(logPath, 'utf8').split('\n').slice(-15).join('\n'); } catch (_) {}
-      dialog.showErrorBox(
-        'توقف السيرفر',
-        `توقف السيرفر بشكل غير متوقع (الرمز ${code}).\n\nآخر سطور السجل:\n${tail}\n\nالسجل الكامل:\n${logPath}`
-      );
-    }
-  });
+    return false;
+  }
+  return true;
 }
 
 // ─── Wait for server to be ready ─────────────────────────────────────────────
-function waitForServer(retries = 40) {
+function waitForServer(retries = 60) {
   return new Promise((resolve, reject) => {
     const attempt = (n) => {
-      const req = http.get(`http://localhost:${PORT}/api/company`, (res) => {
-        resolve();
-      });
+      const req = http.get(`http://localhost:${PORT}/api/company`, () => resolve());
       req.on('error', () => {
         if (n <= 0) return reject(new Error('Server did not start in time'));
         setTimeout(() => attempt(n - 1), 500);
@@ -145,7 +116,6 @@ function createWindow() {
     },
   });
 
-  // Remove default menu in production
   if (!IS_DEV) Menu.setApplicationMenu(null);
 
   mainWindow.loadURL(`http://localhost:${PORT}`);
@@ -155,7 +125,6 @@ function createWindow() {
     if (IS_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
-  // Open external links in browser, not in Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(`http://localhost:${PORT}`)) shell.openExternal(url);
     return { action: 'deny' };
@@ -167,7 +136,7 @@ function createWindow() {
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   freePort(PORT);
-  startServer();
+  if (!startServer()) return;
 
   try {
     await waitForServer();
@@ -181,17 +150,10 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('window-all-closed', () => {
-  if (serverProcess) {
-    serverProcess.kill('SIGTERM');
-    serverProcess = null;
-  }
-  app.quit();
-});
+app.on('window-all-closed', () => app.quit());
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// IPC: allow renderer to get app version
 ipcMain.handle('app-version', () => app.getVersion());
