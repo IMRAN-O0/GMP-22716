@@ -38,16 +38,25 @@ async function startServer() {
     hsts: false,
   }));
 
-  // CORS — only allow same origin (localhost in dev, server IP in prod)
+  // CORS — allow localhost plus any private-LAN address on the same port
   const allowedOrigins = process.env.ALLOWED_ORIGINS
     ? process.env.ALLOWED_ORIGINS.split(',')
     : ['http://localhost:3009', 'http://127.0.0.1:3009'];
 
+  const isPrivateLanOrigin = (origin: string) => {
+    try {
+      const u = new URL(origin);
+      return /^(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(u.hostname);
+    } catch { return false; }
+  };
+
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, same-origin)
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error('Not allowed by CORS'));
+      // Never throw — throwing makes Express return 500 for every asset/API request.
+      if (!origin || allowedOrigins.includes(origin) || isPrivateLanOrigin(origin)) {
+        return callback(null, true);
+      }
+      callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
