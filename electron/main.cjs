@@ -1,8 +1,7 @@
 'use strict';
 
 const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron');
-const { spawn } = require('child_process');
-const { spawn, execSync } = require('child_process');
+const childProcess = require('child_process');
 const path   = require('path');
 const http   = require('http');
 const fs     = require('fs');
@@ -36,16 +35,16 @@ function getDbPath() {
 function freePort(port) {
   try {
     if (process.platform === 'win32') {
-      const output = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
+      const output = childProcess.execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
       const lines = output.split('\n').filter(l => l.includes(`0.0.0.0:${port}`) || l.includes(`127.0.0.1:${port}`));
       const pids = [...new Set(lines.map(l => l.trim().split(/\s+/).pop()).filter(p => /^\d+$/.test(p) && p !== '0'))];
       pids.forEach(pid => {
-        try { execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch (_) {}
+        try { childProcess.execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' }); } catch (_) {}
       });
     } else {
-      const output = execSync(`lsof -ti:${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
+      const output = childProcess.execSync(`lsof -ti:${port}`, { encoding: 'utf8', stdio: ['pipe','pipe','ignore'] });
       output.trim().split('\n').filter(Boolean).forEach(pid => {
-        try { execSync(`kill -9 ${pid}`, { stdio: 'ignore' }); } catch (_) {}
+        try { childProcess.execSync(`kill -9 ${pid}`, { stdio: 'ignore' }); } catch (_) {}
       });
     }
   } catch (_) {
@@ -73,7 +72,7 @@ function startServer() {
   const jwtSecret = getOrCreateSecret();
   const dbPath    = getDbPath();
 
-  serverProcess = spawn(process.execPath, [bundlePath], {
+  serverProcess = childProcess.spawn(process.execPath, [bundlePath], {
     env: {
       ...process.env,
       NODE_ENV:         'production',
@@ -149,6 +148,7 @@ function createWindow() {
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
+  freePort(PORT);
   startServer();
 
   try {
