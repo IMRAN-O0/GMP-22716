@@ -448,14 +448,30 @@ router.get("/company", requireAuth, (req, res) => {
   );
 });
 
-router.put("/company", requireAuth, (req, res) => {
-  const { name_ar, name_en, logo_url, address, phone, email, license_number } = req.body;
+const companySchema = yup.object({
+  name_ar:        yup.string().trim().min(1).max(200).required(),
+  name_en:        yup.string().trim().max(200).optional(),
+  logo_url:       yup.string().trim().url().max(500).nullable().optional(),
+  address:        yup.string().trim().max(500).optional(),
+  phone:          yup.string().trim().max(30).optional(),
+  email:          yup.string().trim().email().max(200).nullable().optional(),
+  license_number: yup.string().trim().max(100).optional(),
+});
+
+router.put("/company", requireAuth, async (req, res) => {
+  let validated: any;
+  try {
+    validated = await companySchema.validate(req.body, { abortEarly: false, stripUnknown: true });
+  } catch (e: any) {
+    return res.status(400).json({ error: e.errors?.join("، ") || "بيانات غير صالحة" });
+  }
+  const { name_ar, name_en, logo_url, address, phone, email, license_number } = validated;
   getDb().get("SELECT id FROM company_info ORDER BY id DESC LIMIT 1", [], (err, row: any) => {
     if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
     if (row) {
       getDb().run(
         "UPDATE company_info SET name_ar=?, name_en=?, logo_url=?, address=?, phone=?, email=?, license_number=? WHERE id=?",
-        [name_ar, name_en, logo_url, address, phone, email, license_number, row.id],
+        [name_ar, name_en ?? null, logo_url ?? null, address ?? null, phone ?? null, email ?? null, license_number ?? null, row.id],
         function(e) {
           if (e) return res.status(500).json({ error: e.message });
           res.json({ success: true });
@@ -464,7 +480,7 @@ router.put("/company", requireAuth, (req, res) => {
     } else {
       getDb().run(
         "INSERT INTO company_info (name_ar, name_en, logo_url, address, phone, email, license_number) VALUES (?,?,?,?,?,?,?)",
-        [name_ar, name_en, logo_url, address, phone, email, license_number],
+        [name_ar, name_en ?? null, logo_url ?? null, address ?? null, phone ?? null, email ?? null, license_number ?? null],
         function(e) {
           if (e) return res.status(500).json({ error: e.message });
           res.json({ success: true, id: this.lastID });
@@ -568,12 +584,26 @@ router.get("/warehouses", requireAuth, (req, res) => {
   });
 });
 
+const warehouseSchema = yup.object({
+  code:        yup.string().trim().min(1).max(50).required(),
+  name:        yup.string().trim().min(1).max(100).required(),
+  type:        yup.string().oneOf(["MAIN", "SUB"]).required(),
+  parent_id:   yup.number().integer().nullable().optional(),
+  description: yup.string().trim().max(500).optional(),
+});
+
 // INV: Create Warehouse
-router.post("/warehouses", requireAuth, (req, res) => {
-  const { code, name, type, parent_id, description } = req.body;
+router.post("/warehouses", requireAuth, async (req, res) => {
+  let validated: any;
+  try {
+    validated = await warehouseSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
+  } catch (e: any) {
+    return res.status(400).json({ error: e.errors?.join("، ") || "بيانات غير صالحة" });
+  }
+  const { code, name, type, parent_id, description } = validated;
   getDb().run(
     `INSERT INTO warehouses (code, name, type, parent_id, description) VALUES (?, ?, ?, ?, ?)`,
-    [code, name, type, parent_id, description],
+    [code, name, type, parent_id ?? null, description ?? null],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
@@ -582,11 +612,19 @@ router.post("/warehouses", requireAuth, (req, res) => {
 });
 
 // INV: Update Warehouse
-router.put("/warehouses/:id", requireAuth, (req, res) => {
-  const { code, name, type, parent_id, description } = req.body;
+router.put("/warehouses/:id", requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id || isNaN(id)) return res.status(400).json({ error: "معرّف غير صالح" });
+  let validated: any;
+  try {
+    validated = await warehouseSchema.validate(req.body, { abortEarly: false, stripUnknown: true });
+  } catch (e: any) {
+    return res.status(400).json({ error: e.errors?.join("، ") || "بيانات غير صالحة" });
+  }
+  const { code, name, type, parent_id, description } = validated;
   getDb().run(
     `UPDATE warehouses SET code=?, name=?, type=?, parent_id=?, description=? WHERE id=?`,
-    [code, name, type, parent_id, description, req.params.id],
+    [code, name, type, parent_id ?? null, description ?? null, id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });
@@ -2044,6 +2082,116 @@ router.get("/reports/all", requireAuth, (req, res) => {
       rows.map((r: any) => ({ ...r, data: JSON.parse(r.data_json || "{}") })),
     );
   });
+});
+
+// ─── Archive Endpoint ─────────────────────────────────────────────────────────
+// GET /api/archive?search=&department=&status=&formId=&dateFrom=&dateTo=&page=1&limit=50
+router.get("/archive", requireAuth, (req: any, res) => {
+  const user = req.user as any;
+  const db = getDb();
+
+  const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit as string) || 50));
+  const offset = (page - 1) * limit;
+
+  const search     = (req.query.search     as string || "").trim();
+  const department = (req.query.department as string || "").trim();
+  const status     = (req.query.status     as string || "").trim();
+  const formId     = (req.query.formId     as string || "").trim();
+  const dateFrom   = (req.query.dateFrom   as string || "").trim();
+  const dateTo     = (req.query.dateTo     as string || "").trim();
+
+  const conditions: string[] = ["fr.status != 'deleted'"];
+  const params: any[] = [];
+
+  // ── Access control ──────────────────────────────────────────────────────────
+  if (user.level === 4) {
+    conditions.push("(fr.creator_id = ? OR fr.creator_id IS NULL)");
+    params.push(user.id);
+  } else if ((user.level === 3 || user.level === 2) && user.department !== "ALL") {
+    conditions.push("fr.department = ?");
+    params.push(user.department);
+  }
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+  if (department) { conditions.push("fr.department = ?");  params.push(department); }
+  if (status)     { conditions.push("fr.status = ?");      params.push(status); }
+  if (formId)     { conditions.push("fr.form_id = ?");     params.push(formId); }
+  if (dateFrom)   { conditions.push("DATE(fr.created_at) >= ?"); params.push(dateFrom); }
+  if (dateTo)     { conditions.push("DATE(fr.created_at) <= ?"); params.push(dateTo); }
+  if (search)     {
+    conditions.push("(fr.record_id LIKE ? OR fr.form_id LIKE ? OR u.name LIKE ?)");
+    const like = `%${search}%`;
+    params.push(like, like, like);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const baseQuery = `
+    FROM forms_records fr
+    LEFT JOIN users u ON fr.creator_id = u.id
+    ${where}
+  `;
+
+  // Count first
+  db.get(`SELECT COUNT(*) as total ${baseQuery}`, params, (err, countRow: any) => {
+    if (err) return res.status(500).json({ error: "DB Error: count" });
+    const total = countRow?.total ?? 0;
+    const pages = Math.ceil(total / limit);
+
+    db.all(
+      `SELECT fr.id, fr.record_id, fr.form_id, fr.department,
+              fr.creator_id, fr.created_at, fr.status,
+              u.name as creator_name, u.user_id as creator_user_id
+       ${baseQuery}
+       ORDER BY fr.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+      (err2, rows: any[]) => {
+        if (err2) return res.status(500).json({ error: "DB Error: rows" });
+        res.json({ data: rows, total, page, pages, limit });
+      }
+    );
+  });
+});
+
+// Archive stats — counts by department and status for the current user's scope
+router.get("/archive/stats", requireAuth, (req: any, res) => {
+  const user = req.user as any;
+  const db = getDb();
+
+  const conditions: string[] = ["status != 'deleted'"];
+  const params: any[] = [];
+
+  if (user.level === 4) {
+    conditions.push("(creator_id = ? OR creator_id IS NULL)");
+    params.push(user.id);
+  } else if ((user.level === 3 || user.level === 2) && user.department !== "ALL") {
+    conditions.push("department = ?");
+    params.push(user.department);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  db.all(
+    `SELECT
+       department,
+       COUNT(*) as total,
+       SUM(CASE WHEN status='approved'        THEN 1 ELSE 0 END) as approved,
+       SUM(CASE WHEN status='pending_review'  THEN 1 ELSE 0 END) as pending_review,
+       SUM(CASE WHEN status='pending_approval'THEN 1 ELSE 0 END) as pending_approval,
+       SUM(CASE WHEN status='draft'           THEN 1 ELSE 0 END) as draft,
+       SUM(CASE WHEN status='rejected'        THEN 1 ELSE 0 END) as rejected
+     FROM forms_records
+     ${where}
+     GROUP BY department
+     ORDER BY department`,
+    params,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json(rows);
+    }
+  );
 });
 
 export default router;

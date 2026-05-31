@@ -17,6 +17,7 @@ import UsersManagement from './pages/UsersManagement';
 import AuditLog from './pages/AuditLog';
 import Reports from './pages/Reports';
 import CompanySettings from './pages/CompanySettings';
+import ArchivePage from './pages/archive/ArchivePage';
 
 import PRDIndex from './pages/prd/PRDIndex';
 import FormPRD001 from './pages/prd/FormPRD001';
@@ -91,6 +92,7 @@ export default function App() {
             <Route path="audit" element={<AuditLog />} />
             <Route path="settings" element={<CompanySettings />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="archive" element={<ArchivePage />} />
             <Route path="hr" element={<HRIndex />} />
             <Route path="hr/new-request" element={<FormHR001 />} />
             <Route path="hr/employee-file" element={<FormHR002 />} />

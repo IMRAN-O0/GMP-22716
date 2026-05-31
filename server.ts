@@ -22,7 +22,7 @@ async function startServer() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
         fontSrc: ["'self'", "data:"],
@@ -71,8 +71,8 @@ async function startServer() {
   app.use('/api/login', loginLimiter);
   app.use('/api/', generalLimiter);
 
-  app.use(express.json({ limit: "20mb" }));
-  app.use(express.urlencoded({ limit: "20mb", extended: true }));
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
   await initDb();
   setupAutomatedBackup();
