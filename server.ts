@@ -23,13 +23,19 @@ async function startServer() {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "blob:"],
-        fontSrc: ["'self'", "data:"],
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
         connectSrc: ["'self'"],
+        // Do NOT force HTTPS upgrades — this app runs over plain HTTP on LAN
+        upgradeInsecureRequests: null,
       },
     },
     crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy:   false,
+    originAgentCluster:        false,
+    // Disable HSTS — it would force browsers to use HTTPS which we don't serve
+    hsts: false,
   }));
 
   // CORS — only allow same origin (localhost in dev, server IP in prod)
