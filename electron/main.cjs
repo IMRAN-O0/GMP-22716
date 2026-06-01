@@ -76,6 +76,15 @@ function startServer() {
     ? path.join(app.getAppPath(), 'dist')
     : path.join(process.resourcesPath, 'dist');
 
+  // Ensure native modules (sqlite3) are found in app.asar.unpacked
+  const asarPath = app.getAppPath();
+  if (!IS_DEV && asarPath.includes('app.asar')) {
+    const unpackedMods = path.join(asarPath.replace('app.asar', 'app.asar.unpacked'), 'node_modules');
+    if (fs.existsSync(unpackedMods)) {
+      require('module').Module.globalPaths.unshift(unpackedMods);
+    }
+  }
+
   try {
     require(bundlePath);
   } catch (err) {
@@ -126,6 +135,7 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    mainWindow.focus();
     if (IS_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
