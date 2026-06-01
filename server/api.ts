@@ -1000,7 +1000,8 @@ router.post("/materials/sync-from-transactions", requireAuth, (req: any, res) =>
     db.serialize(() => {
       db.run("BEGIN TRANSACTION");
       entries.forEach(([code, bal]) => {
-        db.run("UPDATE materials SET balance = ? WHERE code = ?", [bal, code]);
+        const rounded = Math.round((bal as number) * 1e9) / 1e9;
+        db.run("UPDATE materials SET balance = ? WHERE code = ?", [rounded, code]);
       });
       db.run("COMMIT", (commitErr) => {
         if (commitErr) { db.run("ROLLBACK"); return res.status(500).json({ error: "فشل تطبيق التحديثات" }); }

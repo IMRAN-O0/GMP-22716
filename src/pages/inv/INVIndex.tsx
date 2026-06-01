@@ -186,7 +186,7 @@ export default function INVIndex() {
               رصيد المواد
             </span>
             <div className="text-[24px] font-bold text-slate-900">
-              {materials.reduce((acc, curr) => acc + curr.balance, 0)} وحدة
+              {parseFloat(materials.reduce((acc, curr) => acc + curr.balance, 0).toFixed(4))} وحدة
             </div>
           </div>
         </div>
@@ -377,7 +377,7 @@ export default function INVIndex() {
                             </div>
                           ) : (
                             <span className={m.balance < 0 ? "text-red-600 font-bold" : ""}>
-                              {m.balance}
+                              {typeof m.balance === 'number' ? parseFloat(m.balance.toFixed(4)) : m.balance}
                             </span>
                           )}
                           {isLow && <span className="text-[10px] text-red-500 block">منخفض</span>}
