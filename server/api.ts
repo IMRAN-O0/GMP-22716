@@ -1642,7 +1642,7 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
   const user: any = getAuthUser(req);
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
-  getDb().all("SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC LIMIT 200", [], (err, rows) => {
+  getDb().all("SELECT * FROM forms_records WHERE status != 'deleted' ORDER BY id DESC", [], (err, rows) => {
     if (err) return res.status(500).json({ error: "DB Error" });
     const records = rows.map((r: any) => ({
       ...r,
@@ -1681,7 +1681,12 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
       const approvedReleases = formsByFormId("F-FP-001", "approved");
       const fpStored = formsByFormId("F-FP-002");
       approvedReleases.forEach(rel => {
-        const isStored = fpStored.some(stg => stg.data?.batchNumber === rel.data?.batchNumber || stg.data?.reference === rel.record_id);
+        const relBatch = (rel.data?.batchNumber || '').toString().trim().toLowerCase();
+        const isStored = fpStored.some(stg =>
+          (stg.data?.batchNumber || '').toString().trim().toLowerCase() === relBatch ||
+          stg.data?.storageId === rel.data?.batchNumber ||
+          stg.data?.reference === rel.record_id
+        );
         if (!isStored) {
           notifications.push({
             id: `fp-not-stored-${rel.record_id}`,
