@@ -5,20 +5,9 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { getDb } from "./db.js";
+import { matchesReference, buildTransactionId } from "./helpers.js";
 
 const router = Router();
-
-const matchesReference = (formData: any, targetId: string): boolean => {
-  if (!formData || !targetId) return false;
-  return (
-    formData.referenceDocument === targetId ||
-    formData.poNumber === targetId ||
-    formData.reference === targetId ||
-    formData.sourceDocumentNo === targetId ||
-    formData.productionOrderNo === targetId ||
-    formData.productionOrderId === targetId
-  );
-};
 
 if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET environment variable is missing and is required in production.");
@@ -98,7 +87,7 @@ const handleFormApprovalEffect = (fId: string, data: any) => {
 
   // Helper: log to inventory_transactions (including warehouse and expiry when available)
   const logTxn = (type: string, materialCode: string, qty: number, unit: string, batchNo: string, refId: string, warehouseId?: number | null, expiryDate?: string | null) => {
-    const txnId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+    const txnId = buildTransactionId(type);
     getDb().run(
       `INSERT OR IGNORE INTO inventory_transactions (transaction_id, type, material_code, quantity, unit, batch_number, expiry_date, warehouse_id, reference_record_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed')`,
       [txnId, type, materialCode, qty, unit, batchNo || null, expiryDate || null, warehouseId || null, refId]
@@ -767,7 +756,7 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
 
       // Resolve warehouse: try exact code match, then partial match
       const whCode = (r.warehouse_code || "").trim().toUpperCase();
-      let warehouseId: number | null =
+      const warehouseId: number | null =
         warehouseMap[whCode] ??
         warehouseMap[Object.keys(warehouseMap).find((k) => k.toUpperCase().includes(whCode) || whCode.includes(k.toUpperCase())) ?? ""] ??
         null;
@@ -1394,9 +1383,10 @@ router.get("/forms", requireAuth, (req: any, res) => {
 
 // Create Form Record
 router.post("/forms", requireAuth, (req: any, res) => {
-  let { recordId, formId, department, creatorId, status, data } = req.body;
+  const { recordId, formId, department, data } = req.body;
+  let { status } = req.body;
   const timestamp = new Date().toISOString();
-  creatorId = req.user.id; // always use authenticated user's id
+  const creatorId = req.user.id; // always use authenticated user's id (never trust the body)
 
   const user: any = getAuthUser(req);
   if (user && user.level && user.level >= 2 && user.department !== "ALL") {
@@ -1472,9 +1462,10 @@ router.post("/forms", requireAuth, (req: any, res) => {
 // Update Form Record
 router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
   const { recordId } = req.params;
-  let { status, data, userId, notes } = req.body;
+  const { data, notes } = req.body;
+  let { status } = req.body;
   const timestamp = new Date().toISOString();
-  userId = req.user.id;
+  const userId = req.user.id; // always use authenticated user's id (never trust the body)
 
   const user: any = req.user;
   // Enforce status based on user level

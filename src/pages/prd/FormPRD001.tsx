@@ -175,12 +175,8 @@ export default function FormPRD001() {
     if (totalParts > 0) {
       const newRawMaterials = bom.materials.map((m: any) => {
         const part = parseFloat(m.percentage) || 0;
-        let requiredQty = 0;
-        if (m.unit === "%") {
-          requiredQty = (batchSize * part) / 100;
-        } else {
-          requiredQty = (batchSize / totalParts) * part;
-        }
+        const requiredQty =
+          m.unit === "%" ? (batchSize * part) / 100 : (batchSize / totalParts) * part;
         const invItem = inventoryMaterials.find((inv) => inv.code === m.materialCode);
         const outUnit = m.unit === "%" ? (invItem ? invItem.unit : unit) : m.unit;
         return {
@@ -206,7 +202,7 @@ export default function FormPRD001() {
     e.preventDefault();
 
     if (status !== "draft") {
-      let insufficientMaterials = [];
+      const insufficientMaterials = [];
       for (const item of formData.rawMaterials) {
         if (!item.materialCode) continue;
         const inventoryMaterial = inventoryMaterials.find(m => m.code === item.materialCode);

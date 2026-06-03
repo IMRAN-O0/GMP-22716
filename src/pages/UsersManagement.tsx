@@ -163,9 +163,7 @@ export default function UsersManagement() {
     permissions: {},
   });
 
-  if (user?.level !== 1) {
-    return <Navigate to="/" />;
-  }
+  const isAdmin = user?.level === 1;
 
   const fetchUsers = async () => {
     try {
@@ -180,8 +178,14 @@ export default function UsersManagement() {
   };
 
   useEffect(() => {
+    if (!isAdmin) return;
     fetchUsers();
-  }, []);
+  }, [isAdmin]);
+
+  // Hooks must run on every render, so the access check happens after them.
+  if (!isAdmin) {
+    return <Navigate to="/" />;
+  }
 
   const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
     e.preventDefault();
@@ -358,7 +362,9 @@ export default function UsersManagement() {
                           if (u.permissions) {
                             try {
                               perms = JSON.parse(u.permissions);
-                            } catch (e) {}
+                            } catch {
+                              // Malformed permissions JSON — fall back to empty permissions.
+                            }
                           }
                           setFormData({
                             id: u.id,

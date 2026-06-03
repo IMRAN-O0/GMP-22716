@@ -9,7 +9,8 @@ Object.defineProperty(window, 'fetch', {
     configurable: true,
     writable: true,
     value: async (...args: any[]) => {
-        let [resource, config] = args;
+        const [resource] = args;
+        let config = args[1];
         if (typeof resource === 'string' && resource.startsWith('/api/')) {
             config = config || {};
             const token = localStorage.getItem('token');

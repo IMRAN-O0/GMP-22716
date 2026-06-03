@@ -119,4 +119,24 @@ pm2 logs gmp-server          # عرض السجلات
 | `npm run build:all` | بناء frontend + server bundle |
 | `npm run electron:dev` | تشغيل Electron (تطوير) |
 | `npm run electron:build` | بناء ملف .exe للتثبيت |
-| `npm run lint` | فحص TypeScript | 
+| `npm run lint` | فحص الكود بـ ESLint |
+| `npm run lint:fix` | إصلاح مشاكل ESLint تلقائياً |
+| `npm run typecheck` | فحص أنواع TypeScript |
+| `npm run format` | تنسيق الكود بـ Prettier |
+| `npm run format:check` | التحقق من التنسيق دون تعديل |
+| `npm run test` | تشغيل اختبارات الوحدة (Vitest) |
+| `npm run test:watch` | تشغيل الاختبارات بوضع المراقبة |
+| `npm run test:coverage` | تقرير تغطية الاختبارات |
+
+---
+
+## ✅ الجودة والاختبارات (Quality & CI)
+
+- **ESLint + Prettier**: فحص وتنسيق موحّد للكود (إعدادات في `eslint.config.js` و `.prettierrc.json`).
+- **Vitest**: اختبارات وحدة في مجلد `tests/` تغطي دوال المساعدة (`server/helpers.ts`) ودوال التنسيق (`src/lib/utils.ts`).
+- **GitHub Actions**: يعمل تلقائياً عند كل `push`/`pull_request` (`.github/workflows/ci.yml`) ويُشغّل:
+  `lint` → `typecheck` → `test` → `build`.
+
+```bash
+npm run lint && npm run typecheck && npm run test   # نفس فحوصات CI محلياً
+```

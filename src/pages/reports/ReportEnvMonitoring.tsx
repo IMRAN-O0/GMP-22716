@@ -23,7 +23,7 @@ export default function ReportEnvMonitoring() {
       .then((res) => res.json())
       .then((records) => {
         const envs = records.filter((r: any) => r.form_id === "F-PRM-002");
-        let mapped: any[] = [];
+        const mapped: any[] = [];
         envs.forEach((r: any) => {
           if (r.data.readings && Array.isArray(r.data.readings)) {
             r.data.readings.forEach((reading: any) => {

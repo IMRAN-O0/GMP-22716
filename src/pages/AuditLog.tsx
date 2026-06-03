@@ -8,11 +8,10 @@ export default function AuditLog() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  if (user?.level !== 1) {
-    return <Navigate to="/" />;
-  }
+  const isAdmin = user?.level === 1;
 
   useEffect(() => {
+    if (!isAdmin) return;
     fetch("/api/audit")
       .then((r) => r.json())
       .then((data) => {
@@ -23,7 +22,12 @@ export default function AuditLog() {
         console.error(err);
         setLoading(false);
       });
-  }, []);
+  }, [isAdmin]);
+
+  // Hooks must run on every render, so the access check happens after them.
+  if (!isAdmin) {
+    return <Navigate to="/" />;
+  }
 
   return (
     <div className="max-w-6xl mx-auto py-8 px-4">
