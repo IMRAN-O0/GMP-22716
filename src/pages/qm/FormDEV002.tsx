@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, Search } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { getJsonHeaders } from "../../lib/utils";
 
 export default function FormDEV002() {
   const { user } = useAuth();
@@ -46,10 +47,7 @@ export default function FormDEV002() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({
           recordId: `QM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           formId: "F-DEV-002",

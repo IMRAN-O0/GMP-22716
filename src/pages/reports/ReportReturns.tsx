@@ -9,6 +9,7 @@ import {
   PieChart as RechartsPieChart,
 } from "recharts";
 import { RefreshCcw, Trash2, PieChart } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportReturns() {
   const [returns, setReturns] = useState<any[]>([]);
@@ -19,10 +20,10 @@ export default function ReportReturns() {
   useEffect(() => {
     Promise.all([
       fetch("/api/reports/inv/returns-disposals", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getAuthHeaders(),
       }).then((res) => res.json()),
       fetch("/api/reports/inv/shipments", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getAuthHeaders(),
       }).then((res) => res.json()),
     ])
       .then(([retDispData, shipmentsData]) => {

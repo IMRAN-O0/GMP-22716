@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import { PlusCircle, Search, FileSignature, BarChart3 } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function PRDIndex() {
   const [forms, setForms] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/PRD", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms/dept/PRD", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);

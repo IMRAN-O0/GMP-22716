@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormFP002() {
@@ -28,7 +28,7 @@ export default function FormFP002() {
   });
 
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const headers = getAuthHeaders();
 
     fetch("/api/company", { headers }).then(r => r.json()).then(d => setCompany(d || {})).catch(() => {});
 
@@ -65,7 +65,7 @@ export default function FormFP002() {
     setFormData(prev => ({ ...prev, batchNumber: batchNum, productCode: "", productName: "" }));
     if (!batchNum) return;
     try {
-      const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+      const headers = getAuthHeaders();
       const res = await fetch("/api/forms/dept/PRD", { headers });
       const forms = await res.json();
       const prd = forms.find((f: any) => f.form_id === "F-PRD-001" && f.data?.batchNumber === batchNum);
@@ -94,7 +94,7 @@ export default function FormFP002() {
       setLoading(true);
       const res = await fetch(editIdPatch ? `/api/forms/record/${editIdPatch}` : "/api/forms", {
         method: editIdPatch ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getJsonHeaders(),
         body: JSON.stringify({ recordId: formData.storageId, formId: "F-FP-002", department: "INV", creatorId: user?.id, status, data: formData }),
       });
       if (res.ok) { alert("تم الحفظ بنجاح."); navigate("/inv"); }

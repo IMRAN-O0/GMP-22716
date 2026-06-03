@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { formatMaterialCode } from "../../lib/utils";
+import { formatMaterialCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function CreateMaterial() {
   const { user } = useAuth();
@@ -110,10 +110,7 @@ export default function CreateMaterial() {
 
       const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(formPayload),
       });
 
@@ -146,10 +143,7 @@ export default function CreateMaterial() {
         const method = isEditing && selectedMaterialId ? "PUT" : "POST";
         const res = await fetch(url, {
           method,
-          headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+          headers: getJsonHeaders(),
           body: JSON.stringify(payloadData),
         });
         if (res.ok) {
@@ -172,10 +166,7 @@ export default function CreateMaterial() {
         const method = editFormRecordId ? "PUT" : "POST";
         const res = await fetch(url, {
           method,
-          headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+          headers: getJsonHeaders(),
           body: JSON.stringify(formPayload),
         });
         if (res.ok) {
@@ -199,7 +190,7 @@ export default function CreateMaterial() {
     if (editId) {
       setEditFormRecordId(editId);
       fetch(`/api/forms/record/${editId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        headers: getAuthHeaders()
       })
         .then((r) => r.json())
         .then((data) => {

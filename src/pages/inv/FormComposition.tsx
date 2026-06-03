@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { formatMaterialCode, formatProductCode, formatBOMCode } from "../../lib/utils";
+import { formatMaterialCode, formatProductCode, formatBOMCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { Save, ArrowRight, PlusCircle, Trash2, Beaker } from "lucide-react";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
@@ -30,7 +30,7 @@ export default function FormComposition() {
   });
 
   useEffect(() => {
-    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         setFinalProducts(data.filter((m: any) => m.category === "منتج نهائي"));
@@ -93,10 +93,7 @@ export default function FormComposition() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
 

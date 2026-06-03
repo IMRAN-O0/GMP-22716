@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportBalances() {
   const [materials, setMaterials] = useState<any[]>([]);
@@ -17,7 +18,7 @@ export default function ReportBalances() {
     if (low_stock) params.set("low_stock", "true");
     const qs = params.toString() ? `?${params.toString()}` : "";
     fetch(`/api/materials${qs}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((mats) => setMaterials(Array.isArray(mats) ? mats : []))
@@ -28,7 +29,7 @@ export default function ReportBalances() {
   // Initial load: fetch warehouses once, then let filter effect handle materials
   useEffect(() => {
     fetch("/api/warehouses", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((whs) => setWarehouses(Array.isArray(whs) ? whs : []))

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, Calendar, FileText } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getJsonHeaders } from "../../lib/utils";
 
 export default function FormTRN001() {
   const { user } = useAuth();
@@ -65,10 +65,7 @@ export default function FormTRN001() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({
           recordId: formData.planId,
           formId: "F-TRN-001",

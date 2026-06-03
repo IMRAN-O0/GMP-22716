@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, AlertTriangle } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportCalibration() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/reports/qm/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

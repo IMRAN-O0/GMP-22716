@@ -10,13 +10,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { ClipboardList } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportProductionOrders() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/reports/prd/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

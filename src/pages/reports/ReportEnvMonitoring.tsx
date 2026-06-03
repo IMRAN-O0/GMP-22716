@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Thermometer } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 import {
   LineChart,
   Line,
@@ -17,7 +18,7 @@ export default function ReportEnvMonitoring() {
 
   useEffect(() => {
     fetch("/api/reports/qm/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

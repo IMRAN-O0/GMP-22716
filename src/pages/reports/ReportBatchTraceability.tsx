@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { getAuthHeaders } from "../../lib/utils";
 import {
   Route,
   Search,
@@ -74,7 +75,7 @@ export default function ReportBatchTraceability() {
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const headers = getAuthHeaders();
     Promise.all([
       fetch("/api/reports/all", { headers }).then((r) => r.json()),
       fetch("/api/company", { headers }).then((r) => r.json()),

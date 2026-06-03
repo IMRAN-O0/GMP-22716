@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Pencil, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getAuthHeaders } from "../../lib/utils";
 
 export default function FormHR002() {
   const { user } = useAuth();
@@ -22,7 +22,7 @@ export default function FormHR002() {
   const [formData, setFormData] = useState(emptyForm);
   const [date] = useState(new Date().toLocaleDateString("ar-EG"));
 
-  const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+  const h = getAuthHeaders();
 
   useEffect(() => {
     fetch("/api/forms/dept/HR", { headers: h })

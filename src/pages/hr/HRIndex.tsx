@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import { PlusCircle, Search, FileSignature, Pencil } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function HRIndex() {
   const [forms, setForms] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/HR", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms/dept/HR", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { Plus, Pencil, Trash2, X, Save, CheckCircle } from "lucide-react";
+import { getJsonHeaders } from "../../lib/utils";
 
 const EMPTY = { code: "", name: "", name_en: "", contact_person: "", phone: "", email: "", address: "", tax_number: "" };
 
@@ -12,7 +13,7 @@ export default function CreateSupplier() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
 
-  const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
+  const h = getJsonHeaders();
 
   const load = () =>
     fetch("/api/suppliers", { headers: h })

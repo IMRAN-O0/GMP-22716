@@ -10,6 +10,7 @@ import {
   Save,
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import { getJsonHeaders } from "../lib/utils";
 
 const DEPT_PERMISSIONS: Record<
   string,
@@ -195,10 +196,7 @@ export default function UsersManagement() {
       const method = isEdit ? "PUT" : "POST";
       const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(formData),
       });
       if (res.ok) {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { AlertCircle, Search } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 import {
   PieChart,
   Pie,
@@ -15,7 +16,7 @@ export default function ReportNCR() {
 
   useEffect(() => {
     fetch("/api/reports/qm/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

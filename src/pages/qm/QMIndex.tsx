@@ -25,12 +25,13 @@ import {
   Pencil,
 } from "lucide-react";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function QMIndex() {
   const [records, setRecords] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/forms/dept/QM", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms/dept/QM", { headers: getAuthHeaders() })
       .then((res) => res.json())
       .then((data) => setRecords(Array.isArray(data) ? data : []))
       .catch(console.error);

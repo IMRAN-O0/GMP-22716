@@ -9,6 +9,7 @@ import {
   FileWarning,
 } from "lucide-react";
 import {
+import { getAuthHeaders } from "../../lib/utils";
   BarChart,
   Bar,
   XAxis,
@@ -40,7 +41,7 @@ export default function ReportExecutiveDashboard() {
 
   useEffect(() => {
     fetch("/api/reports/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

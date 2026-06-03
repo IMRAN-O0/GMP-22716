@@ -8,7 +8,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getJsonHeaders } from "../../lib/utils";
 
 export default function FormHR001() {
   const { user } = useAuth();
@@ -58,10 +58,7 @@ export default function FormHR001() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {

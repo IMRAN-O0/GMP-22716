@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { Plus, Pencil, Trash2, X, CheckCircle } from "lucide-react";
-import { formatProductCode } from "../../lib/utils";
+import { formatProductCode, getJsonHeaders } from "../../lib/utils";
 
 const EMPTY = { code: "FD-", name: "", name_en: "", unit: "قطعة", description: "", warehouse_id: "", balance: 0, package_size: "", package_size_unit: "جم" };
 
@@ -14,7 +14,7 @@ export default function CreateFinalProduct() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
 
-  const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
+  const h = getJsonHeaders();
 
   const load = () =>
     fetch("/api/materials", { headers: h })

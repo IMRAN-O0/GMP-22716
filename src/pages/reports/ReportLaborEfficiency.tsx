@@ -10,13 +10,14 @@ import {
   Legend,
 } from "recharts";
 import { Users, Clock } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportLaborEfficiency() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/reports/prd/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

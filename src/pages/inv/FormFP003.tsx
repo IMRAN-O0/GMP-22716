@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Truck } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormFP003() {
@@ -31,7 +31,7 @@ export default function FormFP003() {
   });
 
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const headers = getAuthHeaders();
 
     fetch("/api/company", { headers }).then(r => r.json()).then(d => setCompany(d || {})).catch(() => {});
     fetch("/api/customers", { headers }).then(r => r.json()).then(d => setCustomers(Array.isArray(d) ? d : [])).catch(console.error);
@@ -54,7 +54,7 @@ export default function FormFP003() {
     setFormData(prev => ({ ...prev, batchNumber: batchNum, productCode: "", productName: "" }));
     if (!batchNum) return;
     try {
-      const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+      const headers = getAuthHeaders();
       const forms = await fetch("/api/forms/dept/PRD", { headers }).then(r => r.json());
       const prd = forms.find((f: any) => f.form_id === "F-PRD-001" && f.data?.batchNumber === batchNum);
       if (prd?.data?.itemNumber) {
@@ -76,7 +76,7 @@ export default function FormFP003() {
       setLoading(true);
       const res = await fetch(editIdPatch ? `/api/forms/record/${editIdPatch}` : "/api/forms", {
         method: editIdPatch ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getJsonHeaders(),
         body: JSON.stringify({ recordId: formData.shipmentId, formId: "F-FP-003", department: "INV", creatorId: user?.id, status, data: formData }),
       });
       if (res.ok) { alert("تم الحفظ بنجاح."); navigate("/inv"); }

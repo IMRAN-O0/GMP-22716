@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormRMT() {
@@ -29,12 +29,12 @@ export default function FormRMT() {
   });
 
   useEffect(() => {
-    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
 
-    fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         const rows = Array.isArray(data) ? data : [];
@@ -121,10 +121,7 @@ export default function FormRMT() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {

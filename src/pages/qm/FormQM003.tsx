@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Save, Users, Star } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { SearchModal, SearchField } from "../../components/SearchModal";
+import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function FormQM003() {
   const { user } = useAuth();
@@ -27,12 +28,12 @@ export default function FormQM003() {
 
   useEffect(() => {
     // Fetch materials to show what is supplied
-    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
 
-    fetch("/api/suppliers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/suppliers", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setSuppliers(data))
       .catch(console.error);
@@ -71,10 +72,7 @@ export default function FormQM003() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({
           recordId: `QM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           formId: "F-QM-003",

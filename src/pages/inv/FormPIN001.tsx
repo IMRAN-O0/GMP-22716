@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { Save, CheckCircle, Plus, Trash2, Search } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { SearchModal, SearchField } from "../../components/SearchModal";
@@ -38,7 +38,7 @@ export default function FormPIN001() {
   const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const h = getAuthHeaders();
 
     fetch("/api/materials", { headers: h })
       .then((r) => r.json())
@@ -200,10 +200,7 @@ export default function FormPIN001() {
 
       const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {

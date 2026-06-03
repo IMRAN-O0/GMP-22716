@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Wrench } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportMaintenance() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/reports/qm/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

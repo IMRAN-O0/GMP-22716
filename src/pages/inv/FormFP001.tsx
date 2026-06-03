@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function FormFP001() {
   const { user } = useAuth();
@@ -27,7 +27,7 @@ export default function FormFP001() {
   });
 
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const headers = getAuthHeaders();
     fetch("/api/company", { headers }).then(r => r.json()).then(d => setCompany(d || {})).catch(() => {});
     fetch("/api/warehouses", { headers })
       .then(r => r.json())
@@ -103,7 +103,7 @@ export default function FormFP001() {
     let relQty = "";
     if (productCode) {
       try {
-        const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+        const headers = getAuthHeaders();
         const res = await fetch(`/api/materials/by-code/${encodeURIComponent(productCode)}`, { headers });
         if (res.ok) {
           matInfo = await res.json();
@@ -143,7 +143,7 @@ export default function FormFP001() {
       setLoading(true);
       const res = await fetch(editId ? `/api/forms/record/${editId}` : "/api/forms", {
         method: editId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getJsonHeaders(),
         body: JSON.stringify({ recordId: formData.releaseId, formId: "F-FP-001", department: "INV", creatorId: user?.id, status, data: formData }),
       });
       if (res.ok) { alert("تم الحفظ بنجاح."); navigate("/inv"); }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, FileText, FlaskConical } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormLAB001() {
@@ -15,15 +15,15 @@ export default function FormLAB001() {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
 
   useEffect(() => {
-    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
-    fetch("/api/warehouses", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/warehouses", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setWarehouses(data))
       .catch(console.error);
-    fetch("/api/forms/dept/PRD", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms/dept/PRD", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         const orders = data.filter(
@@ -62,10 +62,7 @@ export default function FormLAB001() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({
           recordId: formData.requestId,
           formId: "F-LAB-001",

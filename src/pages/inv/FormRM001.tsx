@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { generateSerialNumber, formatMaterialCode, extractSupplierCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, extractSupplierCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { Save, CheckCircle, Package, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import * as XLSX from "xlsx";
@@ -53,7 +53,7 @@ export default function FormRM001() {
   const [showSupplierModal, setShowSupplierModal] = useState(false);
 
   useEffect(() => {
-    const h = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+    const h = getAuthHeaders();
 
     fetch("/api/warehouses", { headers: h })
       .then((r) => r.json())
@@ -185,10 +185,7 @@ export default function FormRM001() {
 
       const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -329,7 +326,7 @@ export default function FormRM001() {
     try {
       const res = await fetch("/api/materials", {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getAuthHeaders(),
       });
       const data = await res.json();
       if (res.ok) {
@@ -349,10 +346,7 @@ export default function FormRM001() {
     try {
       const res = await fetch("/api/materials/bulk", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({ rows: bulkRows }),
       });
       const data = await res.json();

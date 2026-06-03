@@ -11,13 +11,14 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Activity, AlertOctagon } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportProcessMonitoring() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/reports/prd/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

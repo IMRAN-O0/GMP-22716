@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Activity, Search } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportRiskRegister() {
   const [data, setData] = useState<any[]>([]);
@@ -8,7 +9,7 @@ export default function ReportRiskRegister() {
 
   useEffect(() => {
     fetch("/api/reports/qm/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

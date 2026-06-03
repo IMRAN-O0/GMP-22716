@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Settings, Pencil, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 const emptyForm = {
   date: new Date().toISOString().split("T")[0],
@@ -23,7 +24,7 @@ export default function FormEQP001() {
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/forms/dept/QM", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms/dept/QM", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         const rows = Array.isArray(data) ? data : [];
@@ -33,7 +34,7 @@ export default function FormEQP001() {
 
     const editId = new URLSearchParams(window.location.search).get("edit");
     if (editId) {
-      fetch(`/api/forms/record/${editId}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      fetch(`/api/forms/record/${editId}`, { headers: getAuthHeaders() })
         .then((r) => r.json())
         .then((data) => {
           if (data && data.data) {
@@ -62,10 +63,7 @@ export default function FormEQP001() {
       if (editingRecordId) {
         const res = await fetch(`/api/forms/record/${editingRecordId}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+          headers: getJsonHeaders(),
           body: JSON.stringify({ status, data: formData }),
         });
         if (!res.ok) throw new Error("Update failed");
@@ -85,10 +83,7 @@ export default function FormEQP001() {
         const fetchMethod = editIdPatch ? "PUT" : "POST";
         const res = await fetch(fetchUrl, {
           method: fetchMethod,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+          headers: getJsonHeaders(),
           body: JSON.stringify({
             recordId: `QM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             formId: "F-EQP-001",
@@ -110,10 +105,7 @@ export default function FormEQP001() {
 
       const res = await fetch("/api/forms", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({
           recordId: `QM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           formId: "F-EQP-001",

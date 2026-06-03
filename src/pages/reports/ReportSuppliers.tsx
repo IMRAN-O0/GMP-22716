@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getAuthHeaders } from "../../lib/utils";
 import {
   Radar,
   RadarChart,
@@ -21,7 +22,7 @@ export default function ReportSuppliers() {
 
   useEffect(() => {
     fetch("/api/reports/inv/supplier-evaluations", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((data) => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportTransactions() {
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -10,7 +11,7 @@ export default function ReportTransactions() {
   useEffect(() => {
     Promise.all([
       fetch("/api/reports/inv/transactions", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getAuthHeaders(),
       }).then((res) => res.json()),
       fetch("/api/materials").then((res) => res.json()).catch(() => []),
       fetch("/api/warehouses").then((res) => res.json()).catch(() => []),

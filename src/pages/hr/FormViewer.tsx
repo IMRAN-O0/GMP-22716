@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 const FIELD_LABELS: Record<string, string> = {
   // Common
@@ -547,7 +548,7 @@ export default function FormViewer() {
     try {
       const res = await fetch(`/api/forms/record/${recordId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getJsonHeaders(),
         body: JSON.stringify({ status: newStatus, userId: user?.id, notes: reasonNotes }),
       });
       if (res.ok) { setRecord({ ...record, status: newStatus }); setShowNotesInput({ show: false, type: "" }); setNotes(""); }
@@ -742,7 +743,7 @@ export default function FormViewer() {
                 if (!window.confirm(confirmMsg)) return;
                 const res = await fetch(`/api/forms/record/${recordId}`, {
                   method: "DELETE",
-                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                  headers: getAuthHeaders(),
                 });
                 if (res.ok) { alert("تم حذف النموذج بنجاح"); navigate(-1); }
                 else { const e = await res.json().catch(() => ({ error: "خطأ" })); alert("فشل الحذف: " + e.error); }

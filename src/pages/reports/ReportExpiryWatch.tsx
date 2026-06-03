@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Clock, AlertTriangle, ShieldCheck } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportExpiryWatch() {
   const [data, setData] = useState<any[]>([]);
@@ -7,7 +8,7 @@ export default function ReportExpiryWatch() {
 
   useEffect(() => {
     fetch("/api/reports/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((r) => r.json())
       .then((records) => {

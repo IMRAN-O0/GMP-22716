@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Trash2, Pencil, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function CreateWarehouse() {
   const { user } = useAuth();
@@ -44,7 +45,7 @@ export default function CreateWarehouse() {
       const payload = { code: formData.code, name: formData.name, type: formData.type, parent_id: formData.type === "SUB" && formData.parent_id ? parseInt(formData.parent_id) : null, description: formData.description };
       const res = await fetch(`/api/warehouses/${editingId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -73,10 +74,7 @@ export default function CreateWarehouse() {
         const fetchMethod = editIdPatch ? "PUT" : "POST";
         const res = await fetch(fetchUrl, {
           method: fetchMethod,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
+          headers: getJsonHeaders(),
           body: JSON.stringify(formPayload),
         });
         if (res.ok) {
@@ -99,10 +97,7 @@ export default function CreateWarehouse() {
       if (user?.level <= 2) {
         const res = await fetch("/api/warehouses", {
           method: "POST",
-          headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+          headers: getJsonHeaders(),
           body: JSON.stringify(payloadData),
         });
         if (res.ok) {
@@ -123,10 +118,7 @@ export default function CreateWarehouse() {
         };
         const res = await fetch("/api/forms", {
           method: "POST",
-          headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+          headers: getJsonHeaders(),
           body: JSON.stringify(formPayload),
         });
         if (res.ok) {
@@ -147,7 +139,7 @@ export default function CreateWarehouse() {
     try {
       const res = await fetch(`/api/warehouses/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         setWarehouses((prev) => prev.filter((w) => w.id !== id));

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, Plus, Trash2, FlaskConical } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber } from "../../lib/utils";
+import { generateSerialNumber, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormLAB007() {
@@ -15,7 +15,7 @@ export default function FormLAB007() {
   const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setMaterials(data))
       .catch(console.error);
@@ -114,10 +114,7 @@ export default function FormLAB007() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify({
           recordId: formData.requestId,
           formId: "F-LAB-007",

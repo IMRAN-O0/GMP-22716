@@ -10,13 +10,14 @@ import {
   Cell,
 } from "recharts";
 import { Trash2 } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportProductionWaste() {
   const [data, setData] = useState<any[]>([]);
 
   useEffect(() => {
     fetch("/api/reports/prd/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {

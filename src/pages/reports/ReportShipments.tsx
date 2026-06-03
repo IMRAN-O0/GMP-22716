@@ -8,6 +8,7 @@ import {
   Legend,
 } from "recharts";
 import { PackageOpen, TrendingUp, Users } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 const COLORS = [
   "#3B82F6",
@@ -24,7 +25,7 @@ export default function ReportShipments() {
 
   useEffect(() => {
     fetch("/api/reports/inv/shipments", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((data) => {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, formatMaterialCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, getJsonHeaders } from "../../lib/utils";
 
 export default function FormFP006() {
   const { user } = useAuth();
@@ -51,10 +51,7 @@ export default function FormFP006() {
       const fetchMethod = editIdPatch ? "PUT" : "POST";
       const res = await fetch(fetchUrl, {
         method: fetchMethod,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {

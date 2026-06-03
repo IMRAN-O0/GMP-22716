@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Save } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { getJsonHeaders } from "../lib/utils";
 
 export default function CompanySettings() {
   const { user } = useAuth();
@@ -38,7 +39,7 @@ export default function CompanySettings() {
     try {
       const res = await fetch("/api/company", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getJsonHeaders(),
         body: JSON.stringify(form),
       });
       if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); }

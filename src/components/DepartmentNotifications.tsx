@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AlertCircle, Bell, CheckCircle2, ChevronRight, Clock, Info } from "lucide-react";
 import { Link } from "react-router-dom";
+import { getAuthHeaders } from "../lib/utils";
 
 export default function DepartmentNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -8,7 +9,7 @@ export default function DepartmentNotifications() {
 
   useEffect(() => {
     fetch("/api/notifications/dashboard", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((data) => {

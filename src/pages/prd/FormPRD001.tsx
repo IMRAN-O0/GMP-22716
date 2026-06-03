@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, formatMaterialCode, formatProductCode } from "../../lib/utils";
+import { generateSerialNumber, formatMaterialCode, formatProductCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormPRD001() {
@@ -32,7 +32,7 @@ export default function FormPRD001() {
   const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         setInventoryMaterials(
@@ -42,14 +42,14 @@ export default function FormPRD001() {
       })
       .catch(console.error);
 
-    fetch("/api/customers", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/customers", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         setCustomers(Array.isArray(data) ? data : []);
       })
       .catch(console.error);
 
-    fetch("/api/forms", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/forms", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         const rows = Array.isArray(data) ? data : [];
@@ -244,10 +244,7 @@ export default function FormPRD001() {
 
       const res = await fetch(url, {
         method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
+        headers: getJsonHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {

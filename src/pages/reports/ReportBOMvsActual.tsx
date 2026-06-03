@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Package, Search } from "lucide-react";
+import { getAuthHeaders } from "../../lib/utils";
 
 export default function ReportBOMvsActual() {
   const [data, setData] = useState<any[]>([]);
@@ -7,7 +8,7 @@ export default function ReportBOMvsActual() {
 
   useEffect(() => {
     fetch("/api/reports/prd/all", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => res.json())
       .then((records) => {
