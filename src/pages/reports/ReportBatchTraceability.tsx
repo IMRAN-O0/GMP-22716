@@ -164,7 +164,10 @@ export default function ReportBatchTraceability() {
     setTracedBatch(trace);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    const api = (window as any).electronAPI;
+    if (api?.printPreview) { api.printPreview(); } else { window.print(); }
+  };
 
   const totalSteps = [
     tracedBatch?.materials.length,

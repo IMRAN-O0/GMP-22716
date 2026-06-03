@@ -500,6 +500,11 @@ const translateKey = (key: string): string => {
   return key.replace(/([A-Z])/g, " $1").trim();
 };
 
+const triggerPrint = () => {
+  const api = (window as any).electronAPI;
+  if (api?.printPreview) { api.printPreview(); } else { window.print(); }
+};
+
 export default function FormViewer() {
   const { recordId } = useParams();
   const { user } = useAuth();
@@ -723,7 +728,7 @@ export default function FormViewer() {
             </button>
           )}
 
-          <button onClick={() => window.print()}
+          <button onClick={triggerPrint}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-700 font-semibold text-[13px]">
             <Printer className="w-4 h-4" /> طباعة PDF
           </button>
