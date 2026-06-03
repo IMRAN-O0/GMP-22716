@@ -171,3 +171,7 @@ app.on('activate', () => {
 });
 
 ipcMain.handle('app-version', () => app.getVersion());
+
+ipcMain.handle('print-preview', () => {
+  if (mainWindow) mainWindow.webContents.print({ preview: true, silent: false });
+});

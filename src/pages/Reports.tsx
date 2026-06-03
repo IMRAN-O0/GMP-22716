@@ -270,7 +270,7 @@ export default function Reports() {
           </h2>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => window.print()}
+              onClick={() => { const api = (window as any).electronAPI; if (api?.printPreview) { api.printPreview(); } else { window.print(); } }}
               className="px-5 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg font-semibold transition-colors flex items-center gap-2"
             >
               <svg
