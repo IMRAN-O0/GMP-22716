@@ -18,61 +18,8 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
-
-// ── Form ID → Arabic label mapping ──────────────────────────────────────────
-const FORM_LABELS: Record<string, string> = {
-  "F-HR-001":      "طلب توظيف",
-  "F-HR-002":      "ملف موظف",
-  "F-HR-003":      "فحص طبي",
-  "F-INV-RM-001":  "استلام مواد خام",
-  "F-INV-MAT":     "تسجيل مادة",
-  "F-INV-WH":      "تكويد مستودع",
-  "F-INV-PRQ-001": "طلب شراء",
-  "F-INV-PIN-001": "إدخال مخزون",
-  "F-INV-RMT-001": "أمر صرف",
-  "F-INV-BOM":     "تركيبة منتج",
-  "F-INV-GENERIC": "نموذج مخزون عام",
-  "F-FP-001":      "إفراج منتج نهائي",
-  "F-FP-002":      "تخزين منتج نهائي",
-  "F-FP-003":      "شحن وتوزيع",
-  "F-FP-004":      "مرتجعات",
-  "F-FP-005":      "إتلاف",
-  "F-FP-006":      "جرد منتج نهائي",
-  "F-PRD-001":     "أمر الإنتاج",
-  "F-PRD-002":     "سجل التصنيع",
-  "F-PRD-003":     "قائمة تدقيق الإنتاج",
-  "F-PRD-004":     "مراقبة العملية",
-  "F-QM-001":      "فحص استلام المواد",
-  "F-QM-002":      "فحص أثناء الإنتاج",
-  "F-QM-003":      "تقرير انحراف",
-  "F-QM-004":      "تقرير CAPA",
-  "F-QM-005":      "نموذج شكاوى",
-  "F-QM-006":      "مراجعة الإدارة",
-  "F-DEV-001":     "طلب تطوير منتج",
-  "F-DEV-002":     "خطة التطوير",
-  "F-DEV-003":     "تقرير التحقق",
-  "F-DEV-004":     "اعتماد التطوير",
-  "F-CMP-001":     "سجل الشكاوى",
-  "F-RCL-001":     "استدعاء المنتج",
-  "F-PRM-001":     "إجراء تشغيلي (SOP)",
-  "F-PRM-002":     "تعديل إجراء",
-  "F-PRM-003":     "سياسة جودة",
-  "F-PRM-004":     "مراجعة وثيقة",
-  "F-PRM-005":     "توزيع وثيقة",
-  "F-EQP-001":     "سجل المعدات",
-  "F-MNT-001":     "طلب صيانة",
-  "F-TRN-001":     "خطة تدريب",
-  "F-TRN-002":     "محضر تدريب",
-  "F-TRN-003":     "تقييم تدريب",
-  "F-TRN-004":     "اعتماد كفاءة",
-  "F-LAB-001":     "تحليل مواد خام",
-  "F-LAB-002":     "تحليل منتج وسيط",
-  "F-LAB-003":     "تحليل منتج نهائي",
-  "F-LAB-004":     "معايرة أجهزة",
-  "F-LAB-005":     "سجل بيئة المختبر",
-  "F-LAB-006":     "تقرير نتائج",
-  "F-LAB-007":     "ضبط جودة المختبر",
-};
+import { getAuthHeaders } from "../../lib/utils";
+import { FORM_LABELS } from "../../constants/formLabels";
 
 // ── Department → view base path ──────────────────────────────────────────────
 const DEPT_VIEW: Record<string, string> = {
@@ -168,7 +115,7 @@ export default function ArchivePage() {
   // ── Fetch stats once ─────────────────────────────────────────────────────
   useEffect(() => {
     fetch("/api/archive/stats", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     })
       .then((r) => r.json())
       .then((d) => setStats(Array.isArray(d) ? d : []))
@@ -192,7 +139,7 @@ export default function ArchivePage() {
         dateTo,
       });
       fetch(`/api/archive?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: getAuthHeaders(),
       })
         .then((r) => {
           if (!r.ok) throw new Error("Server error " + r.status);
@@ -229,7 +176,7 @@ export default function ArchivePage() {
   const exportCSV = async () => {
     const params = new URLSearchParams({ search, department, status, formId, dateFrom, dateTo, page: "1", limit: "2000" });
     const r = await fetch(`/api/archive?${params}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: getAuthHeaders(),
     });
     if (!r.ok) return alert("فشل التصدير");
     const d: ArchiveResponse = await r.json();

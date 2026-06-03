@@ -19,6 +19,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { StatusBadge } from "../../components/StatusBadge";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
+import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function INVIndex() {
   const { user } = useAuth();

@@ -2,7 +2,7 @@ import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   Building2, Users, FileText, Settings, LogOut, 
-  LayoutDashboard, Bell, FileBox, Archive, BarChart3, Package, Beaker, BookOpen 
+  LayoutDashboard, Archive, BarChart3, Package, Beaker, BookOpen
 } from 'lucide-react';
 
 export default function Layout() {

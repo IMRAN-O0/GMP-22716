@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { getAuthHeaders } from "../lib/utils";
 import {
   Package,
   Repeat,
@@ -50,7 +51,7 @@ export default function Reports() {
   const [company, setCompany] = useState<any>({});
 
   useEffect(() => {
-    fetch("/api/company", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+    fetch("/api/company", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => setCompany(d || {}))
       .catch(() => {});

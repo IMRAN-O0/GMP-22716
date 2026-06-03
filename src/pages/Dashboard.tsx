@@ -20,6 +20,7 @@ import {
 import DepartmentNotifications from "../components/DepartmentNotifications";
 import { useAuth } from "../context/AuthContext";
 import { StatusBadge } from "../components/StatusBadge";
+import { getAuthHeaders, formatDate } from "../lib/utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -163,22 +164,7 @@ const ALL_DEPTS: DeptKey[] = ["INV", "PRD", "QM", "LAB", "HR", "TRN"];
 // Helpers
 // ---------------------------------------------------------------------------
 
-function authHeaders(): HeadersInit {
-  return { Authorization: `Bearer ${localStorage.getItem("token")}` };
-}
-
-function fmtDate(iso: string): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("ar-SA", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
+const fmtDate = (iso: string) => formatDate(iso);
 
 // ---------------------------------------------------------------------------
 // Shared sub-components
@@ -327,7 +313,7 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const headers = authHeaders();
+    const headers = getAuthHeaders();
     Promise.all([
       fetch("/api/stats", { headers }).then((r) => r.json()),
       fetch("/api/forms", { headers }).then((r) => r.json()),
@@ -512,7 +498,7 @@ function DeptManagerDashboard({ department }: { department: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const headers = authHeaders();
+    const headers = getAuthHeaders();
     const requests: Promise<unknown>[] = [
       fetch("/api/stats", { headers }).then((r) => r.json()),
       fetch("/api/forms", { headers }).then((r) => r.json()),
@@ -764,7 +750,7 @@ function ReviewerDashboard({ department }: { department: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/forms", { headers: authHeaders() })
+    fetch("/api/forms", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data: unknown) => {
         setForms(Array.isArray(data) ? (data as FormRecord[]) : []);
@@ -831,7 +817,7 @@ function EmployeeDashboard({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/forms", { headers: authHeaders() })
+    fetch("/api/forms", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data: unknown) => {
         setForms(Array.isArray(data) ? (data as FormRecord[]) : []);

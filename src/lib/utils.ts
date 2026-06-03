@@ -44,3 +44,21 @@ export const generateSerialNumber = (departmentCode: string, currentCount: numbe
     const sequence = (currentCount + 1).toString().padStart(3, '0');
     return `${departmentCode}-${sequence}-${year}`;
 };
+
+// Shared auth headers — avoids duplicating localStorage.getItem("token") everywhere
+export const getAuthHeaders = (): HeadersInit => ({
+  Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+});
+
+export const getJsonHeaders = (): HeadersInit => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+});
+
+// Shared date formatter
+export const formatDate = (iso: string | undefined | null, locale = "ar-SA"): string => {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+  } catch { return iso; }
+};
