@@ -37,19 +37,17 @@ export default function INVIndex() {
   };
 
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-
-    fetch("/api/warehouses", { headers })
+    fetch("/api/warehouses", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setWarehouses(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/materials", { headers })
+    fetch("/api/materials", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setMaterials(Array.isArray(data) ? data : []))
       .catch(console.error);
 
-    fetch("/api/forms/dept/INV", { headers })
+    fetch("/api/forms/dept/INV", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => setForms(Array.isArray(data) ? data : []))
       .catch(console.error);
@@ -214,8 +212,7 @@ export default function INVIndex() {
                       </select>
                       <div className="flex gap-1 justify-end">
                         <button onClick={async () => {
-                          const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
-                          await fetch(`/api/warehouses/${editingWH.id}`, { method: "PUT", headers: h, body: JSON.stringify({ code: editingWH.code, name: editingWH.name, type: editingWH.type, parent_id: editingWH.parent_id, description: editingWH.description }) });
+                          await fetch(`/api/warehouses/${editingWH.id}`, { method: "PUT", headers: getJsonHeaders(), body: JSON.stringify({ code: editingWH.code, name: editingWH.name, type: editingWH.type, parent_id: editingWH.parent_id, description: editingWH.description }) });
                           setWarehouses(prev => prev.map(w => w.id === editingWH.id ? { ...w, name: editingWH.name, type: editingWH.type } : w));
                           setEditingWH(null);
                         }} className="flex items-center gap-1 px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold"><Check className="w-3 h-3" /> حفظ</button>
@@ -242,8 +239,7 @@ export default function INVIndex() {
                               <input className="w-full border border-slate-200 rounded px-2 py-1 text-[12px]" value={editingWH.name} onChange={e => setEditingWH({ ...editingWH, name: e.target.value })} placeholder="اسم المستودع" />
                               <div className="flex gap-1 justify-end">
                                 <button onClick={async () => {
-                                  const h = { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` };
-                                  await fetch(`/api/warehouses/${editingWH.id}`, { method: "PUT", headers: h, body: JSON.stringify({ code: editingWH.code, name: editingWH.name, type: editingWH.type, parent_id: editingWH.parent_id, description: editingWH.description }) });
+                                  await fetch(`/api/warehouses/${editingWH.id}`, { method: "PUT", headers: getJsonHeaders(), body: JSON.stringify({ code: editingWH.code, name: editingWH.name, type: editingWH.type, parent_id: editingWH.parent_id, description: editingWH.description }) });
                                   setWarehouses(prev => prev.map(w => w.id === editingWH.id ? { ...w, name: editingWH.name } : w));
                                   setEditingWH(null);
                                 }} className="flex items-center gap-1 px-2 py-1 bg-sky-600 text-white rounded text-[11px] font-bold"><Check className="w-3 h-3" /> حفظ</button>
@@ -284,12 +280,12 @@ export default function INVIndex() {
                     if (!window.confirm("سيتم مزامنة جميع الأرصدة من السجلات المعتمدة. هل تريد المتابعة؟")) return;
                     const res = await fetch("/api/materials/sync-from-transactions", {
                       method: "POST",
-                      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                      headers: getAuthHeaders(),
                     });
                     const result = await res.json();
                     if (result.success) {
                       alert(`تمت المزامنة — تم تحديث ${result.updated} مادة.`);
-                      fetch("/api/materials", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+                      fetch("/api/materials", { headers: getAuthHeaders() })
                         .then(r => r.json()).then(d => setMaterials(Array.isArray(d) ? d : []));
                     } else {
                       alert("فشل: " + result.error);
@@ -363,7 +359,7 @@ export default function INVIndex() {
                                     if (isNaN(newBal) || newBal < 0) return;
                                     await fetch(`/api/materials/${m.id}/balance`, {
                                       method: "PATCH",
-                                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+                                      headers: getJsonHeaders(),
                                       body: JSON.stringify({ balance: newBal }),
                                     });
                                     setMaterials(prev => prev.map(x => x.id === m.id ? { ...x, balance: newBal } : x));
@@ -391,7 +387,7 @@ export default function INVIndex() {
                                 if (!window.confirm(`هل أنت متأكد من حذف المادة "${m.name}"؟`)) return;
                                 const res = await fetch(`/api/materials/${m.id}`, {
                                   method: "DELETE",
-                                  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                                  headers: getAuthHeaders(),
                                 });
                                 if (res.ok) {
                                   setMaterials((prev) => prev.filter((x) => x.id !== m.id));
