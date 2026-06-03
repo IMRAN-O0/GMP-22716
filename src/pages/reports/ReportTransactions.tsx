@@ -28,7 +28,7 @@ export default function ReportTransactions() {
         };
 
         // Flatten forms records into transaction line items
-        let rows: any[] = [];
+        const rows: any[] = [];
         data.forEach((record: any) => {
           const fd = record.data;
           if (record.form_id === "F-INV-RM-001") {

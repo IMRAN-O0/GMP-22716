@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 
 // Configure this with real credentials in production
-let transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.ethereal.email',
   port: parseInt(process.env.SMTP_PORT || '587'),
   auth: {

@@ -1,0 +1,8 @@
+dist
+dist-electron
+node_modules
+server-bundle.cjs
+coverage
+package-lock.json
+*.db
+electron/icon.png
