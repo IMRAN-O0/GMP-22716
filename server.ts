@@ -46,7 +46,9 @@ async function startServer() {
   const isPrivateLanOrigin = (origin: string) => {
     try {
       const u = new URL(origin);
-      return /^(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(u.hostname);
+      // Private LAN ranges plus the Tailscale/CGNAT range 100.64.0.0/10 (2nd octet 64-127),
+      // so devices joined over a Tailscale/WireGuard VPN are treated like LAN clients.
+      return /^(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.\d+\.\d+)$/.test(u.hostname);
     } catch { return false; }
   };
 
