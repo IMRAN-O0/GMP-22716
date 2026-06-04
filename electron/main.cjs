@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, globalShortcut } = require('electron');
 const childProcess = require('child_process');
 const path   = require('path');
 const http   = require('http');
@@ -13,6 +13,55 @@ const IS_DEV  = !app.isPackaged;
 const APP_DIR = IS_DEV
   ? path.join(__dirname, '..')
   : path.dirname(app.getPath('exe'));
+
+// ─── App config (server vs client mode) — persisted in userData ──────────────
+// { mode: 'server' }                              → this machine hosts the DB
+// { mode: 'client', serverUrl: '192.168.1.10' }   → connect to a remote server
+function configPath() {
+  return path.join(app.getPath('userData'), 'gmp-config.json');
+}
+
+function readConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeConfig(cfg) {
+  fs.mkdirSync(path.dirname(configPath()), { recursive: true });
+  fs.writeFileSync(configPath(), JSON.stringify(cfg, null, 2), 'utf8');
+}
+
+// Accepts "192.168.1.10", "192.168.1.10:3009" or a full URL, and returns a full
+// origin "http://host:port" (defaulting to port 3009 when none is supplied).
+function normalizeServerUrl(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
+  try {
+    const u = new URL(s);
+    if (!u.port) u.port = String(PORT);
+    return `${u.protocol}//${u.hostname}:${u.port}`;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Probes a server origin. Any HTTP response (even 401) means the server is up.
+function testConnection(rawUrl) {
+  return new Promise((resolve) => {
+    const origin = normalizeServerUrl(rawUrl);
+    if (!origin) return resolve({ ok: false, error: 'عنوان غير صالح' });
+    const req = http.get(`${origin}/api/company`, (res) => {
+      res.destroy();
+      resolve({ ok: true, address: origin, status: res.statusCode });
+    });
+    req.on('error', (e) => resolve({ ok: false, error: e.code || e.message }));
+    req.setTimeout(4000, () => { req.destroy(); resolve({ ok: false, error: 'انتهت المهلة' }); });
+  });
+}
 
 // ─── JWT Secret — generate once and persist in userData ──────────────────────
 function getOrCreateSecret() {
@@ -110,10 +159,32 @@ function waitForServer(retries = 60) {
   });
 }
 
+// ─── Setup window (first run / reconfigure) ──────────────────────────────────
+let setupWindow = null;
+
+function createSetupWindow() {
+  if (setupWindow) { setupWindow.focus(); return; }
+  setupWindow = new BrowserWindow({
+    width:  640,
+    height: 720,
+    title:  'إعداد نظام GMP',
+    icon:   path.join(APP_DIR, 'electron', 'icon.png'),
+    resizable: false,
+    webPreferences: {
+      nodeIntegration:  false,
+      contextIsolation: true,
+      preload:          path.join(__dirname, 'preload.cjs'),
+    },
+  });
+  Menu.setApplicationMenu(null);
+  setupWindow.loadFile(path.join(__dirname, 'setup.html'));
+  setupWindow.on('closed', () => { setupWindow = null; });
+}
+
 // ─── BrowserWindow ────────────────────────────────────────────────────────────
 let mainWindow = null;
 
-function createWindow() {
+function createWindow(targetUrl) {
   mainWindow = new BrowserWindow({
     width:        1440,
     height:       900,
@@ -131,7 +202,7 @@ function createWindow() {
 
   if (!IS_DEV) Menu.setApplicationMenu(null);
 
-  mainWindow.loadURL(`http://localhost:${PORT}`);
+  mainWindow.loadURL(targetUrl);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -139,22 +210,55 @@ function createWindow() {
     if (IS_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
 
+  // In client mode, a wrong address / offline server fails to load. Offer to reconfigure.
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedUrl) => {
+    if (errorCode === -3) return; // ABORTED (e.g. redirect) — ignore
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'error',
+      title: 'تعذّر الاتصال بالسيرفر',
+      message: 'لم يتمكّن البرنامج من الاتصال بالسيرفر.',
+      detail: `العنوان: ${validatedUrl}\n${errorDesc}\n\nتأكد من أن الجهاز الرئيسي يعمل، أو غيّر عنوان السيرفر.`,
+      buttons: ['تغيير الإعدادات', 'إعادة المحاولة', 'خروج'],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    if (choice === 0) { mainWindow.close(); createSetupWindow(); }
+    else if (choice === 1) { mainWindow.reload(); }
+    else { app.quit(); }
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(`http://localhost:${PORT}`)) shell.openExternal(url);
+    if (!url.startsWith(targetUrl)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-// ─── App lifecycle ────────────────────────────────────────────────────────────
-app.whenReady().then(async () => {
+// ─── Decide what to launch based on saved config ─────────────────────────────
+async function launchFromConfig() {
+  const cfg = readConfig();
+
+  // No config yet → show the first-run setup screen.
+  if (!cfg || !cfg.mode) {
+    createSetupWindow();
+    return;
+  }
+
+  // Client mode → just load the remote server; do NOT start a local server/DB.
+  if (cfg.mode === 'client') {
+    const origin = normalizeServerUrl(cfg.serverUrl);
+    if (!origin) { createSetupWindow(); return; }
+    createWindow(origin);
+    return;
+  }
+
+  // Server mode (default) → host the app locally.
   freePort(PORT);
   if (!startServer()) return;
-
   try {
     await waitForServer();
-    createWindow();
+    createWindow(`http://localhost:${PORT}`);
   } catch (err) {
     dialog.showErrorBox(
       'تعذّر تشغيل البرنامج',
@@ -162,16 +266,38 @@ app.whenReady().then(async () => {
     );
     app.quit();
   }
+}
+
+// ─── App lifecycle ────────────────────────────────────────────────────────────
+app.whenReady().then(() => {
+  launchFromConfig();
+
+  // Reopen the connection-settings screen any time with Ctrl+Alt+S.
+  globalShortcut.register('CommandOrControl+Alt+S', () => createSetupWindow());
 });
+
+app.on('will-quit', () => globalShortcut.unregisterAll());
 
 app.on('window-all-closed', () => app.quit());
 
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0) launchFromConfig();
 });
 
 ipcMain.handle('app-version', () => app.getVersion());
 
 ipcMain.handle('print-preview', () => {
   if (mainWindow) mainWindow.webContents.print({ preview: true, silent: false });
+});
+
+// ─── Setup IPC ───────────────────────────────────────────────────────────────
+ipcMain.handle('get-config', () => readConfig());
+
+ipcMain.handle('test-connection', (_e, url) => testConnection(url));
+
+ipcMain.handle('save-config', (_e, cfg) => {
+  writeConfig(cfg);
+  // Relaunch so the startup logic re-runs cleanly in the chosen mode.
+  app.relaunch();
+  app.exit(0);
 });

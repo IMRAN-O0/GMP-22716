@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+    <title>إعداد نظام GMP</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+        color: #1e293b;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .card {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        width: 100%;
+        max-width: 520px;
+        padding: 36px;
+      }
+      h1 { font-size: 22px; color: #0f172a; margin-bottom: 6px; text-align: center; }
+      .sub { font-size: 14px; color: #64748b; text-align: center; margin-bottom: 28px; }
+      .choices { display: grid; gap: 14px; }
+      .choice {
+        border: 2px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 18px;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+      }
+      .choice:hover { border-color: #3b82f6; background: #f8fafc; }
+      .choice.active { border-color: #2563eb; background: #eff6ff; }
+      .choice .icon { font-size: 26px; line-height: 1; }
+      .choice .t { font-size: 16px; font-weight: 700; color: #0f172a; }
+      .choice .d { font-size: 13px; color: #64748b; margin-top: 4px; }
+      .client-fields { margin-top: 18px; display: none; }
+      .client-fields.show { display: block; }
+      label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 15px;
+        direction: ltr;
+        text-align: left;
+      }
+      input:focus { outline: none; border-color: #2563eb; }
+      .hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+      .row { display: flex; gap: 10px; margin-top: 14px; }
+      button {
+        flex: 1;
+        padding: 13px;
+        border: none;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .btn-test { background: #f1f5f9; color: #334155; }
+      .btn-test:hover { background: #e2e8f0; }
+      .btn-save { background: #2563eb; color: #fff; }
+      .btn-save:hover { background: #1d4ed8; }
+      .btn-save:disabled { background: #94a3b8; cursor: not-allowed; }
+      .status { margin-top: 14px; font-size: 14px; text-align: center; min-height: 20px; font-weight: 600; }
+      .status.ok { color: #16a34a; }
+      .status.err { color: #dc2626; }
+      .status.wait { color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>⚙️ إعداد نظام GMP</h1>
+      <p class="sub">اختر طريقة تشغيل هذا الجهاز (تظهر هذه الشاشة مرة واحدة فقط)</p>
+
+      <div class="choices">
+        <div class="choice" id="choice-server" onclick="selectMode('server')">
+          <div class="icon">🖥️</div>
+          <div>
+            <div class="t">جهاز رئيسي (سيرفر)</div>
+            <div class="d">يستضيف قاعدة البيانات. اختر هذا للجهاز الذي ستُحفظ فيه كل البيانات.</div>
+          </div>
+        </div>
+
+        <div class="choice" id="choice-client" onclick="selectMode('client')">
+          <div class="icon">🔗</div>
+          <div>
+            <div class="t">جهاز عميل (يتصل بالسيرفر)</div>
+            <div class="d">لا يخزّن بيانات؛ يتصل بالجهاز الرئيسي ويشاركه نفس قاعدة البيانات.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="client-fields" id="client-fields">
+        <label for="server-url">عنوان السيرفر (الجهاز الرئيسي)</label>
+        <input id="server-url" type="text" placeholder="192.168.1.10" />
+        <p class="hint">اكتب عنوان IP للجهاز الرئيسي. المنفذ 3009 يُضاف تلقائياً.</p>
+        <div class="row">
+          <button class="btn-test" onclick="testConnection()">اختبار الاتصال</button>
+        </div>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <div class="row">
+        <button class="btn-save" id="btn-save" onclick="saveAndStart()" disabled>حفظ وبدء التشغيل</button>
+      </div>
+    </div>
+
+    <script>
+      let mode = null;
+
+      function setStatus(msg, kind) {
+        const el = document.getElementById('status');
+        el.textContent = msg || '';
+        el.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function selectMode(m) {
+        mode = m;
+        document.getElementById('choice-server').classList.toggle('active', m === 'server');
+        document.getElementById('choice-client').classList.toggle('active', m === 'client');
+        document.getElementById('client-fields').classList.toggle('show', m === 'client');
+        setStatus('');
+        // Server mode can be saved immediately; client mode requires a URL.
+        document.getElementById('btn-save').disabled = m === 'client' && !getUrl();
+      }
+
+      function getUrl() {
+        return document.getElementById('server-url').value.trim();
+      }
+
+      document.addEventListener('input', () => {
+        if (mode === 'client') {
+          document.getElementById('btn-save').disabled = !getUrl();
+        }
+      });
+
+      async function testConnection() {
+        const url = getUrl();
+        if (!url) { setStatus('اكتب عنوان السيرفر أولاً.', 'err'); return; }
+        setStatus('جارٍ الاختبار…', 'wait');
+        const res = await window.setupAPI.testConnection(url);
+        if (res.ok) {
+          setStatus('✓ تم الاتصال بالسيرفر بنجاح (' + res.address + ')', 'ok');
+          document.getElementById('btn-save').disabled = false;
+        } else {
+          setStatus('✗ تعذّر الاتصال: ' + (res.error || 'تأكد من العنوان وأن السيرفر يعمل.'), 'err');
+        }
+      }
+
+      async function saveAndStart() {
+        if (!mode) { setStatus('اختر طريقة التشغيل.', 'err'); return; }
+        const cfg = { mode };
+        if (mode === 'client') {
+          const url = getUrl();
+          if (!url) { setStatus('اكتب عنوان السيرفر.', 'err'); return; }
+          cfg.serverUrl = url;
+        }
+        setStatus('جارٍ الحفظ وإعادة التشغيل…', 'wait');
+        await window.setupAPI.saveConfig(cfg);
+      }
+    </script>
+  </body>
+</html>
