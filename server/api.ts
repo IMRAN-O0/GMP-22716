@@ -1668,26 +1668,10 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
         }
       });
 
-      // 2. Finished Product Releases needing Storage in Warehouse (FP-002)
-      const approvedReleases = formsByFormId("F-FP-001", "approved");
-      const fpStored = formsByFormId("F-FP-002");
-      approvedReleases.forEach(rel => {
-        const relBatch = (rel.data?.batchNumber || '').toString().trim().toLowerCase();
-        const isStored = fpStored.some(stg =>
-          (stg.data?.batchNumber || '').toString().trim().toLowerCase() === relBatch ||
-          stg.data?.storageId === rel.data?.batchNumber ||
-          stg.data?.reference === rel.record_id
-        );
-        if (!isStored) {
-          notifications.push({
-            id: `fp-not-stored-${rel.record_id}`,
-            message: `تم الإفراج عن تشغيلة ${rel.data?.batchNumber || ''} بالنموذج ${rel.record_id} بانتظار أمر تخزينه في المستودع.`,
-            type: "info",
-            link: "/inv",
-            date: rel.created_at
-          });
-        }
-      });
+      // NOTE: The "batch release awaiting a storage order (F-FP-002)" notification was
+      // removed on purpose. Releasing a batch (F-FP-001) now adds the released quantity
+      // directly to the finished-product balance, so a separate storage order is no
+      // longer part of the workflow and the reminder is obsolete.
 
       // 3. Production Orders needing Material Issue (RMT)
       const approvedOrders = formsByFormId("F-PRD-001", "approved");
@@ -1862,8 +1846,34 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
 
     notifications.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    res.json(notifications);
+    // Filter out notifications this user has dismissed.
+    getDb().all(
+      "SELECT notification_id FROM dismissed_notifications WHERE user_id = ?",
+      [user.id],
+      (dErr, dismissedRows: any[]) => {
+        if (dErr) return res.json(notifications); // On error, fail open (show all).
+        const dismissed = new Set((dismissedRows || []).map((r) => r.notification_id));
+        res.json(notifications.filter((n) => !dismissed.has(n.id)));
+      },
+    );
   });
+});
+
+// Dismiss (hide) a single dashboard notification for the current user.
+router.delete("/notifications/dashboard/:id", requireAuth, (req: any, res) => {
+  const user: any = getAuthUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  const notificationId = req.params.id;
+  if (!notificationId) return res.status(400).json({ error: "Notification id is required" });
+
+  getDb().run(
+    "INSERT OR IGNORE INTO dismissed_notifications (user_id, notification_id) VALUES (?, ?)",
+    [user.id, notificationId],
+    (err) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json({ success: true });
+    },
+  );
 });
 
 // Get Forms by Department

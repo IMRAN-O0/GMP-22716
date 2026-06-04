@@ -118,6 +118,17 @@ const runMigrations = (dbParam: sqlite3.Database) => {
             warehouse_id INTEGER,
             reference_id TEXT
           );`
+        },
+        {
+          version: 15,
+          name: "create_dismissed_notifications",
+          up: `CREATE TABLE IF NOT EXISTS dismissed_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            notification_id TEXT NOT NULL,
+            dismissed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(user_id, notification_id)
+          );`
         }
       ];
 
