@@ -1,6 +1,6 @@
 {
   "name": "gmp-qms",
-  "productName": "GMP QMS",
+  "productName": "Awal Helm GMP",
   "private": true,
   "version": "1.0.0",
   "description": "GMP Quality Management System",
@@ -89,7 +89,7 @@
   },
   "build": {
     "appId": "com.moderncosmetics.gmp",
-    "productName": "GMP System",
+    "productName": "Awal Helm GMP",
     "copyright": "Modern Cosmetics Co.",
     "directories": {
       "output": "dist-electron"

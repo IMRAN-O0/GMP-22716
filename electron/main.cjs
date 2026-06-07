@@ -11,6 +11,7 @@ const crypto = require('crypto');
 // repainting until forced (typing not showing until a screenshot/resize/focus
 // change). Falling back to software compositing makes painting reliable.
 app.disableHardwareAcceleration();
+app.setName('Awal Helm GMP');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PORT    = parseInt(process.env.PORT || '3009', 10);
@@ -196,7 +197,7 @@ function createWindow(targetUrl) {
     height:       900,
     minWidth:     1024,
     minHeight:    700,
-    title:        'نظام GMP — إدارة الجودة',
+    title:        'Awal Helm GMP',
     icon:         path.join(APP_DIR, 'electron', 'icon.png'),
     show:         false,
     webPreferences: {
@@ -210,6 +211,9 @@ function createWindow(targetUrl) {
   if (!IS_DEV) Menu.setApplicationMenu(null);
 
   mainWindow.loadURL(targetUrl);
+
+  // Keep the window title fixed regardless of the page's <title>.
+  mainWindow.on('page-title-updated', (e) => e.preventDefault());
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -293,8 +297,31 @@ app.on('activate', () => {
 
 ipcMain.handle('app-version', () => app.getVersion());
 
-ipcMain.handle('print-preview', () => {
-  if (mainWindow) mainWindow.webContents.print({ preview: true, silent: false });
+ipcMain.handle('print-preview', async () => {
+  if (!mainWindow) return { ok: false };
+  // Electron's webContents.print() has no real preview (the system dialog shows
+  // "this application doesn't support print preview"). Instead we render the
+  // page to a PDF using print CSS and open it in the OS viewer, which gives a
+  // genuine preview the user can review and print from.
+  try {
+    const data = await mainWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { marginType: 'default' },
+    });
+    const dir = path.join(app.getPath('temp'), 'awal-helm-gmp');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `print-${Date.now()}.pdf`);
+    fs.writeFileSync(file, data);
+    await shell.openPath(file);
+    return { ok: true, file };
+  } catch (err) {
+    // Fall back to the native print dialog if PDF generation fails.
+    try {
+      mainWindow.webContents.print({ silent: false, printBackground: true });
+    } catch (_) { /* ignore */ }
+    return { ok: false, error: String(err) };
+  }
 });
 
 // ─── Setup IPC ───────────────────────────────────────────────────────────────
