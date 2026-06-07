@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   BookOpen,
   Briefcase,
+  Boxes,
   ArrowLeft,
   PlusCircle,
   Eye,
@@ -68,7 +69,7 @@ interface ApiUser {
 // Department metadata
 // ---------------------------------------------------------------------------
 
-type DeptKey = "INV" | "PRD" | "QM" | "LAB" | "HR" | "TRN";
+type DeptKey = "INV" | "PRD" | "QM" | "LAB" | "HR" | "TRN" | "PKG";
 
 interface DeptMeta {
   label: string;
@@ -156,9 +157,21 @@ const DEPT_META: Record<DeptKey, DeptMeta> = {
     accentBg: "bg-teal-600",
     accentText: "text-white",
   },
+  PKG: {
+    label: "التعبئة والتغليف",
+    route: "/pkg",
+    icon: <Boxes className="w-5 h-5" />,
+    iconBg: "bg-rose-50",
+    iconColor: "text-rose-600",
+    hoverBorder: "hover:border-rose-300",
+    badgeBg: "bg-rose-50",
+    badgeText: "text-rose-600",
+    accentBg: "bg-rose-600",
+    accentText: "text-white",
+  },
 };
 
-const ALL_DEPTS: DeptKey[] = ["INV", "PRD", "QM", "LAB", "HR", "TRN"];
+const ALL_DEPTS: DeptKey[] = ["INV", "PRD", "QM", "LAB", "HR", "TRN", "PKG"];
 
 // ---------------------------------------------------------------------------
 // Helpers

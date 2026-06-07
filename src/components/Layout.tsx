@@ -1,9 +1,10 @@
 import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Building2, Users, FileText, Settings, LogOut, 
-  LayoutDashboard, Archive, BarChart3, Package, Beaker, BookOpen
+import {
+  Building2, Users, FileText, Settings, LogOut,
+  LayoutDashboard, Archive, BarChart3, Package, Beaker, BookOpen, Boxes
 } from 'lucide-react';
+import { getAccessibleDepartments } from '../constants/departments';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -13,18 +14,21 @@ export default function Layout() {
     return <Navigate to="/login" replace />;
   }
 
+  const accessibleDepts = getAccessibleDepartments(user);
+
   const isAuthorizedURL = (path: string) => {
       if (user.level === 1 || user.department === 'ALL') return true;
       if (path === '/' || path === '/reports' || path === '/archive') return true;
-      
+
       const deptCode = path.split('/')[1]?.toUpperCase();
       if (!deptCode || deptCode === '') return true;
 
-      // System wide sections
-      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM'].includes(deptCode)) {
-          return user.department === deptCode;
+      // Department sections — accessible if it's the user's department OR they
+      // hold any permission within it (supports working across departments).
+      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(deptCode)) {
+          return accessibleDepts.has(deptCode);
       }
-      return true; 
+      return true;
   };
 
   if (!isAuthorizedURL(location.pathname)) {
@@ -49,6 +53,7 @@ export default function Layout() {
     { title: 'الإنتاج (PRD)', path: '/prd', icon: <Building2 className="w-5 h-5" /> },
     { title: 'المختبر (LAB)', path: '/lab', icon: <Beaker className="w-5 h-5" /> },
     { title: 'المخزون (INV)', path: '/inv', icon: <Package className="w-5 h-5" /> },
+    { title: 'التعبئة والتغليف (PKG)', path: '/pkg', icon: <Boxes className="w-5 h-5" /> },
     { title: 'إدارة الجودة (QM)', path: '/qm', icon: <FileText className="w-5 h-5" /> },
     { title: 'الأرشيف', path: '/archive', icon: <Archive className="w-5 h-5" /> },
     { title: 'التقارير', path: '/reports', icon: <BarChart3 className="w-5 h-5" /> },
@@ -64,8 +69,8 @@ export default function Layout() {
       const code = item.path.split('/')[1]?.toUpperCase();
       if (!code) return true;
       if (user.level === 1 || user.department === 'ALL') return true;
-      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM'].includes(code)) {
-          return user.department === code;
+      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(code)) {
+          return accessibleDepts.has(code);
       }
       return true;
   });

@@ -1555,6 +1555,38 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
       );
       }; // end doUpdate
 
+      // Release gate: a finished-product release (F-FP-001) cannot be approved
+      // until packaging is complete — i.e. an approved "finished product delivery
+      // to warehouse" form (F-PKG-009) exists for the same batch number.
+      if (status === "approved" && row.status !== "approved" && row.form_id === "F-FP-001") {
+        const relData = JSON.parse(finalDataJson || "{}");
+        const batch = (relData.batchNumber || "").toString().trim().toLowerCase();
+        if (!batch) {
+          return res.status(400).json({ error: "لا يمكن الإفراج: رقم التشغيلة (Batch) غير محدد في النموذج." });
+        }
+        getDb().all(
+          "SELECT data_json FROM forms_records WHERE form_id = 'F-PKG-009' AND status = 'approved'",
+          [],
+          (pErr: any, pRows: any[]) => {
+            if (pErr) return res.status(500).json({ error: "خطأ في التحقق من اكتمال التعبئة والتغليف" });
+            const packagingDone = (pRows || []).some((r: any) => {
+              try {
+                return (JSON.parse(r.data_json || "{}").batchNumber || "").toString().trim().toLowerCase() === batch;
+              } catch {
+                return false;
+              }
+            });
+            if (!packagingDone) {
+              return res.status(400).json({
+                error: `لا يمكن الإفراج عن التشغيلة ${relData.batchNumber} قبل اكتمال التعبئة والتغليف. يجب اعتماد نموذج «تسليم المنتج النهائي للمستودع» (F-PKG-009) لهذه التشغيلة أولاً.`,
+              });
+            }
+            doUpdate();
+          },
+        );
+        return;
+      }
+
       // For PRD-002 approval: check raw material balances before committing
       if (status === "approved" && row.status !== "approved" && row.form_id === "F-PRD-002") {
         const prdFormData = JSON.parse(finalDataJson || "{}");
@@ -1673,6 +1705,26 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
       // directly to the finished-product balance, so a separate storage order is no
       // longer part of the workflow and the reminder is obsolete.
 
+      // 2b. Batches whose packaging is complete (approved F-PKG-009) but not yet released.
+      const packagingDone = formsByFormId("F-PKG-009", "approved");
+      const releasedForms = formsByFormId("F-FP-001", "approved");
+      packagingDone.forEach(pkg => {
+        const batch = (pkg.data?.batchNumber || "").toString().trim().toLowerCase();
+        if (!batch) return;
+        const released = releasedForms.some(rel =>
+          (rel.data?.batchNumber || "").toString().trim().toLowerCase() === batch
+        );
+        if (!released) {
+          notifications.push({
+            id: `pkg-ready-for-release-${pkg.record_id}`,
+            message: `اكتملت تعبئة وتغليف التشغيلة ${pkg.data?.batchNumber || ''} وهي جاهزة للإفراج (F-FP-001).`,
+            type: "success",
+            link: "/inv",
+            date: pkg.created_at
+          });
+        }
+      });
+
       // 3. Production Orders needing Material Issue (RMT)
       const approvedOrders = formsByFormId("F-PRD-001", "approved");
       const rmtIssues = formsByFormId("F-INV-RMT-001").filter(r => r.data?.transactionType === "Issue");
@@ -1743,6 +1795,28 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
            date: new Date().toISOString()
          });
       }
+    }
+
+    // Packaging & Filling (PKG): batches manufactured but not yet packaged/delivered.
+    if (user.department === "PKG" || user.department === "ALL" || user.level === 1) {
+      const manufacturedBatches = formsByFormId("F-PRD-002", "approved");
+      const packagingDeliveries = formsByFormId("F-PKG-009");
+      manufacturedBatches.forEach(bmr => {
+        const batch = (bmr.data?.batchNumber || "").toString().trim().toLowerCase();
+        if (!batch) return;
+        const packaged = packagingDeliveries.some(pkg =>
+          (pkg.data?.batchNumber || "").toString().trim().toLowerCase() === batch
+        );
+        if (!packaged) {
+          notifications.push({
+            id: `pkg-needs-packaging-${bmr.record_id}`,
+            message: `التشغيلة ${bmr.data?.batchNumber || ''} تم تصنيعها وبانتظار التعبئة والتغليف وتسليمها للمستودع.`,
+            type: "warning",
+            link: "/pkg",
+            date: bmr.created_at
+          });
+        }
+      });
     }
 
     // Quality (QM)

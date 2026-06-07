@@ -80,6 +80,10 @@ import FormLAB005 from './pages/lab/FormLAB005';
 import FormLAB006 from './pages/lab/FormLAB006';
 import FormLAB007 from './pages/lab/FormLAB007';
 
+// PKG (Packaging & Filling) Imports
+import PKGIndex from './pages/pkg/PKGIndex';
+import PackagingFormRenderer from './pages/pkg/PackagingFormRenderer';
+
 export default function App() {
   return (
     <AuthProvider>
@@ -98,6 +102,11 @@ export default function App() {
             <Route path="hr/employee-file" element={<FormHR002 />} />
             <Route path="hr/medical-exam" element={<FormHR003 />} />
             <Route path="hr/view/:recordId" element={<FormViewer />} />
+
+            {/* Packaging & Filling Routes */}
+            <Route path="pkg" element={<PKGIndex />} />
+            <Route path="pkg/form/:formKey" element={<PackagingFormRenderer />} />
+            <Route path="pkg/view/:recordId" element={<FormViewer />} />
 
             {/* Production Routes */}
             <Route path="prd" element={<PRDIndex />} />
