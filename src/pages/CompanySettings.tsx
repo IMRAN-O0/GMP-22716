@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Save } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getJsonHeaders } from "../lib/utils";
+import { getJsonHeaders, getAuthHeaders } from "../lib/utils";
+
+// Reject logos larger than this to avoid hitting the request size limit.
+const MAX_LOGO_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export default function CompanySettings() {
   const { user } = useAuth();
@@ -20,7 +23,7 @@ export default function CompanySettings() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch("/api/company")
+    fetch("/api/company", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => { if (d && d.id) setForm({ name_ar: d.name_ar || "", name_en: d.name_en || "", logo_url: d.logo_url || "", address: d.address || "", phone: d.phone || "", email: d.email || "", license_number: d.license_number || "" }); })
       .catch(console.error);
@@ -29,12 +32,21 @@ export default function CompanySettings() {
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_LOGO_BYTES) {
+      alert("حجم الشعار كبير جداً. يرجى اختيار صورة أصغر من 2 ميجابايت.");
+      e.target.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => setForm((f) => ({ ...f, logo_url: ev.target?.result as string }));
     reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
+    if (!form.name_ar.trim()) {
+      alert("يرجى إدخال اسم الشركة (العربية) قبل الحفظ.");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/company", {
@@ -42,9 +54,17 @@ export default function CompanySettings() {
         headers: getJsonHeaders(),
         body: JSON.stringify(form),
       });
-      if (res.ok) { setSaved(true); setTimeout(() => setSaved(false), 3000); }
-      else { const e = await res.json(); alert("خطأ: " + e.error); }
-    } catch (err) { console.error(err); }
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        const e = await res.json().catch(() => ({ error: "تعذّر حفظ الإعدادات" }));
+        alert("خطأ: " + (e.error || "تعذّر حفظ الإعدادات"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مرة أخرى.");
+    }
     setSaving(false);
   };
 

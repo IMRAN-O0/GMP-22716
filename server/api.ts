@@ -440,7 +440,9 @@ router.get("/company", requireAuth, (req, res) => {
 const companySchema = yup.object({
   name_ar:        yup.string().trim().min(1).max(200).required(),
   name_en:        yup.string().trim().max(200).optional(),
-  logo_url:       yup.string().trim().url().max(500).nullable().optional(),
+  // logo_url may be an uploaded image stored inline as a base64 data URI,
+  // so we can't require a http(s) URL or a small length here.
+  logo_url:       yup.string().trim().max(3_000_000).nullable().optional(),
   address:        yup.string().trim().max(500).optional(),
   phone:          yup.string().trim().max(30).optional(),
   email:          yup.string().trim().email().max(200).nullable().optional(),
