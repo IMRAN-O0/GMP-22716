@@ -4,7 +4,14 @@ import {
   DEPT_PERMISSIONS,
   DEPARTMENT_CODES,
 } from '../src/constants/departments';
-import { PACKAGING_FORMS, getPackagingForm } from '../src/pages/pkg/packagingForms.config';
+import {
+  PACKAGING_FORMS,
+  getPackagingForm,
+  getPackagingFormById,
+  isPackagingFormId,
+  PKG_FIELD_LABELS,
+  PKG_FORM_TITLES,
+} from '../src/pages/pkg/packagingForms.config';
 
 describe('getAccessibleDepartments', () => {
   it('gives level-1 admins access to every department', () => {
@@ -65,5 +72,29 @@ describe('packaging forms config', () => {
   it('can look up a form by its url key', () => {
     expect(getPackagingForm('pack-warehouse-delivery')?.formId).toBe('F-PKG-009');
     expect(getPackagingForm('does-not-exist')).toBeUndefined();
+  });
+});
+
+describe('FormViewer integration helpers', () => {
+  it('recognises packaging form ids', () => {
+    expect(isPackagingFormId('F-FIL-001')).toBe(true);
+    expect(isPackagingFormId('F-PKG-009')).toBe(true);
+    expect(isPackagingFormId('F-FP-001')).toBe(false);
+    expect(isPackagingFormId('')).toBe(false);
+  });
+
+  it('maps every form id to a title and back to its url key', () => {
+    for (const f of PACKAGING_FORMS) {
+      expect(PKG_FORM_TITLES[f.formId]).toBe(f.title);
+      expect(getPackagingFormById(f.formId)?.key).toBe(f.key);
+    }
+  });
+
+  it('builds field labels for header, fields, checklist items and table columns', () => {
+    expect(PKG_FIELD_LABELS.batchNumber).toBe('رقم التشغيلة');
+    // a checklist item label
+    expect(PKG_FIELD_LABELS.noPreviousProduct).toBeTruthy();
+    // a table column label
+    expect(PKG_FIELD_LABELS.netWeight).toBeTruthy();
   });
 });

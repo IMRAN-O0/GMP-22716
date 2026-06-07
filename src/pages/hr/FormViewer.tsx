@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
+import {
+  PKG_FIELD_LABELS,
+  PKG_FORM_TITLES,
+  getPackagingFormById,
+  isPackagingFormId,
+} from "../pkg/packagingForms.config";
 
 const FIELD_LABELS: Record<string, string> = {
   // Common
@@ -497,6 +503,7 @@ const translateValue = (key: string, val: any): string => {
 
 const translateKey = (key: string): string => {
   if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  if (PKG_FIELD_LABELS[key]) return PKG_FIELD_LABELS[key];
   // Convert camelCase to spaced Arabic-friendly fallback
   return key.replace(/([A-Z])/g, " $1").trim();
 };
@@ -655,7 +662,8 @@ export default function FormViewer() {
     "F-LAB-006":       "سجل معايرة المعدات",
     "F-LAB-007":       "طلب صرف مواد للمختبر",
   };
-  const formTitle = FORM_TITLES[record.form_id] || record.form_id;
+  const formTitle =
+    FORM_TITLES[record.form_id] || PKG_FORM_TITLES[record.form_id] || record.form_id;
 
   return (
     <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
@@ -723,7 +731,15 @@ export default function FormViewer() {
           </>)}
 
           {(record.status === "draft" || record.status === "returned") && (
-            <button onClick={() => { const route = formRouteMap[record.form_id]; if (route) navigate(`${route}?edit=${record.record_id}`); }}
+            <button onClick={() => {
+                if (isPackagingFormId(record.form_id)) {
+                  const key = getPackagingFormById(record.form_id)?.key;
+                  if (key) navigate(`/pkg/form/${key}?edit=${record.record_id}`);
+                  return;
+                }
+                const route = formRouteMap[record.form_id];
+                if (route) navigate(`${route}?edit=${record.record_id}`);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold text-[13px]">
               تعديل المسودة
             </button>

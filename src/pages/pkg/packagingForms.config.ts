@@ -519,3 +519,31 @@ export const getPackagingForm = (key: string): PkgFormDef | undefined =>
 
 export const getPackagingFormById = (formId: string): PkgFormDef | undefined =>
   PACKAGING_FORMS.find((f) => f.formId === formId);
+
+export const isPackagingFormId = (formId: string): boolean =>
+  /^F-(FIL|PKG)-/.test(formId || "");
+
+// formId → Arabic title (used by FormViewer for the header).
+export const PKG_FORM_TITLES: Record<string, string> = Object.fromEntries(
+  PACKAGING_FORMS.map((f) => [f.formId, f.title]),
+);
+
+// field/checklist/column name → Arabic label (used by FormViewer's translateKey
+// so viewed records show friendly labels instead of raw camelCase keys).
+export const PKG_FIELD_LABELS: Record<string, string> = (() => {
+  const labels: Record<string, string> = {
+    batchNumber: "رقم التشغيلة",
+    productCode: "كود المنتج",
+    productName: "اسم المنتج",
+    productionOrderNo: "أمر الإنتاج",
+    formDate: "التاريخ",
+  };
+  for (const form of PACKAGING_FORMS) {
+    for (const section of form.sections) {
+      section.fields?.forEach((f) => (labels[f.name] = f.label));
+      section.checklist?.forEach((c) => (labels[c.name] = c.label));
+      section.table?.columns.forEach((col) => (labels[col.name] = col.label));
+    }
+  }
+  return labels;
+})();
