@@ -6,6 +6,7 @@ import {
   extractSupplierCode,
   generateSerialNumber,
   buildBatchNumber,
+  nextSequentialId,
   formatDate,
   cn,
 } from '../src/lib/utils';
@@ -115,5 +116,27 @@ describe('buildBatchNumber', () => {
   it('does not collide across different days', () => {
     const existing = ['CBS20260607'];
     expect(buildBatchNumber('Candy Body Scrub', '2026-06-08', existing)).toBe('CBS20260608');
+  });
+});
+
+describe('nextSequentialId', () => {
+  it('starts at 0001 when none exist', () => {
+    expect(nextSequentialId('HR', [])).toBe('HR-0001');
+  });
+
+  it('increments past the highest existing numeric suffix', () => {
+    expect(nextSequentialId('HR', ['HR-0001', 'HR-0003', 'HR-0002'])).toBe('HR-0004');
+  });
+
+  it('handles non-padded and prefix-only ids, ignoring unrelated ones', () => {
+    expect(nextSequentialId('EMP', ['EMP-101', 'EMP-105', 'HR-0009'], 3)).toBe('EMP-106');
+  });
+
+  it('respects custom zero-padding width', () => {
+    expect(nextSequentialId('EMP', [], 3)).toBe('EMP-001');
+  });
+
+  it('works with multi-segment prefixes', () => {
+    expect(nextSequentialId('TRN-PLN', ['TRN-PLN-0007'])).toBe('TRN-PLN-0008');
   });
 });

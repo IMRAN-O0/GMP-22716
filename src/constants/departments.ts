@@ -138,9 +138,9 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
     {
       category: "الموارد البشرية",
       items: [
-        { id: "F-HR-001", label: "إضافة موظف" },
-        { id: "F-HR-002", label: "تقييم أداء" },
-        { id: "F-HR-003", label: "سجل الإجازات" },
+        { id: "F-HR-001", label: "طلب توظيف" },
+        { id: "F-HR-002", label: "ملف موظف" },
+        { id: "F-HR-003", label: "فحص طبي" },
       ],
     },
   ],
@@ -148,10 +148,10 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
     {
       category: "التدريب",
       items: [
-        { id: "F-TRN-001", label: "خطة التدريب" },
-        { id: "F-TRN-002", label: "سجل حضور" },
-        { id: "F-TRN-003", label: "شهادة اجتياز" },
-        { id: "F-TRN-004", label: "تقييم مدرب" },
+        { id: "F-TRN-001", label: "خطة تدريب" },
+        { id: "F-TRN-002", label: "محضر تدريب" },
+        { id: "F-TRN-003", label: "تقييم تدريب" },
+        { id: "F-TRN-004", label: "اعتماد كفاءة" },
       ],
     },
   ],

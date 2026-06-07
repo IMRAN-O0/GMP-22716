@@ -46,6 +46,30 @@ export const generateSerialNumber = (departmentCode: string, currentCount: numbe
 };
 
 /**
+ * Generate the next sequential record id for a given prefix, based on the ids
+ * already in use. This replaces the old `Math.random()`-based ids, which could
+ * silently collide. e.g. prefix "HR" with ["HR-0001","HR-0003"] → "HR-0004".
+ *
+ * @param prefix      the id prefix (e.g. "HR", "TRN-PLN", "EMP")
+ * @param existingIds ids already issued (numeric suffix is read from each)
+ * @param width       zero-padding width for the numeric part (default 4)
+ */
+export const nextSequentialId = (
+    prefix: string,
+    existingIds: string[] = [],
+    width: number = 4,
+): string => {
+    const escaped = prefix.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const re = new RegExp(`^${escaped}-?(\\d+)$`);
+    let max = 0;
+    for (const id of existingIds) {
+        const m = String(id || '').match(re);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `${prefix}-${String(max + 1).padStart(width, '0')}`;
+};
+
+/**
  * Build a production batch number from a product's English name and a date.
  *
  * Format: <initials><YYYYMMDD>, where the initials are the first letter of

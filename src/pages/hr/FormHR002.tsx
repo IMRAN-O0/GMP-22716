@@ -2,36 +2,63 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Pencil, X } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, getAuthHeaders } from "../../lib/utils";
+import { nextSequentialId, getAuthHeaders } from "../../lib/utils";
+
+const BASE_FORM = {
+  fullNameAr: "", fullNameEn: "", idNumber: "", dob: "", nationality: "",
+  maritalStatus: "أعزب", phone: "", email: "", address: "",
+  employeeNumber: "",
+  joinDate: "", department: "", jobTitle: "", supervisor: "",
+  contractType: "دوام كامل", basicSalary: "", allowances: "",
+};
 
 export default function FormHR002() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<any[]>([]);
+  const [allHrIds, setAllHrIds] = useState<string[]>([]);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [company, setCompany] = useState<any>({});
 
-  const emptyForm = {
-    fullNameAr: "", fullNameEn: "", idNumber: "", dob: "", nationality: "",
-    maritalStatus: "أعزب", phone: "", email: "", address: "",
-    employeeNumber: `EMP-${Math.floor(Math.random() * 900 + 100)}`,
-    joinDate: "", department: "", jobTitle: "", supervisor: "",
-    contractType: "دوام كامل", basicSalary: "", allowances: "",
-  };
-
-  const [formData, setFormData] = useState(emptyForm);
+  const [formData, setFormData] = useState(BASE_FORM);
   const [date] = useState(new Date().toLocaleDateString("ar-EG"));
 
   const h = getAuthHeaders();
 
+  // Next employee number, derived from the employee numbers already in use.
+  const nextEmployeeNumber = (recs: any[]) =>
+    nextSequentialId(
+      "EMP",
+      recs.map((f: any) => f?.data?.employeeNumber).filter(Boolean),
+      3,
+    );
+
   useEffect(() => {
+    const editId = new URLSearchParams(window.location.search).get("edit");
+
+    fetch("/api/company", { headers: h })
+      .then((r) => r.json())
+      .then((d) => setCompany(d || {}))
+      .catch(() => {});
+
     fetch("/api/forms/dept/HR", { headers: h })
       .then(r => r.json())
-      .then(data => setRecords(Array.isArray(data) ? data.filter((f: any) => f.form_id === "F-HR-002") : []))
-      .catch(console.error);
+      .then(data => {
+        const rows = Array.isArray(data) ? data : [];
+        const hr002 = rows.filter((f: any) => f.form_id === "F-HR-002");
+        setRecords(hr002);
+        setAllHrIds(rows.map((f: any) => f.record_id).filter(Boolean));
+        // Pre-fill a fresh employee number only when creating a new file.
+        if (!editId) {
+          setFormData((prev) =>
+            prev.employeeNumber ? prev : { ...prev, employeeNumber: nextEmployeeNumber(hr002) },
+          );
+        }
+      })
+      .catch(() => {});
 
     // Support URL param edit (from HRIndex edit button)
-    const editId = new URLSearchParams(window.location.search).get("edit");
     if (editId) {
       fetch(`/api/forms/record/${editId}`, { headers: h })
         .then(r => r.json())
@@ -41,7 +68,7 @@ export default function FormHR002() {
             setEditingRecordId(editId);
           }
         })
-        .catch(console.error);
+        .catch(() => {});
     }
   }, []);
 
@@ -53,7 +80,7 @@ export default function FormHR002() {
 
   const cancelEdit = () => {
     setEditingRecordId(null);
-    setFormData({ ...emptyForm, employeeNumber: `EMP-${Math.floor(Math.random() * 900 + 100)}` });
+    setFormData({ ...BASE_FORM, employeeNumber: nextEmployeeNumber(records) });
   };
 
   const handleSubmit = async (e: React.FormEvent, status: any) => {
@@ -61,7 +88,7 @@ export default function FormHR002() {
     setLoading(true);
     try {
       const isEdit = editingRecordId !== null;
-      const recordId = isEdit ? editingRecordId! : generateSerialNumber("HR", Math.floor(Math.random() * 1000));
+      const recordId = isEdit ? editingRecordId! : nextSequentialId("HR", allHrIds);
       const payload = { recordId, formId: "F-HR-002", department: "HR", creatorId: user?.id, status, data: formData };
       const res = await fetch(
         isEdit ? `/api/forms/record/${editingRecordId}` : "/api/forms",
@@ -79,7 +106,10 @@ export default function FormHR002() {
         const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
         alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      alert("تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مرة أخرى.");
+    }
     setLoading(false);
   };
 
@@ -87,13 +117,13 @@ export default function FormHR002() {
     <div className="max-w-4xl mx-auto bg-white border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] rounded-2xl overflow-hidden">
       <div className="border-b border-slate-200 p-6 flex justify-between items-center bg-slate-50">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">الشركة الحديثة للتجميل</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{company.name_ar || "نظام الجودة"}</h1>
           <p className="text-sm font-semibold text-slate-500 mt-1">ISO 22716 - GMP</p>
         </div>
         <div className="text-left">
           <h2 className="text-xl font-bold text-slate-800 mb-1">ملف الموظف الشخصي</h2>
           <p className="text-sm font-mono text-slate-500">نموذج: F-HR-002</p>
-          <p className="text-sm font-mono text-slate-500">تاريخ الإصدار: 01-01-2025</p>
+          <p className="text-sm font-mono text-slate-500">تاريخ الإصدار: {date}</p>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, GraduationCap, CheckSquare } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, getJsonHeaders } from "../../lib/utils";
+import { nextSequentialId, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function FormTRN003() {
   const { user } = useAuth();
@@ -11,15 +11,15 @@ export default function FormTRN003() {
   const [employees, setEmployees] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("/api/employees")
+    fetch("/api/employees", { headers: getAuthHeaders() })
       .then((r) => r.json())
-      .then((data) => setEmployees(data))
-      .catch(console.error);
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch(() => {});
   }, []);
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    evalId: generateSerialNumber("TRN-EVAL", Math.floor(Math.random() * 10000)),
+    evalId: "",
     date: new Date().toISOString().split("T")[0],
     employeeId: "",
     employeeName: "",
@@ -69,7 +69,7 @@ export default function FormTRN003() {
         method: fetchMethod,
         headers: getJsonHeaders(),
         body: JSON.stringify({
-          recordId: formData.evalId,
+          recordId: formData.evalId || nextSequentialId("TRN-EVAL", []),
           formId: "F-TRN-003",
           department: "TRN",
           creatorId: user?.id,
@@ -90,22 +90,31 @@ export default function FormTRN003() {
     }
   };
 
-  // --- INJECTED BY PATCH ---
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const editId = params.get("edit");
     if (editId) {
-      fetch(`/api/forms/record/${editId}`)
+      fetch(`/api/forms/record/${editId}`, { headers: getAuthHeaders() })
         .then((r) => r.json())
         .then((data) => {
           if (data && data.data) {
             setFormData((prev) => ({ ...prev, ...data.data }));
           }
         })
-        .catch(console.error);
+        .catch(() => {});
+    } else {
+      fetch("/api/forms/dept/TRN", { headers: getAuthHeaders() })
+        .then((r) => r.json())
+        .then((data) => {
+          const rows = Array.isArray(data) ? data : [];
+          const ids = rows
+            .filter((f: any) => f.form_id === "F-TRN-003")
+            .map((f: any) => f.record_id);
+          setFormData((prev) => ({ ...prev, evalId: nextSequentialId("TRN-EVAL", ids) }));
+        })
+        .catch(() => {});
     }
   }, []);
-  // -------------------------
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
