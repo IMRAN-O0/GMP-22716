@@ -158,6 +158,15 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
         label: f.title,
       })),
     },
+    {
+      category: "التقارير",
+      items: [
+        { id: "pkg_release_ready", label: "تقرير جاهزية الإفراج" },
+        { id: "pkg_reconciliation", label: "تقرير تسوية المواد" },
+        { id: "pkg_batch_log", label: "سجل التعبئة والتغليف للدفعة" },
+        { id: "pkg_downtime", label: "تقرير التوقفات والأعطال" },
+      ],
+    },
   ],
   ALL: [
     {

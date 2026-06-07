@@ -11,7 +11,9 @@ import {
   CheckCircle,
   Printer,
   AlertCircle,
+  Boxes,
 } from "lucide-react";
+import { PKG_FORM_TITLES } from "../pkg/packagingForms.config";
 
 interface TraceRecord {
   record_id: string;
@@ -27,6 +29,7 @@ interface BatchTrace {
   materials: TraceRecord[];
   production: TraceRecord | null;
   operations: TraceRecord[];
+  packaging: TraceRecord[];
   lab: TraceRecord[];
   qm: TraceRecord[];
   release: TraceRecord[];
@@ -106,6 +109,7 @@ export default function ReportBatchTraceability() {
       materials: [],
       production,
       operations: [],
+      packaging: [],
       lab: [],
       qm: [],
       release: [],
@@ -127,6 +131,10 @@ export default function ReportBatchTraceability() {
       }
       if (["F-PRD-002", "F-PRD-003", "F-PRD-004"].includes(r.form_id)) {
         if (byBatch || byProdRef) trace.operations.push(r);
+      }
+      // Packaging & Filling forms (F-FIL-* / F-PKG-*)
+      if (/^F-(FIL|PKG)-/.test(r.form_id)) {
+        if (byBatch || byProdRef) trace.packaging.push(r);
       }
       if (["F-LAB-001","F-LAB-002","F-LAB-003","F-LAB-004","F-LAB-005"].includes(r.form_id)) {
         if (byBatch || byProdRef) trace.lab.push(r);
@@ -174,6 +182,7 @@ export default function ReportBatchTraceability() {
     tracedBatch?.materials.length,
     tracedBatch?.production ? 1 : 0,
     tracedBatch?.operations.length,
+    tracedBatch?.packaging.length,
     tracedBatch?.lab.length,
     tracedBatch?.release.length,
     tracedBatch?.shipment.length,
@@ -344,10 +353,27 @@ export default function ReportBatchTraceability() {
               </TraceSection>
 
               <TraceSection
+                icon={<Boxes className="w-5 h-5 text-rose-600" />}
+                iconBg="bg-rose-50"
+                title="التعبئة والتغليف"
+                step="3"
+                empty="لا توجد نماذج تعبئة أو تغليف مرتبطة"
+              >
+                {tracedBatch.packaging.map((p, i) => (
+                  <TraceRow key={i} label={p.record_id} formLabel={PKG_FORM_TITLES[p.form_id] || FORM_LABELS[p.form_id] || p.form_id}>
+                    <Field k="النتيجة" v={p.data.result || p.data.clearanceResult || p.data.withinTolerance || p.data.quarantineStatus} />
+                    <Field k="الكمية المسلّمة" v={p.data.quantityDelivered} />
+                    <Field k="نفّذ بواسطة" v={p.data.performedBy || p.data.deliveredBy || p.data.receivedBy} />
+                    <Field k="التاريخ" v={fmtDate(p.data.formDate || p.created_at)} />
+                  </TraceRow>
+                ))}
+              </TraceSection>
+
+              <TraceSection
                 icon={<FlaskConical className="w-5 h-5 text-purple-600" />}
                 iconBg="bg-purple-50"
                 title="نتائج المختبر"
-                step="3"
+                step="4"
                 empty="لا توجد تحاليل مختبرية مرتبطة"
               >
                 {tracedBatch.lab.map((l, i) => (
@@ -384,7 +410,7 @@ export default function ReportBatchTraceability() {
                 icon={<CheckCircle className="w-5 h-5 text-teal-600" />}
                 iconBg="bg-teal-50"
                 title="الإفراج عن الدفعة وتخزينها"
-                step="4"
+                step="5"
                 empty="بانتظار قرار الإفراج"
               >
                 {tracedBatch.release.map((r, i) => (
@@ -401,7 +427,7 @@ export default function ReportBatchTraceability() {
                 icon={<Truck className="w-5 h-5 text-emerald-600" />}
                 iconBg="bg-emerald-50"
                 title="الشحن والتوزيع"
-                step="5"
+                step="6"
                 empty="لم يتم شحن هذه الدفعة بعد"
               >
                 {tracedBatch.shipment.map((s, i) => (

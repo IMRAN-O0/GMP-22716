@@ -20,6 +20,8 @@ import {
   ShieldAlert,
   Route,
   Clock,
+  Boxes,
+  Scale,
 } from "lucide-react";
 import ReportBalances from "./reports/ReportBalances";
 import ReportTransactions from "./reports/ReportTransactions";
@@ -45,6 +47,11 @@ import ReportBatchTraceability from "./reports/ReportBatchTraceability";
 import ReportExecutiveDashboard from "./reports/ReportExecutiveDashboard";
 import ReportExpiryWatch from "./reports/ReportExpiryWatch";
 
+import ReportReleaseReadiness from "./reports/ReportReleaseReadiness";
+import ReportPkgReconciliation from "./reports/ReportPkgReconciliation";
+import ReportPkgBatchLog from "./reports/ReportPkgBatchLog";
+import ReportPkgDowntime from "./reports/ReportPkgDowntime";
+
 export default function Reports() {
   const { user } = useAuth();
   const [activeReport, setActiveReport] = useState<string | null>(null);
@@ -63,6 +70,7 @@ export default function Reports() {
     (user.department === "INV" ||
       user.department === "PRD" ||
       user.department === "QM" ||
+      user.department === "PKG" ||
       user.department === "ALL" ||
       Number(user.level) === 1);
   if (!user || !isAuthorized) {
@@ -240,6 +248,38 @@ export default function Reports() {
       desc: "استدعاءات المنتجات وسجل الاسترداد",
       dept: "QM",
     },
+    {
+      id: "pkg_release_ready",
+      title: "تقرير جاهزية الإفراج",
+      icon: <Truck className="w-6 h-6" />,
+      color: "bg-rose-600",
+      desc: "حالة الدفعات: تصنيع ← تغليف ← جاهزة للإفراج ← إفراج",
+      dept: "PKG",
+    },
+    {
+      id: "pkg_reconciliation",
+      title: "تقرير تسوية مواد التعبئة/التغليف",
+      icon: <Scale className="w-6 h-6" />,
+      color: "bg-amber-600",
+      desc: "فروقات المواد لكل دفعة وإبراز التجاوزات",
+      dept: "PKG",
+    },
+    {
+      id: "pkg_batch_log",
+      title: "سجل التعبئة والتغليف للدفعة",
+      icon: <Boxes className="w-6 h-6" />,
+      color: "bg-rose-500",
+      desc: "كل نماذج التعبئة/التغليف لدفعة واحدة",
+      dept: "PKG",
+    },
+    {
+      id: "pkg_downtime",
+      title: "تقرير التوقفات والأعطال",
+      icon: <Clock className="w-6 h-6" />,
+      color: "bg-sky-600",
+      desc: "تحليل توقفات خطوط التعبئة وأسبابها",
+      dept: "PKG",
+    },
   ];
 
   const reportTypes = allReportTypes.filter((rt) => {
@@ -345,6 +385,11 @@ export default function Reports() {
           {activeReport === "qm_env" && <ReportEnvMonitoring />}
           {activeReport === "qm_cal" && <ReportCalibration />}
           {activeReport === "qm_recall" && <ReportRecall />}
+
+          {activeReport === "pkg_release_ready" && <ReportReleaseReadiness />}
+          {activeReport === "pkg_reconciliation" && <ReportPkgReconciliation />}
+          {activeReport === "pkg_batch_log" && <ReportPkgBatchLog />}
+          {activeReport === "pkg_downtime" && <ReportPkgDowntime />}
         </div>
       </div>
     );

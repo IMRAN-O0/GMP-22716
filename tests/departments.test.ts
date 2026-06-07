@@ -63,10 +63,16 @@ describe('packaging forms config', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('exposes a PKG permission group built from the forms', () => {
+  it('exposes a PKG permission group built from the forms plus reports', () => {
     const pkgIds = DEPT_PERMISSIONS.PKG.flatMap((c) => c.items.map((i) => i.id));
-    expect(pkgIds).toContain('F-PKG-009');
-    expect(pkgIds.length).toBe(PACKAGING_FORMS.length);
+    // every form id is present
+    for (const f of PACKAGING_FORMS) expect(pkgIds).toContain(f.formId);
+    // plus the four PKG report permissions
+    expect(pkgIds).toContain('pkg_release_ready');
+    expect(pkgIds).toContain('pkg_reconciliation');
+    expect(pkgIds).toContain('pkg_batch_log');
+    expect(pkgIds).toContain('pkg_downtime');
+    expect(pkgIds.length).toBe(PACKAGING_FORMS.length + 4);
   });
 
   it('can look up a form by its url key', () => {
