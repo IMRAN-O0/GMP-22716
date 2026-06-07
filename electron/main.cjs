@@ -7,6 +7,11 @@ const http   = require('http');
 const fs     = require('fs');
 const crypto = require('crypto');
 
+// Fix "paint stall" on some Windows GPUs/drivers where the renderer stops
+// repainting until forced (typing not showing until a screenshot/resize/focus
+// change). Falling back to software compositing makes painting reliable.
+app.disableHardwareAcceleration();
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PORT    = parseInt(process.env.PORT || '3009', 10);
 const IS_DEV  = !app.isPackaged;
@@ -174,6 +179,7 @@ function createSetupWindow() {
       nodeIntegration:  false,
       contextIsolation: true,
       preload:          path.join(__dirname, 'preload.cjs'),
+      backgroundThrottling: false, // keep painting even when focus briefly leaves
     },
   });
   Menu.setApplicationMenu(null);
@@ -197,6 +203,7 @@ function createWindow(targetUrl) {
       nodeIntegration:  false,
       contextIsolation: true,
       preload:          path.join(__dirname, 'preload.cjs'),
+      backgroundThrottling: false, // keep painting even when focus briefly leaves
     },
   });
 
