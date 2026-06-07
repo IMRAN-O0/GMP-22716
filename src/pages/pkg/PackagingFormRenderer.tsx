@@ -29,13 +29,31 @@ export default function PackagingFormRenderer() {
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Production batches (approved batch records) for linking by batch number.
+  // Production batches (those that already carry a batch number) for linking.
+  // Deduplicated and memoized so the dropdown doesn't rebuild on every keystroke.
   useEffect(() => {
     fetch("/api/forms/dept/PRD", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((rows) => setBatches(Array.isArray(rows) ? rows : []))
       .catch(() => {});
   }, []);
+
+  const batchOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { batchNumber: string; productName: string; productCode: string; productionOrderNo: string }[] = [];
+    for (const b of batches) {
+      const bn = (b.data?.batchNumber || "").toString().trim();
+      if (!bn || seen.has(bn)) continue;
+      seen.add(bn);
+      out.push({
+        batchNumber: bn,
+        productName: b.data?.productName || "",
+        productCode: b.data?.productCode || "",
+        productionOrderNo: b.data?.productionOrderNo || b.record_id || "",
+      });
+    }
+    return out;
+  }, [batches]);
 
   // Generate a fresh record id for new forms, or load an existing record to edit.
   useEffect(() => {
@@ -149,40 +167,57 @@ export default function PackagingFormRenderer() {
         </button>
       </div>
 
-      {/* Shared header — links the form to the batch/product */}
+      {/* Shared header — pick the batch once; product fields fill automatically */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <h3 className="font-bold text-slate-800 mb-4">بيانات التشغيلة والمنتج</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">رقم التشغيلة (Batch) *</label>
-            <input
-              list="pkg-batches"
-              className="w-full border border-slate-300 rounded-lg py-2 px-3 text-sm"
-              value={data.batchNumber}
-              onChange={(e) => {
-                const bn = e.target.value;
-                const match = batches.find((b) => (b.data?.batchNumber || "") === bn);
-                set("batchNumber", bn);
-                if (match) {
-                  set("productCode", match.data?.productCode || data.productCode);
-                  set("productName", match.data?.productName || data.productName);
-                  set("productionOrderNo", match.data?.productionOrderNo || match.record_id);
-                }
-              }}
-            />
-            <datalist id="pkg-batches">
-              {batches.filter((b) => b.data?.batchNumber).map((b) => (
-                <option key={b.record_id} value={b.data.batchNumber}>{b.data?.productName || ""}</option>
-              ))}
-            </datalist>
+            {batchOptions.length > 0 ? (
+              <select
+                className="w-full border border-slate-300 rounded-lg py-2 px-3 text-sm bg-white"
+                value={data.batchNumber}
+                onChange={(e) => {
+                  const bn = e.target.value;
+                  const match = batchOptions.find((b) => b.batchNumber === bn);
+                  setData((p: any) => ({
+                    ...p,
+                    batchNumber: bn,
+                    productCode: match?.productCode || "",
+                    productName: match?.productName || "",
+                    productionOrderNo: match?.productionOrderNo || "",
+                  }));
+                }}
+              >
+                <option value="">— اختر التشغيلة —</option>
+                {batchOptions.map((b) => (
+                  <option key={b.batchNumber} value={b.batchNumber}>
+                    {b.batchNumber}{b.productName ? ` — ${b.productName}` : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Fallback: no production batches found yet — allow manual entry.
+              <input
+                className="w-full border border-slate-300 rounded-lg py-2 px-3 text-sm"
+                value={data.batchNumber}
+                onChange={(e) => set("batchNumber", e.target.value)}
+                placeholder="أدخل رقم التشغيلة"
+              />
+            )}
+            <p className="text-[11px] text-slate-400 mt-1">تُملأ بيانات المنتج تلقائياً عند اختيار التشغيلة.</p>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">كود المنتج</label>
-            <input className="w-full border border-slate-300 rounded-lg py-2 px-3 text-sm" value={data.productCode} onChange={(e) => set("productCode", e.target.value)} />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">كود المنتج (تلقائي)</label>
+            <input readOnly className="w-full border border-slate-200 bg-slate-50 text-slate-600 rounded-lg py-2 px-3 text-sm" value={data.productCode} />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1">اسم المنتج</label>
-            <input className="w-full border border-slate-300 rounded-lg py-2 px-3 text-sm" value={data.productName} onChange={(e) => set("productName", e.target.value)} />
+            <label className="block text-sm font-semibold text-slate-700 mb-1">اسم المنتج (تلقائي)</label>
+            <input readOnly className="w-full border border-slate-200 bg-slate-50 text-slate-600 rounded-lg py-2 px-3 text-sm" value={data.productName} />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">أمر الإنتاج (تلقائي)</label>
+            <input readOnly className="w-full border border-slate-200 bg-slate-50 text-slate-600 rounded-lg py-2 px-3 text-sm" value={data.productionOrderNo} />
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">التاريخ</label>
