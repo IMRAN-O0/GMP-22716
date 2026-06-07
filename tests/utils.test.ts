@@ -5,6 +5,7 @@ import {
   formatBOMCode,
   extractSupplierCode,
   generateSerialNumber,
+  buildBatchNumber,
   formatDate,
   cn,
 } from '../src/lib/utils';
@@ -84,5 +85,35 @@ describe('cn', () => {
   it('merges class names and de-duplicates tailwind conflicts', () => {
     expect(cn('p-2', 'p-4')).toBe('p-4');
     expect(cn('text-sm', false && 'hidden', 'font-bold')).toBe('text-sm font-bold');
+  });
+});
+
+describe('buildBatchNumber', () => {
+  it('takes the first letter of each word + YYYYMMDD', () => {
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07')).toBe('CBS20260607');
+  });
+
+  it('uppercases and handles 2-word and 4-word names', () => {
+    expect(buildBatchNumber('aloe gel', '2026-06-07')).toBe('AG20260607');
+    expect(buildBatchNumber('Deep Sea Mud Mask', '2026-06-07')).toBe('DSMM20260607');
+  });
+
+  it('ignores extra whitespace and punctuation when taking initials', () => {
+    expect(buildBatchNumber('  Candy   Body  Scrub ', '2026-06-07')).toBe('CBS20260607');
+    expect(buildBatchNumber('Vitamin-C Serum', '2026-06-07')).toBe('VS20260607');
+  });
+
+  it('appends F, then F2, F3 on collisions', () => {
+    const existing = ['CBS20260607'];
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07', existing)).toBe('CBS20260607F');
+    existing.push('CBS20260607F');
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07', existing)).toBe('CBS20260607F2');
+    existing.push('CBS20260607F2');
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07', existing)).toBe('CBS20260607F3');
+  });
+
+  it('does not collide across different days', () => {
+    const existing = ['CBS20260607'];
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-08', existing)).toBe('CBS20260608');
   });
 });

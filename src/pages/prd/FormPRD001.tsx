@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, formatMaterialCode, formatProductCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
+import { generateSerialNumber, buildBatchNumber, formatMaterialCode, formatProductCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 
 export default function FormPRD001() {
@@ -14,9 +14,10 @@ export default function FormPRD001() {
   const [productionOrderNo, setProductionOrderNo] = useState(() =>
     generateSerialNumber("PO", Math.floor(Math.random() * 10000)),
   );
-  const [batchNumber, setBatchNumber] = useState(() =>
-    generateSerialNumber("BAT", Math.floor(Math.random() * 10000)),
-  );
+  // Batch number is derived from the selected product's English name + date,
+  // so it starts empty and is filled once a product is chosen.
+  const [batchNumber, setBatchNumber] = useState("");
+  const [existingBatches, setExistingBatches] = useState<string[]>([]);
   const [sysDate] = useState(new Date().toLocaleDateString("ar-EG"));
 
   const [inventoryMaterials, setInventoryMaterials] = useState<any[]>([]);
@@ -58,6 +59,13 @@ export default function FormPRD001() {
             (f: any) => f.form_id === "F-INV-BOM" && f.status === "approved",
           ),
         );
+        // Collect batch numbers already issued by production orders, for
+        // collision handling when generating a new batch number.
+        setExistingBatches(
+          rows
+            .filter((f: any) => f.form_id === "F-PRD-001" && f.data?.batchNumber)
+            .map((f: any) => String(f.data.batchNumber)),
+        );
       })
       .catch(console.error);
 
@@ -96,6 +104,29 @@ export default function FormPRD001() {
     }[],
     productionManagerName: "",
   });
+
+  // Selected finished product (if any) and whether it lacks an English name.
+  const selectedProduct = products.find((p: any) => p.code === formData.itemNumber);
+  const productMissingEn = !!selectedProduct && !(selectedProduct.name_en || "").trim();
+
+  // Regenerate the batch number whenever the chosen product or the issue date
+  // changes. Skipped in edit mode so a saved order keeps its original batch.
+  useEffect(() => {
+    const editId = new URLSearchParams(window.location.search).get("edit");
+    if (editId) return;
+    if (!selectedProduct || productMissingEn) {
+      setFormData((prev) => (prev.batchNumber ? { ...prev, batchNumber: "" } : prev));
+      return;
+    }
+    const next = buildBatchNumber(
+      selectedProduct.name_en,
+      formData.issueDate,
+      existingBatches,
+    );
+    setFormData((prev) =>
+      prev.batchNumber === next ? prev : { ...prev, batchNumber: next },
+    );
+  }, [formData.itemNumber, formData.issueDate, selectedProduct, productMissingEn, existingBatches]);
 
   const addRawMaterial = () => {
     setFormData((prev) => ({
@@ -200,6 +231,18 @@ export default function FormPRD001() {
 
   const handleSubmit = async (e: React.FormEvent, status: any) => {
     e.preventDefault();
+
+    if (productMissingEn) {
+      alert(
+        "هذا المنتج لا يملك اسماً إنجليزياً، وهو مطلوب لتوليد رقم الدفعة.\n" +
+          "يرجى تحديث «الاسم بالإنجليزية» للمنتج من شاشة المنتجات النهائية ثم إعادة المحاولة.",
+      );
+      return;
+    }
+    if (status !== "draft" && !formData.batchNumber) {
+      alert("لم يتم توليد رقم الدفعة. تأكد من اختيار منتج نهائي صالح يحمل اسماً إنجليزياً.");
+      return;
+    }
 
     if (status !== "draft") {
       const insufficientMaterials = [];
@@ -384,8 +427,15 @@ export default function FormPRD001() {
               readOnly
               disabled
               value={formData.batchNumber}
+              placeholder="يُولَّد تلقائياً بعد اختيار المنتج…"
               className="w-full border-slate-200 bg-slate-50 rounded-lg shadow-sm text-sm py-2 text-slate-500 font-mono"
             />
+            {productMissingEn && (
+              <p className="text-[11px] text-rose-600 mt-1">
+                هذا المنتج لا يملك اسماً إنجليزياً — لا يمكن توليد رقم الدفعة.
+                يرجى إضافة «الاسم بالإنجليزية» من شاشة المنتجات النهائية أولاً.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">
