@@ -31,6 +31,18 @@ import { getAuthHeaders } from "../../lib/utils";
 export default function QMIndex() {
   const [records, setRecords] = useState<any[]>([]);
 
+  // QM forms that support continuing/editing from their own route via ?edit=
+  const editRouteByForm: Record<string, string> = {
+    "F-CLN-001": "/qm/cln-001",
+    "F-PRM-001": "/qm/prm-001",
+    "F-PRM-002": "/qm/prm-002",
+    "F-PRM-003": "/qm/prm-003",
+    "F-PRM-004": "/qm/prm-004",
+    "F-PRM-005": "/qm/prm-005",
+    "F-EQP-001": "/qm/eqp-001",
+    "F-MNT-001": "/qm/mnt-001",
+  };
+
   useEffect(() => {
     fetch("/api/forms/dept/QM", { headers: getAuthHeaders() })
       .then((res) => res.json())
@@ -396,13 +408,13 @@ export default function QMIndex() {
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center gap-2 justify-center">
-                          {r.form_id === "F-EQP-001" && (
+                          {editRouteByForm[r.form_id] && (
                             <Link
-                              to={`/qm/eqp-001?edit=${r.record_id}`}
+                              to={`${editRouteByForm[r.form_id]}?edit=${r.record_id}`}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold rounded-lg text-xs border border-amber-200 transition-colors"
                             >
                               <Pencil className="w-3 h-3" />
-                              تعديل
+                              {r.status === "draft" ? "إكمال" : "تعديل"}
                             </Link>
                           )}
                           <Link

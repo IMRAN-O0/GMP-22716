@@ -1905,7 +1905,10 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
       if (dept === "ALL") return "/";
       if (dept === "QA" || dept === "QC" || dept === "ENG") return "/qm";
       if (dept === "R&D") return "/lab";
-      return `/${dept.toLowerCase()}`;
+      // Only departments with a real index route are safe to deep-link to;
+      // anything else falls back to the dashboard to avoid a dead route.
+      const routed = new Set(["HR", "TRN", "PRD", "LAB", "INV", "QM", "PKG"]);
+      return routed.has(dept) ? `/${dept.toLowerCase()}` : "/";
     };
 
     if (myDrafts.length > 0) {
