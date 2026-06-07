@@ -62,6 +62,7 @@ import FormPRM004 from './pages/qm/FormPRM004';
 import FormPRM005 from './pages/qm/FormPRM005';
 import FormEQP001 from './pages/qm/FormEQP001';
 import FormMNT001 from './pages/qm/FormMNT001';
+import FormCLN001 from './pages/qm/FormCLN001';
 
 // TRN (Training) Imports
 import TRNIndex from './pages/trn/TRNIndex';
@@ -156,6 +157,7 @@ export default function App() {
             <Route path="qm/prm-005" element={<FormPRM005 />} />
             <Route path="qm/eqp-001" element={<FormEQP001 />} />
             <Route path="qm/mnt-001" element={<FormMNT001 />} />
+            <Route path="qm/cln-001" element={<FormCLN001 />} />
             {/* Make sure we can view QM records using the same viewer */}
             <Route path="qm/view/:recordId" element={<FormViewer />} />
 

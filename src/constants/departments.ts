@@ -91,6 +91,19 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
       ],
     },
     {
+      category: "النظافة والمرافق والصيانة",
+      items: [
+        { id: "F-CLN-001", label: "سجل التنظيف الأسبوعي" },
+        { id: "F-PRM-001", label: "تفتيش المباني والمرافق" },
+        { id: "F-PRM-002", label: "مراقبة الحرارة والرطوبة" },
+        { id: "F-PRM-003", label: "فحص أنظمة الإضاءة" },
+        { id: "F-PRM-004", label: "مراقبة جودة الهواء" },
+        { id: "F-PRM-005", label: "فحص أنظمة الصرف" },
+        { id: "F-EQP-001", label: "سجلات وفحوصات المعدات" },
+        { id: "F-MNT-001", label: "خطط وسجلات الصيانة" },
+      ],
+    },
+    {
       category: "التقارير",
       items: [
         { id: "qm_ncr", label: "تقرير عدم المطابقة NCR" },

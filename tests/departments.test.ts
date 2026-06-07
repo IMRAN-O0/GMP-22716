@@ -13,6 +13,24 @@ import {
   PKG_FORM_TITLES,
 } from '../src/pages/pkg/packagingForms.config';
 
+describe('QM permissions include cleaning, premises & maintenance forms', () => {
+  it('exposes F-CLN-001 and the premises/maintenance forms in the QM group', () => {
+    const qmIds = DEPT_PERMISSIONS.QM.flatMap((c) => c.items.map((i) => i.id));
+    for (const id of [
+      'F-CLN-001',
+      'F-PRM-001',
+      'F-PRM-002',
+      'F-PRM-003',
+      'F-PRM-004',
+      'F-PRM-005',
+      'F-EQP-001',
+      'F-MNT-001',
+    ]) {
+      expect(qmIds).toContain(id);
+    }
+  });
+});
+
 describe('getAccessibleDepartments', () => {
   it('gives level-1 admins access to every department', () => {
     const depts = getAccessibleDepartments({ level: 1, department: 'INV' });

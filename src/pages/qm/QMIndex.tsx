@@ -23,6 +23,7 @@ import {
   Wrench,
   FileBarChart2,
   Pencil,
+  Sparkles,
 } from "lucide-react";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
 import { getAuthHeaders } from "../../lib/utils";
@@ -230,6 +231,30 @@ export default function QMIndex() {
             <h4 className="font-bold text-slate-800">F-RCL-001</h4>
             <p className="text-sm text-slate-500 mt-1">
               قرارات وخطط وتقارير السحب
+            </p>
+          </Link>
+        </div>
+      </section>
+
+      {/* Sanitation & Cleaning */}
+      <section>
+        <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+          <Sparkles className="w-6 h-6 text-cyan-500" />
+          <h2 className="text-xl font-bold text-slate-800">
+            النظافة والتطهير (Sanitation)
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Link
+            to="/qm/cln-001"
+            className="bg-white border border-cyan-200 bg-cyan-50/40 rounded-xl p-6 hover:shadow-md hover:border-cyan-400 transition-all flex flex-col items-center group text-center"
+          >
+            <div className="w-12 h-12 bg-cyan-100 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <Sparkles className="text-cyan-600 w-6 h-6" />
+            </div>
+            <h4 className="font-bold text-slate-800">F-CLN-001</h4>
+            <p className="text-sm text-slate-500 mt-1 font-semibold text-cyan-700">
+              سجل التنظيف الأسبوعي للمرافق
             </p>
           </Link>
         </div>
