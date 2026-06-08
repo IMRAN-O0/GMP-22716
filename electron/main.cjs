@@ -307,7 +307,15 @@ ipcMain.handle('print-preview', async () => {
     const data = await mainWindow.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',
-      margins: { marginType: 'default' },
+      margins: { marginType: 'custom', top: 0.4, bottom: 0.6, left: 0.3, right: 0.3 },
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate:
+        '<div style="width:100%;font-size:8px;color:#888;padding:0 8mm;' +
+        'display:flex;justify-content:space-between;direction:rtl;">' +
+        '<span>Awal Helm GMP</span>' +
+        '<span>صفحة <span class="pageNumber"></span> من <span class="totalPages"></span></span>' +
+        '</div>',
     });
     const dir = path.join(app.getPath('temp'), 'awal-helm-gmp');
     fs.mkdirSync(dir, { recursive: true });

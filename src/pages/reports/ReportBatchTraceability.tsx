@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { getAuthHeaders } from "../../lib/utils";
+import ReportPrintHeader from "../../components/ReportPrintHeader";
 import {
   Route,
   Search,
@@ -73,20 +74,14 @@ export default function ReportBatchTraceability() {
   const [allRecords, setAllRecords] = useState<TraceRecord[]>([]);
   const [searchBatch, setSearchBatch] = useState("");
   const [tracedBatch, setTracedBatch] = useState<BatchTrace | null>(null);
-  const [company, setCompany] = useState<any>({});
   const [loadingData, setLoadingData] = useState(true);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const headers = getAuthHeaders();
-    Promise.all([
-      fetch("/api/reports/all", { headers }).then((r) => r.json()),
-      fetch("/api/company", { headers }).then((r) => r.json()),
-    ])
-      .then(([records, comp]) => {
-        setAllRecords(Array.isArray(records) ? records : []);
-        setCompany(comp || {});
-      })
+    fetch("/api/reports/all", { headers })
+      .then((r) => r.json())
+      .then((records) => setAllRecords(Array.isArray(records) ? records : []))
       .catch(console.error)
       .finally(() => setLoadingData(false));
   }, []);
@@ -267,24 +262,11 @@ export default function ReportBatchTraceability() {
         {/* Trace result */}
         {tracedBatch ? (
           <div id="batch-print-area" ref={printRef}>
-            {/* Print header */}
-            <div className="hidden print:block mb-6 border-b-2 border-slate-300 pb-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  {company.logo && (
-                    <img src={company.logo} alt="logo" className="h-14 mb-1 object-contain" />
-                  )}
-                  <div className="font-bold text-lg text-slate-900">{company.name_ar || "الشركة"}</div>
-                  <div className="text-sm text-slate-500">{company.name_en}</div>
-                </div>
-                <div className="text-left ltr text-sm text-slate-600 space-y-0.5">
-                  <div className="font-bold text-base text-slate-900">تقرير تتبع الدفعة</div>
-                  <div>رقم الدفعة: <strong>{tracedBatch.batch}</strong></div>
-                  <div>تاريخ التقرير: {new Date().toLocaleDateString("ar-SA")}</div>
-                  <div>رقم الترخيص: {company.license_number || "—"}</div>
-                </div>
-              </div>
-            </div>
+            {/* Unified print header (shows company logo, name & license). */}
+            <ReportPrintHeader
+              title="تقرير تتبع الدفعة الكامل"
+              subtitle={`رقم الدفعة: ${tracedBatch.batch}`}
+            />
 
             {/* Screen title */}
             <div className="print:hidden bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
