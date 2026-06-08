@@ -2,7 +2,7 @@ import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   Building2, Users, FileText, Settings, LogOut,
-  LayoutDashboard, Archive, BarChart3, Package, Beaker, BookOpen, Boxes
+  LayoutDashboard, Archive, BarChart3, Package, Beaker, Boxes
 } from 'lucide-react';
 import { getAccessibleDepartments } from '../constants/departments';
 
@@ -20,12 +20,14 @@ export default function Layout() {
       if (user.level === 1 || user.department === 'ALL') return true;
       if (path === '/' || path === '/reports' || path === '/archive') return true;
 
-      const deptCode = path.split('/')[1]?.toUpperCase();
-      if (!deptCode || deptCode === '') return true;
+      const raw = path.split('/')[1]?.toUpperCase();
+      if (!raw || raw === '') return true;
+      // HR & Training were merged into a single "HRT" department.
+      const deptCode = raw === 'HR' || raw === 'TRN' ? 'HRT' : raw;
 
       // Department sections — accessible if it's the user's department OR they
       // hold any permission within it (supports working across departments).
-      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(deptCode)) {
+      if (['HRT', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(deptCode)) {
           return accessibleDepts.has(deptCode);
       }
       return true;
@@ -48,8 +50,7 @@ export default function Layout() {
 
   const navItems = [
     { title: 'الرئيسية', path: '/', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { title: 'الموارد البشرية (HR)', path: '/hr', icon: <Users className="w-5 h-5" /> },
-    { title: 'التدريب (TRN)', path: '/trn', icon: <BookOpen className="w-5 h-5" /> },
+    { title: 'الموارد البشرية والتدريب (HRT)', path: '/hr', icon: <Users className="w-5 h-5" /> },
     { title: 'الإنتاج (PRD)', path: '/prd', icon: <Building2 className="w-5 h-5" /> },
     { title: 'المختبر (LAB)', path: '/lab', icon: <Beaker className="w-5 h-5" /> },
     { title: 'المخزون (INV)', path: '/inv', icon: <Package className="w-5 h-5" /> },
@@ -66,10 +67,11 @@ export default function Layout() {
   }
 
   const filteredNavItems = navItems.filter(item => {
-      const code = item.path.split('/')[1]?.toUpperCase();
-      if (!code) return true;
+      const raw = item.path.split('/')[1]?.toUpperCase();
+      if (!raw) return true;
       if (user.level === 1 || user.department === 'ALL') return true;
-      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(code)) {
+      const code = raw === 'HR' || raw === 'TRN' ? 'HRT' : raw;
+      if (['HRT', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(code)) {
           return accessibleDepts.has(code);
       }
       return true;

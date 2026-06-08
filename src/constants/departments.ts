@@ -16,7 +16,8 @@ export interface PermCategory {
 }
 
 // Department codes that map to a sidebar section / index page.
-export const DEPARTMENT_CODES = ["HR", "TRN", "PRD", "LAB", "INV", "QM", "PKG"] as const;
+// HR + Training were merged into a single department: "HRT".
+export const DEPARTMENT_CODES = ["HRT", "PRD", "LAB", "INV", "QM", "PKG"] as const;
 
 export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
   INV: [
@@ -134,23 +135,32 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
       items: [{ id: "expiry_watch", label: "تقرير انتهاء الصلاحية" }],
     },
   ],
-  HR: [
+  // Merged Human Resources + Training department.
+  HRT: [
     {
-      category: "الموارد البشرية",
+      category: "التوظيف والتهيئة",
       items: [
-        { id: "F-HR-001", label: "طلب توظيف" },
-        { id: "F-HR-002", label: "ملف موظف" },
+        { id: "F-HR-001", label: "طلب احتياج وظيفي" },
         { id: "F-HR-003", label: "فحص طبي" },
+        { id: "F-HRT-005", label: "خطة تهيئة موظف جديد" },
       ],
     },
-  ],
-  TRN: [
     {
-      category: "التدريب",
+      category: "شؤون الموظفين والعمليات",
       items: [
-        { id: "F-TRN-001", label: "خطة تدريب" },
-        { id: "F-TRN-002", label: "محضر تدريب" },
-        { id: "F-TRN-003", label: "تقييم تدريب" },
+        { id: "F-HR-002", label: "ملف موظف" },
+        { id: "F-HRT-001", label: "إقرار الالتزام بالسلامة و GMP" },
+        { id: "F-HRT-002", label: "طلب إجازة" },
+        { id: "F-HRT-003", label: "تسليم واستلام عُهدة" },
+      ],
+    },
+    {
+      category: "التدريب والتطوير",
+      items: [
+        { id: "F-HRT-004", label: "حصر الاحتياجات التدريبية (TNA)" },
+        { id: "F-TRN-001", label: "خطة التدريب السنوية" },
+        { id: "F-TRN-002", label: "سجل التدريب الفردي" },
+        { id: "F-TRN-003", label: "تقييم فعالية التدريب" },
         { id: "F-TRN-004", label: "اعتماد كفاءة" },
       ],
     },
@@ -195,8 +205,7 @@ export const USER_DEPARTMENT_OPTIONS = [
   "PRD",
   "QM",
   "LAB",
-  "HR",
-  "TRN",
+  "HRT",
   "PKG",
   "SLA",
   "ALL",

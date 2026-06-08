@@ -35,7 +35,7 @@ export default function FormHR003() {
       .then((r) => r.json())
       .then((d) => setCompany(d || {}))
       .catch(() => {});
-    fetch("/api/forms/dept/HR", { headers: getAuthHeaders() })
+    fetch("/api/forms/dept/HRT", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data) => {
         const rows = Array.isArray(data) ? data : [];
@@ -74,7 +74,7 @@ export default function FormHR003() {
     const payload = {
       recordId,
       formId: "F-HR-003",
-      department: "HR",
+      department: "HRT",
       creatorId: user?.id,
       status,
       data: formData,

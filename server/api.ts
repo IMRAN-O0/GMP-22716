@@ -1332,6 +1332,28 @@ const FORM_REQUIRED_FIELDS: Record<string, { field: string; label: string }[]> =
     { field: "issueDate",             label: "تاريخ الإصدار" },
     { field: "expiryDate",            label: "تاريخ الانتهاء" },
   ],
+  // ── Merged HR + Training (HRT) new forms ──
+  "F-HRT-001": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "pledgeDate",            label: "تاريخ الإقرار" },
+  ],
+  "F-HRT-002": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "leaveType",             label: "نوع الإجازة" },
+    { field: "startDate",             label: "تاريخ بداية الإجازة" },
+    { field: "endDate",               label: "تاريخ نهاية الإجازة" },
+  ],
+  "F-HRT-003": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "date",                  label: "التاريخ" },
+  ],
+  "F-HRT-004": [
+    { field: "department",            label: "القسم" },
+  ],
+  "F-HRT-005": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "joinDate",              label: "تاريخ الالتحاق" },
+  ],
 };
 
 const validateFormData = (formId: string, data: any): string[] => {
@@ -1876,13 +1898,13 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
        });
     }
 
-    // Training (TRN)
-    if (user.department === "TRN" || user.department === "ALL" || user.level === 1) {
+    // Human Resources & Training (merged: HRT)
+    if (user.department === "HRT" || user.department === "ALL" || user.level === 1) {
        const newEmployees = formsByFormId("F-HR-002").filter(r => r.status === "approved");
        const trainingPlans = formsByFormId("F-TRN-002");
-       
+
        newEmployees.forEach(emp => {
-         // Check if a training plan exists for this employee 
+         // Check if a training plan exists for this employee
          // Assuming the employee name or ID is linked. We'll use referenceDocument or employee ID
          const hasPlan = trainingPlans.some(plan =>
            plan.data?.employeeId === emp.record_id ||
@@ -1894,7 +1916,7 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
               id: `trn-missing-plan-${emp.record_id}`,
               message: `الموظف الجديد (${emp.data?.fullNameAr || emp.record_id}) يحتاج إلى خطة تدريب وإدراج في السجلات.`,
               type: "info",
-              link: "/trn",
+              link: "/hr",
               date: emp.created_at
             });
          }
@@ -1907,9 +1929,11 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
       if (dept === "ALL") return "/";
       if (dept === "QA" || dept === "QC" || dept === "ENG") return "/qm";
       if (dept === "R&D") return "/lab";
+      // Merged HR + Training department uses the /hr hub.
+      if (dept === "HRT" || dept === "HR" || dept === "TRN") return "/hr";
       // Only departments with a real index route are safe to deep-link to;
       // anything else falls back to the dashboard to avoid a dead route.
-      const routed = new Set(["HR", "TRN", "PRD", "LAB", "INV", "QM", "PKG"]);
+      const routed = new Set(["PRD", "LAB", "INV", "QM", "PKG"]);
       return routed.has(dept) ? `/${dept.toLowerCase()}` : "/";
     };
 

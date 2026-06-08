@@ -12,6 +12,11 @@ import HRIndex from './pages/hr/HRIndex';
 import FormHR001 from './pages/hr/FormHR001';
 import FormHR002 from './pages/hr/FormHR002';
 import FormHR003 from './pages/hr/FormHR003';
+import FormHRT001 from './pages/hr/FormHRT001';
+import FormHRT002 from './pages/hr/FormHRT002';
+import FormHRT003 from './pages/hr/FormHRT003';
+import FormHRT004 from './pages/hr/FormHRT004';
+import FormHRT005 from './pages/hr/FormHRT005';
 import FormViewer from './pages/hr/FormViewer';
 import UsersManagement from './pages/UsersManagement';
 import AuditLog from './pages/AuditLog';
@@ -64,8 +69,7 @@ import FormEQP001 from './pages/qm/FormEQP001';
 import FormMNT001 from './pages/qm/FormMNT001';
 import FormCLN001 from './pages/qm/FormCLN001';
 
-// TRN (Training) Imports
-import TRNIndex from './pages/trn/TRNIndex';
+// TRN (Training) form imports — department merged into HRT, hub at /hr
 import FormTRN001 from './pages/trn/FormTRN001';
 import FormTRN002 from './pages/trn/FormTRN002';
 import FormTRN003 from './pages/trn/FormTRN003';
@@ -98,10 +102,16 @@ export default function App() {
             <Route path="settings" element={<CompanySettings />} />
             <Route path="reports" element={<Reports />} />
             <Route path="archive" element={<ArchivePage />} />
+            {/* Human Resources & Training (merged: HRT) */}
             <Route path="hr" element={<HRIndex />} />
             <Route path="hr/new-request" element={<FormHR001 />} />
             <Route path="hr/employee-file" element={<FormHR002 />} />
             <Route path="hr/medical-exam" element={<FormHR003 />} />
+            <Route path="hr/safety-pledge" element={<FormHRT001 />} />
+            <Route path="hr/leave-request" element={<FormHRT002 />} />
+            <Route path="hr/custody-handover" element={<FormHRT003 />} />
+            <Route path="hr/training-needs" element={<FormHRT004 />} />
+            <Route path="hr/onboarding" element={<FormHRT005 />} />
             <Route path="hr/view/:recordId" element={<FormViewer />} />
 
             {/* Packaging & Filling Routes */}
@@ -161,8 +171,8 @@ export default function App() {
             {/* Make sure we can view QM records using the same viewer */}
             <Route path="qm/view/:recordId" element={<FormViewer />} />
 
-            {/* Training Routes */}
-            <Route path="trn" element={<TRNIndex />} />
+            {/* Training Routes (department merged into HRT; hub redirects to /hr) */}
+            <Route path="trn" element={<Navigate to="/hr" replace />} />
             <Route path="trn/trn-001" element={<FormTRN001 />} />
             <Route path="trn/trn-002" element={<FormTRN002 />} />
             <Route path="trn/trn-003" element={<FormTRN003 />} />

@@ -42,7 +42,7 @@ export default function FormHR002() {
       .then((d) => setCompany(d || {}))
       .catch(() => {});
 
-    fetch("/api/forms/dept/HR", { headers: h })
+    fetch("/api/forms/dept/HRT", { headers: h })
       .then(r => r.json())
       .then(data => {
         const rows = Array.isArray(data) ? data : [];
@@ -89,7 +89,7 @@ export default function FormHR002() {
     try {
       const isEdit = editingRecordId !== null;
       const recordId = isEdit ? editingRecordId! : nextSequentialId("HR", allHrIds);
-      const payload = { recordId, formId: "F-HR-002", department: "HR", creatorId: user?.id, status, data: formData };
+      const payload = { recordId, formId: "F-HR-002", department: "HRT", creatorId: user?.id, status, data: formData };
       const res = await fetch(
         isEdit ? `/api/forms/record/${editingRecordId}` : "/api/forms",
         { method: isEdit ? "PUT" : "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify(payload) }

@@ -1,55 +1,58 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, Calendar, FileText } from "lucide-react";
+import { Save, Boxes, FileText } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { nextSequentialId, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
-export default function FormTRN001() {
+export default function FormHRT003() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    planId: "",
-    year: new Date().getFullYear().toString(),
+    custodyId: "",
+    employeeName: "",
+    employeeId: "",
     department: "",
-    trainingCourses: [] as {
-      courseName: string;
-      targetAudience: string;
-      schedule: string;
-      provider: string;
-    }[],
-    preparedBy: user?.name || "",
+    handoverType: "تسليم",
     date: new Date().toISOString().split("T")[0],
+    items: [] as {
+      itemName: string;
+      serialNo: string;
+      quantity: string;
+      itemCondition: string;
+    }[],
+    notes: "",
+    preparedBy: user?.name || "",
     status: "Draft",
   });
 
-  const [courseInput, setCourseInput] = useState({
-    courseName: "",
-    targetAudience: "",
-    schedule: "",
-    provider: "",
+  const [itemInput, setItemInput] = useState({
+    itemName: "",
+    serialNo: "",
+    quantity: "",
+    itemCondition: "",
   });
 
-  const addCourse = () => {
-    if (courseInput.courseName && courseInput.targetAudience) {
+  const addItem = () => {
+    if (itemInput.itemName && itemInput.quantity) {
       setFormData((prev) => ({
         ...prev,
-        trainingCourses: [...prev.trainingCourses, courseInput],
+        items: [...prev.items, itemInput],
       }));
-      setCourseInput({
-        courseName: "",
-        targetAudience: "",
-        schedule: "",
-        provider: "",
+      setItemInput({
+        itemName: "",
+        serialNo: "",
+        quantity: "",
+        itemCondition: "",
       });
     }
   };
 
-  const removeCourse = (index: number) => {
+  const removeItem = (index: number) => {
     setFormData((prev) => ({
       ...prev,
-      trainingCourses: prev.trainingCourses.filter((_, i) => i !== index),
+      items: prev.items.filter((_, i) => i !== index),
     }));
   };
 
@@ -67,8 +70,8 @@ export default function FormTRN001() {
         method: fetchMethod,
         headers: getJsonHeaders(),
         body: JSON.stringify({
-          recordId: formData.planId || nextSequentialId("TRN-PLN", []),
-          formId: "F-TRN-001",
+          recordId: formData.custodyId || nextSequentialId("HRT-CUS", []),
+          formId: "F-HRT-003",
           department: "HRT",
           creatorId: user?.id,
           status: status,
@@ -101,15 +104,17 @@ export default function FormTRN001() {
         })
         .catch(() => {});
     } else {
-      // Issue the next sequential plan id (avoids random collisions).
       fetch("/api/forms/dept/HRT", { headers: getAuthHeaders() })
         .then((r) => r.json())
         .then((data) => {
           const rows = Array.isArray(data) ? data : [];
           const ids = rows
-            .filter((f: any) => f.form_id === "F-TRN-001")
+            .filter((f: any) => f.form_id === "F-HRT-003")
             .map((f: any) => f.record_id);
-          setFormData((prev) => ({ ...prev, planId: nextSequentialId("TRN-PLN", ids) }));
+          setFormData((prev) => ({
+            ...prev,
+            custodyId: nextSequentialId("HRT-CUS", ids),
+          }));
         })
         .catch(() => {});
     }
@@ -119,14 +124,14 @@ export default function FormTRN001() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3 mb-6 bg-white p-4 rounded-xl border border-sky-200 shadow-sm border-r-4 border-r-sky-500">
         <div className="p-3 bg-sky-50 rounded-lg text-sky-600">
-          <Calendar className="w-8 h-8" />
+          <Boxes className="w-8 h-8" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-slate-800">
-            خطة التدريب السنوية
+            تسليم واستلام عُهدة
           </h1>
           <p className="text-slate-500">
-            النموذج: F-TRN-001 | قطاع التدريب والتطوير
+            النموذج: F-HRT-003 | الموارد البشرية والتدريب
           </p>
         </div>
       </div>
@@ -135,23 +140,23 @@ export default function FormTRN001() {
         <div className="p-6 space-y-8">
           <div>
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">
-              تفاصيل الخطة
+              بيانات الموظف
             </h3>
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  رقم الخطة المرجعي (تلقائي)
+                  رقم العهدة (تلقائي)
                 </label>
                 <input
                   type="text"
                   readOnly
                   className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500"
-                  value={formData.planId}
+                  value={formData.custodyId}
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  تاريخ الإصدار
+                  التاريخ <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="date"
@@ -165,107 +170,135 @@ export default function FormTRN001() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  سنة الخطة <span className="text-red-500">*</span>
+                  اسم الموظف <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
-                  placeholder="مثال: 2026"
-                  value={formData.year}
+                  value={formData.employeeName}
                   onChange={(e) =>
-                    setFormData({ ...formData, year: e.target.value })
+                    setFormData({ ...formData, employeeName: e.target.value })
                   }
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  القسم المستهدف (أو الكل)
+                  الرقم الوظيفي
                 </label>
                 <input
                   type="text"
                   className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
-                  placeholder="مثال: قسم الجودة"
+                  value={formData.employeeId}
+                  onChange={(e) =>
+                    setFormData({ ...formData, employeeId: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  القسم
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
                   value={formData.department}
                   onChange={(e) =>
                     setFormData({ ...formData, department: e.target.value })
                   }
                 />
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  نوع العملية
+                </label>
+                <select
+                  className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
+                  value={formData.handoverType}
+                  onChange={(e) =>
+                    setFormData({ ...formData, handoverType: e.target.value })
+                  }
+                >
+                  <option value="تسليم">تسليم</option>
+                  <option value="استرجاع">استرجاع</option>
+                </select>
+              </div>
             </div>
           </div>
 
           <div>
             <h3 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">
-              الدورات التدريبية المجدولة
+              أصناف العهدة
             </h3>
 
             <div className="bg-slate-50 p-4 border border-slate-200 rounded-lg mb-4">
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    اسم الدورة
+                    اسم الصنف
                   </label>
                   <input
                     type="text"
                     className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                    value={courseInput.courseName}
+                    value={itemInput.itemName}
                     onChange={(e) =>
-                      setCourseInput({
-                        ...courseInput,
-                        courseName: e.target.value,
+                      setItemInput({
+                        ...itemInput,
+                        itemName: e.target.value,
                       })
                     }
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    الجمهور المستهدف
+                    الرقم التسلسلي
                   </label>
                   <input
                     type="text"
                     className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                    value={courseInput.targetAudience}
+                    value={itemInput.serialNo}
                     onChange={(e) =>
-                      setCourseInput({
-                        ...courseInput,
-                        targetAudience: e.target.value,
+                      setItemInput({
+                        ...itemInput,
+                        serialNo: e.target.value,
                       })
                     }
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    الجدول الزمني (الشهر)
+                    الكمية
                   </label>
                   <input
                     type="text"
                     className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                    placeholder="مثال: أغسطس"
-                    value={courseInput.schedule}
+                    value={itemInput.quantity}
                     onChange={(e) =>
-                      setCourseInput({
-                        ...courseInput,
-                        schedule: e.target.value,
+                      setItemInput({
+                        ...itemInput,
+                        quantity: e.target.value,
                       })
                     }
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    جهة التدريب
+                    الحالة
                   </label>
                   <input
                     type="text"
                     className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
-                    value={courseInput.provider}
+                    value={itemInput.itemCondition}
                     onChange={(e) =>
-                      setCourseInput({
-                        ...courseInput,
-                        provider: e.target.value,
+                      setItemInput({
+                        ...itemInput,
+                        itemCondition: e.target.value,
                       })
                     }
                   />
@@ -274,49 +307,47 @@ export default function FormTRN001() {
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={addCourse}
+                  onClick={addItem}
                   className="px-4 py-1.5 bg-sky-600 text-white rounded font-bold text-sm hover:bg-sky-700"
                 >
-                  إضافة الدورة
+                  إضافة الصنف
                 </button>
               </div>
             </div>
 
-            {formData.trainingCourses.length > 0 && (
+            {formData.items.length > 0 && (
               <table className="w-full text-right text-sm border-collapse border border-slate-200 mt-4 rounded-lg overflow-hidden">
                 <thead className="bg-slate-100 text-slate-600">
                   <tr>
                     <th className="p-3 border-b border-slate-200">م</th>
+                    <th className="p-3 border-b border-slate-200">اسم الصنف</th>
                     <th className="p-3 border-b border-slate-200">
-                      اسم الدورة
+                      الرقم التسلسلي
                     </th>
-                    <th className="p-3 border-b border-slate-200">
-                      الجمهور المستهدف
-                    </th>
-                    <th className="p-3 border-b border-slate-200">الجدول</th>
-                    <th className="p-3 border-b border-slate-200">الجهة</th>
+                    <th className="p-3 border-b border-slate-200">الكمية</th>
+                    <th className="p-3 border-b border-slate-200">الحالة</th>
                     <th className="p-3 border-b border-slate-200 text-center">
                       حذف
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {formData.trainingCourses.map((c, i) => (
+                  {formData.items.map((c, i) => (
                     <tr
                       key={i}
                       className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                     >
                       <td className="p-3">{i + 1}</td>
                       <td className="p-3 font-semibold text-slate-800">
-                        {c.courseName}
+                        {c.itemName}
                       </td>
-                      <td className="p-3">{c.targetAudience}</td>
-                      <td className="p-3">{c.schedule}</td>
-                      <td className="p-3">{c.provider}</td>
+                      <td className="p-3">{c.serialNo}</td>
+                      <td className="p-3">{c.quantity}</td>
+                      <td className="p-3">{c.itemCondition}</td>
                       <td className="p-3 text-center">
                         <button
                           type="button"
-                          onClick={() => removeCourse(i)}
+                          onClick={() => removeItem(i)}
                           className="text-red-500 hover:text-red-700 font-bold"
                         >
                           X
@@ -328,9 +359,28 @@ export default function FormTRN001() {
               </table>
             )}
           </div>
+
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-200 pb-2">
+              ملاحظات
+            </h3>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                ملاحظات
+              </label>
+              <textarea
+                rows={3}
+                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+              />
+            </div>
+          </div>
         </div>
 
-                <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
+        <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
           <button
             type="button"
             disabled={loading}
@@ -339,7 +389,7 @@ export default function FormTRN001() {
           >
             حفظ كمسودة
           </button>
-          
+
           {user?.level <= 2 ? (
             <button
               type="button"

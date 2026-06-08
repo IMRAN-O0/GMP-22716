@@ -66,7 +66,7 @@ export default function FormTRN004() {
         body: JSON.stringify({
           recordId: formData.certId || nextSequentialId("TRN-CERT", []),
           formId: "F-TRN-004",
-          department: "TRN",
+          department: "HRT",
           creatorId: user?.id,
           status: status,
           data: formData,
@@ -78,7 +78,7 @@ export default function FormTRN004() {
         `تم التوثيق بنجاح (${status === "draft" ? "مسودة" : "معتمد"}): ` +
           saved.record_id,
       );
-      navigate("/trn");
+      navigate("/hr");
     } catch (err) {
       console.error(err);
       alert("فشل حفظ النموذج");
@@ -98,7 +98,7 @@ export default function FormTRN004() {
         })
         .catch(() => {});
     } else {
-      fetch("/api/forms/dept/TRN", { headers: getAuthHeaders() })
+      fetch("/api/forms/dept/HRT", { headers: getAuthHeaders() })
         .then((r) => r.json())
         .then((data) => {
           const rows = Array.isArray(data) ? data : [];

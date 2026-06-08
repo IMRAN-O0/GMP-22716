@@ -71,7 +71,7 @@ export default function FormTRN003() {
         body: JSON.stringify({
           recordId: formData.evalId || nextSequentialId("TRN-EVAL", []),
           formId: "F-TRN-003",
-          department: "TRN",
+          department: "HRT",
           creatorId: user?.id,
           status: status,
           data: formData,
@@ -83,7 +83,7 @@ export default function FormTRN003() {
         `تم التقييم بنجاح (${status === "draft" ? "مسودة" : "معتمد"}): ` +
           saved.record_id,
       );
-      navigate("/trn");
+      navigate("/hr");
     } catch (err) {
       console.error(err);
       alert("فشل حفظ النموذج");
@@ -103,7 +103,7 @@ export default function FormTRN003() {
         })
         .catch(() => {});
     } else {
-      fetch("/api/forms/dept/TRN", { headers: getAuthHeaders() })
+      fetch("/api/forms/dept/HRT", { headers: getAuthHeaders() })
         .then((r) => r.json())
         .then((data) => {
           const rows = Array.isArray(data) ? data : [];

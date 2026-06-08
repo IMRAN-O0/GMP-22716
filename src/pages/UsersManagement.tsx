@@ -149,7 +149,7 @@ export default function UsersManagement() {
               id: null,
               userId: "",
               name: "",
-              department: "HR",
+              department: "HRT",
               level: 4,
               password: "",
               permissions: {},
