@@ -1354,6 +1354,39 @@ const FORM_REQUIRED_FIELDS: Record<string, { field: string; label: string }[]> =
     { field: "employeeName",          label: "اسم الموظف" },
     { field: "joinDate",              label: "تاريخ الالتحاق" },
   ],
+  "F-HRT-006": [
+    { field: "candidateName",         label: "اسم المرشح" },
+    { field: "interviewDate",         label: "تاريخ المقابلة" },
+  ],
+  "F-HRT-007": [
+    { field: "candidateName",         label: "اسم المرشح" },
+    { field: "jobTitle",              label: "المسمى الوظيفي" },
+  ],
+  "F-HRT-008": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "noticeDate",            label: "تاريخ الإشعار" },
+    { field: "violationDescription",  label: "وصف المخالفة / التقصير" },
+  ],
+  "F-HRT-009": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "evaluationDate",        label: "تاريخ التقييم" },
+  ],
+  "F-HRT-010": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "reviewDate",            label: "تاريخ التقييم" },
+  ],
+  "F-HRT-011": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "lastWorkingDay",        label: "آخر يوم عمل" },
+  ],
+  "F-HRT-012": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "exitDate",              label: "تاريخ المغادرة" },
+  ],
+  "F-HRT-013": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "clearanceDate",         label: "تاريخ إخلاء الطرف" },
+  ],
 };
 
 const validateFormData = (formId: string, data: any): string[] => {

@@ -141,6 +141,8 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
       category: "التوظيف والتهيئة",
       items: [
         { id: "F-HR-001", label: "طلب احتياج وظيفي" },
+        { id: "F-HRT-006", label: "تقييم مقابلة شخصية" },
+        { id: "F-HRT-007", label: "عرض وظيفي" },
         { id: "F-HR-003", label: "فحص طبي" },
         { id: "F-HRT-005", label: "خطة تهيئة موظف جديد" },
       ],
@@ -152,6 +154,7 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
         { id: "F-HRT-001", label: "إقرار الالتزام بالسلامة و GMP" },
         { id: "F-HRT-002", label: "طلب إجازة" },
         { id: "F-HRT-003", label: "تسليم واستلام عُهدة" },
+        { id: "F-HRT-008", label: "لفت نظر / إنذار كتابي" },
       ],
     },
     {
@@ -162,6 +165,21 @@ export const DEPT_PERMISSIONS: Record<string, PermCategory[]> = {
         { id: "F-TRN-002", label: "سجل التدريب الفردي" },
         { id: "F-TRN-003", label: "تقييم فعالية التدريب" },
         { id: "F-TRN-004", label: "اعتماد كفاءة" },
+      ],
+    },
+    {
+      category: "تقييم الأداء",
+      items: [
+        { id: "F-HRT-009", label: "تقييم فترة التجربة (90 يوماً)" },
+        { id: "F-HRT-010", label: "تقييم الأداء السنوي / النصف سنوي" },
+      ],
+    },
+    {
+      category: "نهاية الخدمة",
+      items: [
+        { id: "F-HRT-011", label: "قبول استقالة / إنهاء خدمات" },
+        { id: "F-HRT-012", label: "مقابلة خروج" },
+        { id: "F-HRT-013", label: "إخلاء طرف" },
       ],
     },
   ],

@@ -17,6 +17,14 @@ import FormHRT002 from './pages/hr/FormHRT002';
 import FormHRT003 from './pages/hr/FormHRT003';
 import FormHRT004 from './pages/hr/FormHRT004';
 import FormHRT005 from './pages/hr/FormHRT005';
+import FormHRT006 from './pages/hr/FormHRT006';
+import FormHRT007 from './pages/hr/FormHRT007';
+import FormHRT008 from './pages/hr/FormHRT008';
+import FormHRT009 from './pages/hr/FormHRT009';
+import FormHRT010 from './pages/hr/FormHRT010';
+import FormHRT011 from './pages/hr/FormHRT011';
+import FormHRT012 from './pages/hr/FormHRT012';
+import FormHRT013 from './pages/hr/FormHRT013';
 import FormViewer from './pages/hr/FormViewer';
 import UsersManagement from './pages/UsersManagement';
 import AuditLog from './pages/AuditLog';
@@ -112,6 +120,14 @@ export default function App() {
             <Route path="hr/custody-handover" element={<FormHRT003 />} />
             <Route path="hr/training-needs" element={<FormHRT004 />} />
             <Route path="hr/onboarding" element={<FormHRT005 />} />
+            <Route path="hr/interview-eval" element={<FormHRT006 />} />
+            <Route path="hr/job-offer" element={<FormHRT007 />} />
+            <Route path="hr/warning-notice" element={<FormHRT008 />} />
+            <Route path="hr/probation-eval" element={<FormHRT009 />} />
+            <Route path="hr/performance-review" element={<FormHRT010 />} />
+            <Route path="hr/resignation" element={<FormHRT011 />} />
+            <Route path="hr/exit-interview" element={<FormHRT012 />} />
+            <Route path="hr/clearance" element={<FormHRT013 />} />
             <Route path="hr/view/:recordId" element={<FormViewer />} />
 
             {/* Packaging & Filling Routes */}

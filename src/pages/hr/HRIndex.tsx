@@ -16,6 +16,13 @@ import {
   GraduationCap,
   Calendar,
   Award,
+  UserCheck,
+  AlertTriangle,
+  ClipboardCheck,
+  TrendingUp,
+  LogOut,
+  MessageSquare,
+  CheckSquare,
 } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
@@ -32,6 +39,8 @@ const FORM_GROUPS: {
     category: "التوظيف والتهيئة",
     items: [
       { id: "F-HR-001", label: "طلب احتياج وظيفي", route: "/hr/new-request", icon: <UserPlus className="w-6 h-6" /> },
+      { id: "F-HRT-006", label: "تقييم مقابلة شخصية", route: "/hr/interview-eval", icon: <UserCheck className="w-6 h-6" /> },
+      { id: "F-HRT-007", label: "عرض وظيفي", route: "/hr/job-offer", icon: <FileSignature className="w-6 h-6" /> },
       { id: "F-HR-003", label: "فحص طبي", route: "/hr/medical-exam", icon: <Stethoscope className="w-6 h-6" /> },
       { id: "F-HRT-005", label: "خطة تهيئة موظف جديد", route: "/hr/onboarding", icon: <ClipboardList className="w-6 h-6" /> },
     ],
@@ -43,6 +52,7 @@ const FORM_GROUPS: {
       { id: "F-HRT-001", label: "إقرار الالتزام بالسلامة و GMP", route: "/hr/safety-pledge", icon: <ShieldCheck className="w-6 h-6" /> },
       { id: "F-HRT-002", label: "طلب إجازة", route: "/hr/leave-request", icon: <CalendarDays className="w-6 h-6" /> },
       { id: "F-HRT-003", label: "تسليم واستلام عُهدة", route: "/hr/custody-handover", icon: <Boxes className="w-6 h-6" /> },
+      { id: "F-HRT-008", label: "لفت نظر / إنذار كتابي", route: "/hr/warning-notice", icon: <AlertTriangle className="w-6 h-6" /> },
     ],
   },
   {
@@ -53,6 +63,21 @@ const FORM_GROUPS: {
       { id: "F-TRN-002", label: "سجل التدريب الفردي", route: "/trn/trn-002", icon: <FileText className="w-6 h-6" /> },
       { id: "F-TRN-003", label: "تقييم فعالية التدريب", route: "/trn/trn-003", icon: <GraduationCap className="w-6 h-6" /> },
       { id: "F-TRN-004", label: "اعتماد كفاءة", route: "/trn/trn-004", icon: <Award className="w-6 h-6" /> },
+    ],
+  },
+  {
+    category: "تقييم الأداء",
+    items: [
+      { id: "F-HRT-009", label: "تقييم فترة التجربة (90 يوماً)", route: "/hr/probation-eval", icon: <ClipboardCheck className="w-6 h-6" /> },
+      { id: "F-HRT-010", label: "تقييم الأداء السنوي / النصف سنوي", route: "/hr/performance-review", icon: <TrendingUp className="w-6 h-6" /> },
+    ],
+  },
+  {
+    category: "نهاية الخدمة",
+    items: [
+      { id: "F-HRT-011", label: "قبول استقالة / إنهاء خدمات", route: "/hr/resignation", icon: <LogOut className="w-6 h-6" /> },
+      { id: "F-HRT-012", label: "مقابلة خروج", route: "/hr/exit-interview", icon: <MessageSquare className="w-6 h-6" /> },
+      { id: "F-HRT-013", label: "إخلاء طرف", route: "/hr/clearance", icon: <CheckSquare className="w-6 h-6" /> },
     ],
   },
 ];
