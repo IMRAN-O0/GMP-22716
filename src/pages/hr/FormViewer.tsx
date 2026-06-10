@@ -349,6 +349,8 @@ const FIELD_LABELS: Record<string, string> = {
   supervisor: "المشرف المباشر",
   basicSalary: "الراتب الأساسي",
   allowances: "البدلات",
+  iqamaExpiry: "تاريخ انتهاء الإقامة",
+  contractExpiry: "تاريخ انتهاء العقد",
   // HR — HR-003 (Medical Exam)
   examDate: "تاريخ الفحص",
   examType: "نوع الفحص",

@@ -567,6 +567,97 @@ router.get("/employees", requireAuth, (req, res) => {
   });
 });
 
+// HRT: Bulk-import employee files (F-HR-002) from an Excel upload.
+// Each row becomes an approved forms_record + a row in the employees table.
+router.post("/employees/bulk", requireAuth, (req: any, res) => {
+  const user = req.user;
+  if (!user || user.level > 2) return res.status(403).json({ error: "غير مصرح" });
+
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0)
+    return res.status(400).json({ error: "لا توجد بيانات للاستيراد" });
+
+  const db = getDb();
+  const timestamp = new Date().toISOString();
+
+  const nextNum = (ids: string[], prefix: string) => {
+    let max = 0;
+    ids.forEach((id) => {
+      const m = String(id).match(new RegExp(`^${prefix}-?(\\d+)$`));
+      if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; }
+    });
+    return max;
+  };
+
+  // Pre-load existing record_ids (HR-####) and employee numbers (EMP-###).
+  db.all(
+    "SELECT record_id, data_json FROM forms_records WHERE form_id = 'F-HR-002'",
+    [],
+    (e1, hr002Rows: any[]) => {
+      if (e1) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+      db.all(
+        "SELECT record_id FROM forms_records WHERE record_id LIKE 'HR-%'",
+        [],
+        (e2, hrIdRows: any[]) => {
+          if (e2) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+
+          let recSeq = nextNum((hrIdRows || []).map((r) => r.record_id), "HR");
+          const empNumbers = (hr002Rows || [])
+            .map((r) => { try { return JSON.parse(r.data_json)?.employeeNumber; } catch { return null; } })
+            .filter(Boolean);
+          let empSeq = nextNum(empNumbers, "EMP");
+
+          const errors: string[] = [];
+          let inserted = 0;
+
+          const insertNext = (i: number) => {
+            if (i >= rows.length) {
+              return res.json({ success: true, inserted, skipped: 0, errors });
+            }
+            const r = rows[i] || {};
+            if (!r.fullNameAr || !r.idNumber) {
+              errors.push(`الصف ${i + 3}: الاسم بالعربي ورقم الهوية مطلوبان`);
+              return insertNext(i + 1);
+            }
+            recSeq += 1;
+            empSeq += 1;
+            const recordId = `HR-${String(recSeq).padStart(4, "0")}`;
+            const employeeNumber = `EMP-${String(empSeq).padStart(3, "0")}`;
+            const data = { ...r, employeeNumber };
+
+            db.run(
+              `INSERT INTO forms_records (record_id, form_id, department, creator_id, created_at, status, data_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [recordId, "F-HR-002", "HRT", user.id, timestamp, "approved", JSON.stringify(data)],
+              function (insErr) {
+                if (insErr) {
+                  errors.push(`الصف ${i + 3} (${r.fullNameAr}): ${insErr.message}`);
+                  return insertNext(i + 1);
+                }
+                inserted++;
+                // Sync to employees table
+                db.run(
+                  `INSERT OR REPLACE INTO employees (employee_number, full_name_ar, full_name_en, department, job_title, join_date, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                  [employeeNumber, r.fullNameAr || "", r.fullNameEn || "", r.department || "", r.jobTitle || "", r.joinDate || "", "active"],
+                );
+                db.run(
+                  `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, ?, ?, ?, ?, ?)`,
+                  [user.id, "CREATE", "F-HR-002", recordId, timestamp, "Bulk import"],
+                );
+                insertNext(i + 1);
+              },
+            );
+          };
+
+          insertNext(0);
+        },
+      );
+    },
+  );
+});
+
+
 // INV: Get Warehouses
 router.get("/warehouses", requireAuth, (req, res) => {
   getDb().all("SELECT * FROM warehouses WHERE is_active = 1 ORDER BY code ASC", [], (err, rows) => {
