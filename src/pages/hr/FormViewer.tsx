@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getAuthHeaders, getJsonHeaders } from "../../lib/utils";
+import {
+  PKG_FIELD_LABELS,
+  PKG_FORM_TITLES,
+  getPackagingFormById,
+  isPackagingFormId,
+} from "../pkg/packagingForms.config";
 
 const FIELD_LABELS: Record<string, string> = {
   // Common
@@ -343,6 +349,8 @@ const FIELD_LABELS: Record<string, string> = {
   supervisor: "المشرف المباشر",
   basicSalary: "الراتب الأساسي",
   allowances: "البدلات",
+  iqamaExpiry: "تاريخ انتهاء الإقامة",
+  contractExpiry: "تاريخ انتهاء العقد",
   // HR — HR-003 (Medical Exam)
   examDate: "تاريخ الفحص",
   examType: "نوع الفحص",
@@ -350,6 +358,78 @@ const FIELD_LABELS: Record<string, string> = {
   medicalNotes: "الملاحظات الطبية",
   nextExamDate: "تاريخ الفحص القادم",
   officerName: "اسم الضابط الطبي",
+  // HRT — merged HR + Training new forms
+  pledgeId: "رقم الإقرار",
+  pledgeDate: "تاريخ الإقرار",
+  acknowledgements: "الإقرارات",
+  declaration: "نص الإقرار",
+  task: "البند",
+  done: "تم",
+  leaveType: "نوع الإجازة",
+  daysCount: "عدد الأيام",
+  coveringEmployee: "الموظف البديل",
+  custodyId: "رقم العهدة",
+  handoverType: "نوع العملية",
+  serialNo: "الرقم التسلسلي",
+  itemCondition: "الحالة",
+  tnaId: "رقم التقرير",
+  skillArea: "المهارة / المجال",
+  currentLevel: "المستوى الحالي",
+  requiredLevel: "المستوى المطلوب",
+  suggestedCourse: "الدورة المقترحة",
+  needs: "الاحتياجات التدريبية",
+  onboardingId: "رقم الخطة",
+  checklist: "بنود التهيئة",
+  // HRT — Phase 3 (recruitment / performance / offboarding)
+  interviewId: "رقم التقييم",
+  candidateName: "اسم المرشح",
+  interviewDate: "تاريخ المقابلة",
+  interviewer: "اسم المُقابِل",
+  criteria: "معايير التقييم",
+  criterion: "المعيار",
+  rating: "التقييم",
+  recommendation: "التوصية",
+  offerId: "رقم العرض",
+  housingAllowance: "بدل السكن",
+  transportAllowance: "بدل النقل",
+  otherAllowances: "بدلات أخرى",
+  totalSalary: "إجمالي الراتب",
+  contractDuration: "مدة العقد",
+  offerDate: "تاريخ العرض",
+  warningId: "رقم الإشعار",
+  warningType: "نوع الإجراء",
+  violationDate: "تاريخ المخالفة",
+  noticeDate: "تاريخ الإشعار",
+  violationDescription: "وصف المخالفة / التقصير",
+  actionRequired: "الإجراء المطلوب",
+  issuedBy: "صادر عن",
+  probationId: "رقم التقييم",
+  decision: "القرار",
+  reviewId: "رقم التقييم",
+  reviewPeriod: "فترة التقييم",
+  kpis: "مؤشرات الأداء",
+  kpi: "المؤشر",
+  target: "المستهدف",
+  achieved: "المُنجز",
+  weight: "الوزن %",
+  overallRating: "التقييم العام",
+  strengths: "نقاط القوة",
+  improvements: "مجالات التحسين",
+  resignationId: "رقم الطلب",
+  submitDate: "تاريخ تقديم الطلب",
+  lastWorkingDay: "آخر يوم عمل",
+  exitInterviewId: "رقم المقابلة",
+  exitDate: "تاريخ المغادرة",
+  reasonForLeaving: "سبب ترك العمل",
+  feedback: "التقييم",
+  topic: "المحور",
+  comment: "التعليق",
+  suggestions: "اقتراحات للتحسين",
+  wouldRecommend: "التوصية بالعمل في الشركة",
+  clearanceId: "رقم إخلاء الطرف",
+  clearanceItems: "بنود إخلاء الطرف",
+  finalSettlement: "إجمالي مستحقات نهاية الخدمة",
+  clearanceDate: "تاريخ إخلاء الطرف",
   // TRN — TRN-001 (Training Plan)
   planId: "رقم خطة التدريب",
   year: "السنة",
@@ -417,6 +497,37 @@ const FIELD_LABELS: Record<string, string> = {
   referenceDocument: "وثيقة المرجع",
   lowStockAlert: "تنبيه مخزون منخفض",
   lowStockAlertTriggered: "تم تفعيل تنبيه المخزون المنخفض",
+  // QM — Cleaning / Premises / Maintenance (tabular forms)
+  weekStartDate: "بداية الأسبوع",
+  shift: "الوردية",
+  cleaningLog: "جدول التنظيف",
+  material: "مادة التنظيف",
+  verifiedDate: "تاريخ التحقّق",
+  sat: "السبت",
+  sun: "الأحد",
+  mon: "الاثنين",
+  tue: "الثلاثاء",
+  wed: "الأربعاء",
+  thu: "الخميس",
+  fri: "الجمعة",
+  areas: "نتائج فحص المرافق",
+  area: "المنطقة / المرفق",
+  cleanliness: "النظافة العامة",
+  pestControl: "مكافحة الآفات",
+  maintenanceNeeded: "تحتاج صيانة؟",
+  temp: "الحرارة °م",
+  tempLimit: "حد الحرارة المسموح",
+  humidity: "الرطوبة %",
+  humidityLimit: "حد الرطوبة المسموح",
+  zones: "المناطق الضوئية",
+  minRequired: "الحد الأدنى المطلوب",
+  coversIntact: "الأغطية سليمة؟",
+  drains: "نقاط الصرف",
+  trapIntact: "السيفون سليم؟",
+  logMonth: "شهر السجل",
+  tasks: "مهام الصيانة",
+  scheduledDate: "التاريخ المخطط",
+  completedDate: "تاريخ التنفيذ",
 };
 
 // Fields that are internal/redundant and should NOT appear in print
@@ -497,6 +608,7 @@ const translateValue = (key: string, val: any): string => {
 
 const translateKey = (key: string): string => {
   if (FIELD_LABELS[key]) return FIELD_LABELS[key];
+  if (PKG_FIELD_LABELS[key]) return PKG_FIELD_LABELS[key];
   // Convert camelCase to spaced Arabic-friendly fallback
   return key.replace(/([A-Z])/g, " $1").trim();
 };
@@ -578,6 +690,11 @@ export default function FormViewer() {
 
   const formRouteMap: Record<string, string> = {
     "F-HR-001": "/hr/new-request", "F-HR-002": "/hr/employee-file", "F-HR-003": "/hr/medical-exam",
+    "F-HRT-001": "/hr/safety-pledge", "F-HRT-002": "/hr/leave-request", "F-HRT-003": "/hr/custody-handover",
+    "F-HRT-004": "/hr/training-needs", "F-HRT-005": "/hr/onboarding",
+    "F-HRT-006": "/hr/interview-eval", "F-HRT-007": "/hr/job-offer", "F-HRT-008": "/hr/warning-notice",
+    "F-HRT-009": "/hr/probation-eval", "F-HRT-010": "/hr/performance-review",
+    "F-HRT-011": "/hr/resignation", "F-HRT-012": "/hr/exit-interview", "F-HRT-013": "/hr/clearance",
     "F-PRD-001": "/prd/production-order", "F-PRD-002": "/prd/batch-record",
     "F-PRD-003": "/prd/production-checklist", "F-PRD-004": "/prd/process-monitoring",
     "F-INV-RMT-001": "/inv/rmt", "F-FP-001": "/inv/fp-001", "F-FP-002": "/inv/fp-002",
@@ -591,7 +708,8 @@ export default function FormViewer() {
     "F-DEV-004": "/qm/dev-004", "F-CMP-001": "/qm/cmp-001", "F-RCL-001": "/qm/rcl-001",
     "F-PRM-001": "/qm/prm-001", "F-PRM-002": "/qm/prm-002", "F-PRM-003": "/qm/prm-003",
     "F-PRM-004": "/qm/prm-004", "F-PRM-005": "/qm/prm-005", "F-EQP-001": "/qm/eqp-001",
-    "F-MNT-001": "/qm/mnt-001", "F-TRN-001": "/trn/trn-001", "F-TRN-002": "/trn/trn-002",
+    "F-MNT-001": "/qm/mnt-001", "F-CLN-001": "/qm/cln-001",
+    "F-TRN-001": "/trn/trn-001", "F-TRN-002": "/trn/trn-002",
     "F-TRN-003": "/trn/trn-003", "F-TRN-004": "/trn/trn-004",
     "F-LAB-001": "/lab/lab-001", "F-LAB-002": "/lab/lab-002", "F-LAB-003": "/lab/lab-003",
     "F-LAB-004": "/lab/lab-004", "F-LAB-005": "/lab/lab-005", "F-LAB-006": "/lab/lab-006",
@@ -640,9 +758,23 @@ export default function FormViewer() {
     "F-PRM-005":       "سجل فحص الصرف الصحي",
     "F-EQP-001":       "سجل المعدة / المعايرة",
     "F-MNT-001":       "سجل الصيانة",
-    "F-HR-001":        "طلب توظيف",
+    "F-CLN-001":       "سجل التنظيف الأسبوعي للمرافق",
+    "F-HR-001":        "طلب احتياج وظيفي",
     "F-HR-002":        "ملف الموظف",
     "F-HR-003":        "سجل الفحص الطبي",
+    "F-HRT-001":       "إقرار الالتزام بالسلامة والصحة المهنية و GMP",
+    "F-HRT-002":       "طلب إجازة",
+    "F-HRT-003":       "تسليم واستلام عُهدة",
+    "F-HRT-004":       "حصر الاحتياجات التدريبية (TNA)",
+    "F-HRT-005":       "خطة تهيئة موظف جديد",
+    "F-HRT-006":       "تقييم مقابلة شخصية",
+    "F-HRT-007":       "عرض وظيفي",
+    "F-HRT-008":       "لفت نظر / إنذار كتابي",
+    "F-HRT-009":       "تقييم فترة التجربة (90 يوماً)",
+    "F-HRT-010":       "تقييم الأداء السنوي / النصف سنوي",
+    "F-HRT-011":       "قبول استقالة / إنهاء خدمات",
+    "F-HRT-012":       "مقابلة خروج (Exit Interview)",
+    "F-HRT-013":       "إخلاء طرف (Clearance)",
     "F-TRN-001":       "خطة التدريب السنوية",
     "F-TRN-002":       "سجل التدريب",
     "F-TRN-003":       "تقييم فعالية التدريب",
@@ -655,7 +787,8 @@ export default function FormViewer() {
     "F-LAB-006":       "سجل معايرة المعدات",
     "F-LAB-007":       "طلب صرف مواد للمختبر",
   };
-  const formTitle = FORM_TITLES[record.form_id] || record.form_id;
+  const formTitle =
+    FORM_TITLES[record.form_id] || PKG_FORM_TITLES[record.form_id] || record.form_id;
 
   return (
     <div className="max-w-4xl mx-auto space-y-4" dir="rtl">
@@ -723,7 +856,15 @@ export default function FormViewer() {
           </>)}
 
           {(record.status === "draft" || record.status === "returned") && (
-            <button onClick={() => { const route = formRouteMap[record.form_id]; if (route) navigate(`${route}?edit=${record.record_id}`); }}
+            <button onClick={() => {
+                if (isPackagingFormId(record.form_id)) {
+                  const key = getPackagingFormById(record.form_id)?.key;
+                  if (key) navigate(`/pkg/form/${key}?edit=${record.record_id}`);
+                  return;
+                }
+                const route = formRouteMap[record.form_id];
+                if (route) navigate(`${route}?edit=${record.record_id}`);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold text-[13px]">
               تعديل المسودة
             </button>

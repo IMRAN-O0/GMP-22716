@@ -1,9 +1,11 @@
 import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Building2, Users, FileText, Settings, LogOut, 
-  LayoutDashboard, Archive, BarChart3, Package, Beaker, BookOpen
+import {
+  Building2, Users, FileText, Settings, LogOut,
+  LayoutDashboard, Archive, BarChart3, Package, Beaker, Boxes
 } from 'lucide-react';
+import { getAccessibleDepartments } from '../constants/departments';
+import NaxeLogo from './NaxeLogo';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -13,18 +15,23 @@ export default function Layout() {
     return <Navigate to="/login" replace />;
   }
 
+  const accessibleDepts = getAccessibleDepartments(user);
+
   const isAuthorizedURL = (path: string) => {
       if (user.level === 1 || user.department === 'ALL') return true;
       if (path === '/' || path === '/reports' || path === '/archive') return true;
-      
-      const deptCode = path.split('/')[1]?.toUpperCase();
-      if (!deptCode || deptCode === '') return true;
 
-      // System wide sections
-      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM'].includes(deptCode)) {
-          return user.department === deptCode;
+      const raw = path.split('/')[1]?.toUpperCase();
+      if (!raw || raw === '') return true;
+      // HR & Training were merged into a single "HRT" department.
+      const deptCode = raw === 'HR' || raw === 'TRN' ? 'HRT' : raw;
+
+      // Department sections — accessible if it's the user's department OR they
+      // hold any permission within it (supports working across departments).
+      if (['HRT', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(deptCode)) {
+          return accessibleDepts.has(deptCode);
       }
-      return true; 
+      return true;
   };
 
   if (!isAuthorizedURL(location.pathname)) {
@@ -44,11 +51,11 @@ export default function Layout() {
 
   const navItems = [
     { title: 'الرئيسية', path: '/', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { title: 'الموارد البشرية (HR)', path: '/hr', icon: <Users className="w-5 h-5" /> },
-    { title: 'التدريب (TRN)', path: '/trn', icon: <BookOpen className="w-5 h-5" /> },
+    { title: 'الموارد البشرية والتدريب (HRT)', path: '/hr', icon: <Users className="w-5 h-5" /> },
     { title: 'الإنتاج (PRD)', path: '/prd', icon: <Building2 className="w-5 h-5" /> },
     { title: 'المختبر (LAB)', path: '/lab', icon: <Beaker className="w-5 h-5" /> },
     { title: 'المخزون (INV)', path: '/inv', icon: <Package className="w-5 h-5" /> },
+    { title: 'التعبئة والتغليف (PKG)', path: '/pkg', icon: <Boxes className="w-5 h-5" /> },
     { title: 'إدارة الجودة (QM)', path: '/qm', icon: <FileText className="w-5 h-5" /> },
     { title: 'الأرشيف', path: '/archive', icon: <Archive className="w-5 h-5" /> },
     { title: 'التقارير', path: '/reports', icon: <BarChart3 className="w-5 h-5" /> },
@@ -61,11 +68,12 @@ export default function Layout() {
   }
 
   const filteredNavItems = navItems.filter(item => {
-      const code = item.path.split('/')[1]?.toUpperCase();
-      if (!code) return true;
+      const raw = item.path.split('/')[1]?.toUpperCase();
+      if (!raw) return true;
       if (user.level === 1 || user.department === 'ALL') return true;
-      if (['HR', 'TRN', 'PRD', 'LAB', 'INV', 'QM'].includes(code)) {
-          return user.department === code;
+      const code = raw === 'HR' || raw === 'TRN' ? 'HRT' : raw;
+      if (['HRT', 'PRD', 'LAB', 'INV', 'QM', 'PKG'].includes(code)) {
+          return accessibleDepts.has(code);
       }
       return true;
   });
@@ -75,8 +83,7 @@ export default function Layout() {
       {/* Sidebar - Right */}
       <div className="w-[260px] bg-slate-800 text-white min-h-screen flex flex-col flex-shrink-0 p-8 print:hidden">
         <div className="flex items-center mb-12">
-          <div className="w-8 h-8 flex-shrink-0 bg-sky-400 rounded-lg ml-3"></div>
-          <h1 className="text-xl font-black tracking-tight pointer-events-none">QForm Manager</h1>
+          <NaxeLogo size={34} withWordmark />
         </div>
 
         <nav className="flex-1 space-y-2">

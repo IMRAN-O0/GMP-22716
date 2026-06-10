@@ -173,10 +173,14 @@ export default function CreateFinalProduct() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-semibold text-slate-600 mb-1">الاسم بالإنجليزية</label>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1">
+                    الاسم بالإنجليزية <span className="text-red-500">*</span>
+                    <span className="text-xs text-slate-400 font-normal mr-1">(يُستخدم لتوليد رقم الدفعة)</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="Product Name"
+                    required
+                    placeholder="مثال: Candy Body Scrub"
                     value={editing.name_en || ""}
                     onChange={(e) => setEditing({ ...editing, name_en: e.target.value })}
                     className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400"

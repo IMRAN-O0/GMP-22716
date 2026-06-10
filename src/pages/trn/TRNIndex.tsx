@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   BookOpen,
@@ -8,24 +8,51 @@ import {
   Award,
   Search,
   Archive,
+  AlertCircle,
 } from "lucide-react";
 import { StatusBadge } from "../../components/StatusBadge";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
 import { getAuthHeaders } from "../../lib/utils";
+import { FORM_LABELS } from "../../constants/formLabels";
 
 export default function TRNIndex() {
   const [forms, setForms] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/forms/dept/TRN", { headers: getAuthHeaders() })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("فشل تحميل السجلات");
+        return r.json();
+      })
       .then((data) => setForms(Array.isArray(data) ? data : []))
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setError("تعذّر تحميل سجلات التدريب. تأكد من الاتصال وحاول مجدداً.");
+      });
   }, []);
+
+  const filteredForms = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return forms;
+    return forms.filter((f) => {
+      const label = FORM_LABELS[f.form_id] || f.form_id;
+      return [f.record_id, f.form_id, label, f.status, f.creator_id]
+        .map((v) => String(v ?? "").toLowerCase())
+        .some((v) => v.includes(q));
+    });
+  }, [forms, search]);
 
   return (
     <div className="space-y-6">
       <DepartmentNotifications />
+      {error && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -103,8 +130,10 @@ export default function TRNIndex() {
           <div className="relative">
             <input
               type="text"
-              placeholder="بحث برقم السجل..."
-              className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-[14px] w-64 focus:ring-sky-400 focus:border-sky-400 text-slate-500"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="بحث برقم السجل أو النموذج..."
+              className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-[14px] w-64 focus:ring-sky-400 focus:border-sky-400 text-slate-700"
             />
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           </div>
@@ -126,17 +155,17 @@ export default function TRNIndex() {
               </tr>
             </thead>
             <tbody className="text-[14px] text-slate-600">
-              {forms.length === 0 ? (
+              {filteredForms.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
                     className="px-6 py-8 text-center text-slate-400"
                   >
-                    لا توجد سجلات حتى الآن
+                    {search ? "لا توجد نتائج مطابقة للبحث" : "لا توجد سجلات حتى الآن"}
                   </td>
                 </tr>
               ) : (
-                forms.map((f, i) => (
+                filteredForms.map((f, i) => (
                   <tr
                     key={i}
                     className="hover:bg-slate-50 border-b border-slate-100 last:border-0 transition-colors"
@@ -144,7 +173,7 @@ export default function TRNIndex() {
                     <td className="px-6 py-4 font-mono font-bold text-slate-900">
                       {f.record_id}
                     </td>
-                    <td className="px-6 py-4">{f.form_id}</td>
+                    <td className="px-6 py-4">{FORM_LABELS[f.form_id] || f.form_id}</td>
                     <td className="px-6 py-4">
                       {new Date(f.created_at).toLocaleDateString("ar-EG")}
                     </td>

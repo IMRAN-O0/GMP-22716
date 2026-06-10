@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getAuthHeaders } from "../lib/utils";
+import ReportPrintHeader from "../components/ReportPrintHeader";
 import {
   Package,
   Repeat,
@@ -20,6 +20,9 @@ import {
   ShieldAlert,
   Route,
   Clock,
+  Boxes,
+  Scale,
+  Search,
 } from "lucide-react";
 import ReportBalances from "./reports/ReportBalances";
 import ReportTransactions from "./reports/ReportTransactions";
@@ -45,17 +48,15 @@ import ReportBatchTraceability from "./reports/ReportBatchTraceability";
 import ReportExecutiveDashboard from "./reports/ReportExecutiveDashboard";
 import ReportExpiryWatch from "./reports/ReportExpiryWatch";
 
+import ReportReleaseReadiness from "./reports/ReportReleaseReadiness";
+import ReportPkgReconciliation from "./reports/ReportPkgReconciliation";
+import ReportPkgBatchLog from "./reports/ReportPkgBatchLog";
+import ReportPkgDowntime from "./reports/ReportPkgDowntime";
+
 export default function Reports() {
   const { user } = useAuth();
   const [activeReport, setActiveReport] = useState<string | null>(null);
-  const [company, setCompany] = useState<any>({});
-
-  useEffect(() => {
-    fetch("/api/company", { headers: getAuthHeaders() })
-      .then((r) => r.json())
-      .then((d) => setCompany(d || {}))
-      .catch(() => {});
-  }, []);
+  const [search, setSearch] = useState("");
 
   // Only show reports to authorized departments
   const isAuthorized =
@@ -63,6 +64,7 @@ export default function Reports() {
     (user.department === "INV" ||
       user.department === "PRD" ||
       user.department === "QM" ||
+      user.department === "PKG" ||
       user.department === "ALL" ||
       Number(user.level) === 1);
   if (!user || !isAuthorized) {
@@ -240,6 +242,38 @@ export default function Reports() {
       desc: "استدعاءات المنتجات وسجل الاسترداد",
       dept: "QM",
     },
+    {
+      id: "pkg_release_ready",
+      title: "تقرير جاهزية الإفراج",
+      icon: <Truck className="w-6 h-6" />,
+      color: "bg-rose-600",
+      desc: "حالة الدفعات: تصنيع ← تغليف ← جاهزة للإفراج ← إفراج",
+      dept: "PKG",
+    },
+    {
+      id: "pkg_reconciliation",
+      title: "تقرير تسوية مواد التعبئة/التغليف",
+      icon: <Scale className="w-6 h-6" />,
+      color: "bg-amber-600",
+      desc: "فروقات المواد لكل دفعة وإبراز التجاوزات",
+      dept: "PKG",
+    },
+    {
+      id: "pkg_batch_log",
+      title: "سجل التعبئة والتغليف للدفعة",
+      icon: <Boxes className="w-6 h-6" />,
+      color: "bg-rose-500",
+      desc: "كل نماذج التعبئة/التغليف لدفعة واحدة",
+      dept: "PKG",
+    },
+    {
+      id: "pkg_downtime",
+      title: "تقرير التوقفات والأعطال",
+      icon: <Clock className="w-6 h-6" />,
+      color: "bg-sky-600",
+      desc: "تحليل توقفات خطوط التعبئة وأسبابها",
+      dept: "PKG",
+    },
   ];
 
   const reportTypes = allReportTypes.filter((rt) => {
@@ -300,26 +334,12 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* Print Header */}
-        <div className="hidden print:flex items-start justify-between border-b-2 border-slate-700 pb-4 mb-4 gap-4">
-          <div className="flex items-center gap-3">
-            {company.logo_url ? (
-              <img src={company.logo_url} alt="شعار" className="h-16 w-16 object-contain border border-slate-200 rounded-lg p-0.5" />
-            ) : (
-              <div className="h-16 w-16 border-2 border-slate-300 rounded-lg flex items-center justify-center text-slate-400 text-xs font-bold">شعار</div>
-            )}
-            <div>
-              <div className="font-bold text-xl text-slate-900">{company.name_ar || "الشركة"}</div>
-              {company.name_en && <div className="text-sm text-slate-500">{company.name_en}</div>}
-              {company.license_number && <div className="text-xs text-slate-400">رقم الترخيص: {company.license_number}</div>}
-            </div>
-          </div>
-          <div className="text-left">
-            <div className="font-bold text-lg text-slate-800">{reportTypes.find((r) => r.id === activeReport)?.title}</div>
-            <div className="text-sm text-slate-500 mt-1">تاريخ الطباعة: {new Date().toLocaleDateString("ar-SA")}</div>
-            <div className="text-xs text-slate-400 mt-0.5">نظام الجودة ISO 22716</div>
-          </div>
-        </div>
+        {/* Unified print header (batch trace renders its own with batch no.) */}
+        {activeReport !== "batch_trace" && (
+          <ReportPrintHeader
+            title={reportTypes.find((r) => r.id === activeReport)?.title || "تقرير"}
+          />
+        )}
 
         <div className="print:text-sm">
           {activeReport === "exec_dash" && <ReportExecutiveDashboard />}
@@ -345,41 +365,96 @@ export default function Reports() {
           {activeReport === "qm_env" && <ReportEnvMonitoring />}
           {activeReport === "qm_cal" && <ReportCalibration />}
           {activeReport === "qm_recall" && <ReportRecall />}
+
+          {activeReport === "pkg_release_ready" && <ReportReleaseReadiness />}
+          {activeReport === "pkg_reconciliation" && <ReportPkgReconciliation />}
+          {activeReport === "pkg_batch_log" && <ReportPkgBatchLog />}
+          {activeReport === "pkg_downtime" && <ReportPkgDowntime />}
         </div>
       </div>
     );
   }
 
+  // Group reports by department for an organized landing page.
+  const GROUPS: { dept: string; label: string }[] = [
+    { dept: "ALL", label: "تقارير عامة" },
+    { dept: "INV", label: "المخزون (INV)" },
+    { dept: "PRD", label: "الإنتاج (PRD)" },
+    { dept: "QM", label: "إدارة الجودة (QM)" },
+    { dept: "PKG", label: "التعبئة والتغليف (PKG)" },
+  ];
+
+  const q = search.trim().toLowerCase();
+  const visibleReports = reportTypes.filter(
+    (r) =>
+      !q ||
+      r.title.toLowerCase().includes(q) ||
+      r.desc.toLowerCase().includes(q),
+  );
+  const groups = GROUPS.map((g) => ({
+    ...g,
+    items: visibleReports.filter((r) => r.dept === g.dept),
+  })).filter((g) => g.items.length > 0);
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-slate-900">التقارير</h1>
-        <p className="text-slate-500 mt-2">
-          اختر التقرير المطلوب لعرض البيانات والتحليلات
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">التقارير</h1>
+          <p className="text-slate-500 mt-2">
+            اختر التقرير المطلوب لعرض البيانات والتحليلات
+          </p>
+        </div>
+        <div className="relative w-full md:w-80">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ابحث عن تقرير بالاسم أو الوصف…"
+            className="w-full pl-4 pr-10 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-sky-400 focus:border-sky-400 text-slate-700 bg-white shadow-sm"
+          />
+          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {reportTypes.map((report) => (
-          <button
-            key={report.id}
-            onClick={() => setActiveReport(report.id)}
-            className="text-right bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-sky-300 transition-all group flex flex-col gap-4"
-          >
-            <div
-              className={`w-14 h-14 rounded-2xl ${report.color} text-white flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform`}
-            >
-              {report.icon}
+      {groups.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-400">
+          لا توجد تقارير مطابقة لبحثك.
+        </div>
+      ) : (
+        groups.map((group) => (
+          <section key={group.dept}>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-lg font-bold text-slate-700">{group.label}</h2>
+              <span className="bg-slate-100 text-slate-500 text-xs font-bold px-2 py-0.5 rounded-full">
+                {group.items.length}
+              </span>
+              <div className="flex-1 h-px bg-slate-200" />
             </div>
-            <div>
-              <h3 className="text-xl font-bold text-slate-800 mb-1">
-                {report.title}
-              </h3>
-              <p className="text-slate-500 text-sm">{report.desc}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {group.items.map((report) => (
+                <button
+                  key={report.id}
+                  onClick={() => setActiveReport(report.id)}
+                  className="text-right bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-sky-300 transition-all group flex flex-col gap-4"
+                >
+                  <div
+                    className={`w-14 h-14 rounded-2xl ${report.color} text-white flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform`}
+                  >
+                    {report.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800 mb-1">
+                      {report.title}
+                    </h3>
+                    <p className="text-slate-500 text-sm">{report.desc}</p>
+                  </div>
+                </button>
+              ))}
             </div>
-          </button>
-        ))}
-      </div>
+          </section>
+        ))
+      )}
     </div>
   );
 }

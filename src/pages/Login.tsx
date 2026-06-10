@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Lock, User } from "lucide-react";
+import NaxeLogo from "../components/NaxeLogo";
 
 export default function Login() {
   const [userId, setUserId] = useState("");
@@ -37,11 +38,14 @@ export default function Login() {
       dir="rtl"
     >
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="mt-6 text-center text-[28px] font-bold text-slate-900">
-          QForm Manager
+        <div className="flex justify-center">
+          <NaxeLogo size={64} />
+        </div>
+        <h2 className="mt-4 text-center text-[28px] font-black text-slate-900">
+          NAXE<span className="text-sky-500"> OS</span>
         </h2>
         <p className="mt-2 text-center text-[14px] text-slate-500">
-          المنصة الذكية لإدارة النماذج المؤسسية
+          نظام إدارة الجودة والتصنيع — متوافق مع ISO 22716
         </p>
       </div>
 

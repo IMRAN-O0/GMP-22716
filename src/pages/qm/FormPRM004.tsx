@@ -1,74 +1,56 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Save, Wind } from "lucide-react";
+import { useState } from "react";
+import { Wind } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { getJsonHeaders } from "../../lib/utils";
+import {
+  RepeatableTable,
+  FormActions,
+  useQmFormSubmit,
+  useEditLoader,
+  type ColumnDef,
+} from "./_shared/qmForm";
+
+const FILTER = [
+  { value: "نظيف", label: "نظيف" },
+  { value: "يحتاج تغيير", label: "يحتاج تغيير" },
+];
+const STATUS = [
+  { value: "مطابق", label: "مطابق" },
+  { value: "غير مطابق", label: "غير مطابق" },
+];
+
+const COLUMNS: ColumnDef[] = [
+  { key: "area", label: "المنطقة", width: "20%", placeholder: "المنطقة" },
+  { key: "particulateCount", label: "عدّ الجسيمات", placeholder: "—" },
+  { key: "microbialCount", label: "العدّ الميكروبي", placeholder: "—" },
+  { key: "airPressureDiff", label: "فرق الضغط (Pa)", placeholder: "—" },
+  { key: "filterStatus", label: "حالة الفلتر", type: "select", options: FILTER },
+  { key: "status", label: "النتيجة", type: "select", options: STATUS },
+];
+
+const emptyRow = () => ({
+  area: "",
+  particulateCount: "",
+  microbialCount: "",
+  airPressureDiff: "",
+  filterStatus: "نظيف",
+  status: "مطابق",
+});
 
 export default function FormPRM004() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [formData, setFormData] = useState({
+  const { submit } = useQmFormSubmit("F-PRM-004", "تم حفظ مراقبة جودة الهواء");
+
+  const [formData, setFormData] = useState<any>({
     date: new Date().toISOString().split("T")[0],
-    area: "Production",
-    particulateCount: "",
-    microbialCount: "",
-    airPressureDiff: "",
-    filterStatus: "Good", // Good, Needs Replacement
-    notes: "",
     inspector: user?.name || "",
+    readings: [emptyRow(), emptyRow()],
+    notes: "",
   });
 
-  const handleSubmit = async (e: React.FormEvent, status: any = "approved") => {
-    e.preventDefault();
-    try {
-      const editIdPatch = new URLSearchParams(window.location.search).get(
-        "edit",
-      );
-      const fetchUrl = editIdPatch
-        ? `/api/forms/record/${editIdPatch}`
-        : "/api/forms";
-      const fetchMethod = editIdPatch ? "PUT" : "POST";
-      const res = await fetch(fetchUrl, {
-        method: fetchMethod,
-        headers: getJsonHeaders(),
-        body: JSON.stringify({
-          recordId: `QM-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          formId: "F-PRM-004",
-          department: "QM",
-          creatorId: user?.id,
-          status: status,
-          data: formData,
-        }),
-      });
-      if (!res.ok) throw new Error("Submission failed");
-      const saved = await res.json();
-      alert("تم حفظ نموذج جودة الهواء بنجاح: " + saved.record_id);
-      navigate("/qm");
-    } catch (err) {
-      console.error(err);
-      alert("فشل حفظ");
-    }
-  };
-
-  // --- INJECTED BY PATCH ---
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const editId = params.get("edit");
-    if (editId) {
-      fetch(`/api/forms/record/${editId}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data && data.data) {
-            setFormData((prev) => ({ ...prev, ...data.data }));
-          }
-        })
-        .catch(console.error);
-    }
-  }, []);
-  // -------------------------
+  useEditLoader(setFormData);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-3 mb-6 bg-white p-4 rounded-xl border border-sky-200 shadow-sm border-r-4 border-r-sky-500">
         <div className="p-3 bg-sky-50 rounded-lg text-sky-600">
           <Wind className="w-8 h-8" />
@@ -77,158 +59,58 @@ export default function FormPRM004() {
           <h1 className="text-2xl font-bold text-slate-800">
             مراقبة جودة الهواء (Air Quality Monitoring)
           </h1>
-          <p className="text-slate-500">النموذج: F-PRM-004</p>
+          <p className="text-slate-500">النموذج: F-PRM-004 | قياسات متعدّدة المناطق</p>
         </div>
       </div>
+
       <form
-        onSubmit={handleSubmit}
-        className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4"
+        onSubmit={(e) => e.preventDefault()}
+        className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6"
       >
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className="block mb-1">التاريخ</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">التاريخ</label>
             <input
               type="date"
-              className="w-full border p-2 rounded"
+              required
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
               value={formData.date}
-              onChange={(e) =>
-                setFormData({ ...formData, date: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             />
           </div>
           <div>
-            <label className="block mb-1">المراقب</label>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">المفتش</label>
             <input
               type="text"
               readOnly
-              className="w-full border p-2 rounded bg-slate-50"
+              className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-500"
               value={formData.inspector}
             />
           </div>
         </div>
+
         <div>
-          <label className="block mb-1">المنطقة</label>
-          <select
-            className="w-full border p-2 rounded"
-            value={formData.area}
-            onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-          >
-            <option value="Production">الإنتاج</option>
-            <option value="QC">المختبر</option>
-          </select>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block mb-1">عدد الجسيمات (Particulates)</label>
-            <input
-              type="text"
-              className="w-full border p-2 rounded"
-              value={formData.particulateCount}
-              onChange={(e) =>
-                setFormData({ ...formData, particulateCount: e.target.value })
-              }
-            />
-          </div>
-          <div>
-            <label className="block mb-1">
-              العد الميكروبي (Microbial Count)
-            </label>
-            <input
-              type="text"
-              className="w-full border p-2 rounded"
-              value={formData.microbialCount}
-              onChange={(e) =>
-                setFormData({ ...formData, microbialCount: e.target.value })
-              }
-            />
-          </div>
-          <div>
-            <label className="block mb-1">
-              فرق الضغط الهواء (Pressure Diff)
-            </label>
-            <input
-              type="text"
-              className="w-full border p-2 rounded"
-              value={formData.airPressureDiff}
-              onChange={(e) =>
-                setFormData({ ...formData, airPressureDiff: e.target.value })
-              }
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block mb-1">حالة الفلاتر (Filters Status)</label>
-          <select
-            className="w-full border p-2 rounded"
-            value={formData.filterStatus}
-            onChange={(e) =>
-              setFormData({ ...formData, filterStatus: e.target.value })
-            }
-          >
-            <option value="Good">ممتازة (Good)</option>
-            <option value="Needs Replacement">
-              تحتاج تغيير (Needs Replacement)
-            </option>
-          </select>
-        </div>
-        <div>
-          <label className="block mb-1">ملاحظات</label>
-          <textarea
-            className="w-full border p-2 rounded"
-            rows={2}
-            value={formData.notes}
-            onChange={(e) =>
-              setFormData({ ...formData, notes: e.target.value })
-            }
+          <label className="block text-sm font-semibold text-slate-700 mb-2">قياسات جودة الهواء</label>
+          <RepeatableTable
+            columns={COLUMNS}
+            rows={formData.readings}
+            onChange={(rows) => setFormData({ ...formData, readings: rows })}
+            newRow={emptyRow}
+            addLabel="إضافة منطقة"
           />
         </div>
-                <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-slate-200">
-          <button
-            type="button"
-            onClick={(e) => handleSubmit(e, "draft")}
-            className="flex items-center px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[14px]"
-          >
-            حفظ كمسودة
-          </button>
-          
-          {user?.level <= 2 ? (
-            <button
-              type="button"
-              onClick={(e) => handleSubmit(e, "approved")}
-              className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
-            >
-              حفظ واعتماد
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSubmit(
-                  e,
-                  user?.level === 3 ? "pending_approval" : "pending_review"
-                )
-              }
-              className="flex items-center px-5 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-[14px]"
-            >
-              إرسال للمراجعة
-            </button>
-          )}
 
-          <div className="flex-1"></div>
-          <button
-            type="button"
-            onClick={() => {
-              if (window.history.length > 1) {
-                navigate(-1);
-              } else {
-                navigate("/");
-              }
-            }}
-            className="text-slate-500 hover:text-slate-700 font-semibold text-[14px]"
-          >
-            إغلاق والعودة
-          </button>
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2">ملاحظات</label>
+          <textarea
+            rows={2}
+            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-sky-500"
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+          />
         </div>
+
+        <FormActions onSubmit={(status) => submit(formData, status)} />
       </form>
     </div>
   );

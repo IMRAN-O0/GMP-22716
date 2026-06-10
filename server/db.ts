@@ -118,6 +118,28 @@ const runMigrations = (dbParam: sqlite3.Database) => {
             warehouse_id INTEGER,
             reference_id TEXT
           );`
+        },
+        {
+          version: 15,
+          name: "create_dismissed_notifications",
+          up: `CREATE TABLE IF NOT EXISTS dismissed_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            notification_id TEXT NOT NULL,
+            dismissed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(user_id, notification_id)
+          );`
+        },
+        {
+          // Merge Human Resources (HR) + Training (TRN) into one department: HRT.
+          version: 16,
+          name: "merge_hr_trn_records_to_hrt",
+          up: `UPDATE forms_records SET department='HRT' WHERE department IN ('HR','TRN');`
+        },
+        {
+          version: 17,
+          name: "merge_hr_trn_users_to_hrt",
+          up: `UPDATE users SET department='HRT' WHERE department IN ('HR','TRN');`
         }
       ];
 

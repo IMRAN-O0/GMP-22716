@@ -12,6 +12,19 @@ import HRIndex from './pages/hr/HRIndex';
 import FormHR001 from './pages/hr/FormHR001';
 import FormHR002 from './pages/hr/FormHR002';
 import FormHR003 from './pages/hr/FormHR003';
+import FormHRT001 from './pages/hr/FormHRT001';
+import FormHRT002 from './pages/hr/FormHRT002';
+import FormHRT003 from './pages/hr/FormHRT003';
+import FormHRT004 from './pages/hr/FormHRT004';
+import FormHRT005 from './pages/hr/FormHRT005';
+import FormHRT006 from './pages/hr/FormHRT006';
+import FormHRT007 from './pages/hr/FormHRT007';
+import FormHRT008 from './pages/hr/FormHRT008';
+import FormHRT009 from './pages/hr/FormHRT009';
+import FormHRT010 from './pages/hr/FormHRT010';
+import FormHRT011 from './pages/hr/FormHRT011';
+import FormHRT012 from './pages/hr/FormHRT012';
+import FormHRT013 from './pages/hr/FormHRT013';
 import FormViewer from './pages/hr/FormViewer';
 import UsersManagement from './pages/UsersManagement';
 import AuditLog from './pages/AuditLog';
@@ -62,9 +75,9 @@ import FormPRM004 from './pages/qm/FormPRM004';
 import FormPRM005 from './pages/qm/FormPRM005';
 import FormEQP001 from './pages/qm/FormEQP001';
 import FormMNT001 from './pages/qm/FormMNT001';
+import FormCLN001 from './pages/qm/FormCLN001';
 
-// TRN (Training) Imports
-import TRNIndex from './pages/trn/TRNIndex';
+// TRN (Training) form imports — department merged into HRT, hub at /hr
 import FormTRN001 from './pages/trn/FormTRN001';
 import FormTRN002 from './pages/trn/FormTRN002';
 import FormTRN003 from './pages/trn/FormTRN003';
@@ -80,6 +93,10 @@ import FormLAB005 from './pages/lab/FormLAB005';
 import FormLAB006 from './pages/lab/FormLAB006';
 import FormLAB007 from './pages/lab/FormLAB007';
 
+// PKG (Packaging & Filling) Imports
+import PKGIndex from './pages/pkg/PKGIndex';
+import PackagingFormRenderer from './pages/pkg/PackagingFormRenderer';
+
 export default function App() {
   return (
     <AuthProvider>
@@ -93,11 +110,30 @@ export default function App() {
             <Route path="settings" element={<CompanySettings />} />
             <Route path="reports" element={<Reports />} />
             <Route path="archive" element={<ArchivePage />} />
+            {/* Human Resources & Training (merged: HRT) */}
             <Route path="hr" element={<HRIndex />} />
             <Route path="hr/new-request" element={<FormHR001 />} />
             <Route path="hr/employee-file" element={<FormHR002 />} />
             <Route path="hr/medical-exam" element={<FormHR003 />} />
+            <Route path="hr/safety-pledge" element={<FormHRT001 />} />
+            <Route path="hr/leave-request" element={<FormHRT002 />} />
+            <Route path="hr/custody-handover" element={<FormHRT003 />} />
+            <Route path="hr/training-needs" element={<FormHRT004 />} />
+            <Route path="hr/onboarding" element={<FormHRT005 />} />
+            <Route path="hr/interview-eval" element={<FormHRT006 />} />
+            <Route path="hr/job-offer" element={<FormHRT007 />} />
+            <Route path="hr/warning-notice" element={<FormHRT008 />} />
+            <Route path="hr/probation-eval" element={<FormHRT009 />} />
+            <Route path="hr/performance-review" element={<FormHRT010 />} />
+            <Route path="hr/resignation" element={<FormHRT011 />} />
+            <Route path="hr/exit-interview" element={<FormHRT012 />} />
+            <Route path="hr/clearance" element={<FormHRT013 />} />
             <Route path="hr/view/:recordId" element={<FormViewer />} />
+
+            {/* Packaging & Filling Routes */}
+            <Route path="pkg" element={<PKGIndex />} />
+            <Route path="pkg/form/:formKey" element={<PackagingFormRenderer />} />
+            <Route path="pkg/view/:recordId" element={<FormViewer />} />
 
             {/* Production Routes */}
             <Route path="prd" element={<PRDIndex />} />
@@ -147,11 +183,12 @@ export default function App() {
             <Route path="qm/prm-005" element={<FormPRM005 />} />
             <Route path="qm/eqp-001" element={<FormEQP001 />} />
             <Route path="qm/mnt-001" element={<FormMNT001 />} />
+            <Route path="qm/cln-001" element={<FormCLN001 />} />
             {/* Make sure we can view QM records using the same viewer */}
             <Route path="qm/view/:recordId" element={<FormViewer />} />
 
-            {/* Training Routes */}
-            <Route path="trn" element={<TRNIndex />} />
+            {/* Training Routes (department merged into HRT; hub redirects to /hr) */}
+            <Route path="trn" element={<Navigate to="/hr" replace />} />
             <Route path="trn/trn-001" element={<FormTRN001 />} />
             <Route path="trn/trn-002" element={<FormTRN002 />} />
             <Route path="trn/trn-003" element={<FormTRN003 />} />

@@ -1,37 +1,95 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Save, CheckCircle, Pencil, X } from "lucide-react";
+import { Pencil, X, Users, FileSpreadsheet, Upload, Download, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, getAuthHeaders } from "../../lib/utils";
+import { nextSequentialId, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
+import * as XLSX from "xlsx";
+
+const BASE_FORM = {
+  fullNameAr: "", fullNameEn: "", idNumber: "", iqamaExpiry: "", dob: "", nationality: "",
+  maritalStatus: "أعزب", phone: "", email: "", address: "",
+  employeeNumber: "",
+  joinDate: "", department: "", jobTitle: "", supervisor: "",
+  contractType: "دوام كامل", contractExpiry: "", basicSalary: "", allowances: "",
+};
+
+// Column order for the bulk Excel template: Arabic header + data key.
+const BULK_COLUMNS: { header: string; key: string }[] = [
+  { header: "الاسم الكامل (عربي)*", key: "fullNameAr" },
+  { header: "الاسم الكامل (إنجليزي)*", key: "fullNameEn" },
+  { header: "الهوية / الإقامة*", key: "idNumber" },
+  { header: "تاريخ انتهاء الإقامة", key: "iqamaExpiry" },
+  { header: "تاريخ الميلاد", key: "dob" },
+  { header: "الجنسية*", key: "nationality" },
+  { header: "الحالة الاجتماعية", key: "maritalStatus" },
+  { header: "رقم الهاتف*", key: "phone" },
+  { header: "البريد الإلكتروني", key: "email" },
+  { header: "العنوان", key: "address" },
+  { header: "تاريخ الالتحاق*", key: "joinDate" },
+  { header: "القسم*", key: "department" },
+  { header: "المسمى الوظيفي*", key: "jobTitle" },
+  { header: "المشرف المباشر", key: "supervisor" },
+  { header: "نوع العقد", key: "contractType" },
+  { header: "تاريخ انتهاء العقد", key: "contractExpiry" },
+  { header: "الراتب الأساسي", key: "basicSalary" },
+  { header: "البدلات", key: "allowances" },
+];
 
 export default function FormHR002() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<any[]>([]);
+  const [allHrIds, setAllHrIds] = useState<string[]>([]);
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [company, setCompany] = useState<any>({});
 
-  const emptyForm = {
-    fullNameAr: "", fullNameEn: "", idNumber: "", dob: "", nationality: "",
-    maritalStatus: "أعزب", phone: "", email: "", address: "",
-    employeeNumber: `EMP-${Math.floor(Math.random() * 900 + 100)}`,
-    joinDate: "", department: "", jobTitle: "", supervisor: "",
-    contractType: "دوام كامل", basicSalary: "", allowances: "",
-  };
-
-  const [formData, setFormData] = useState(emptyForm);
+  const [formData, setFormData] = useState(BASE_FORM);
   const [date] = useState(new Date().toLocaleDateString("ar-EG"));
+
+  // Bulk Excel import state
+  const [activeTab, setActiveTab] = useState<"single" | "bulk">("single");
+  const [bulkRows, setBulkRows] = useState<any[]>([]);
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+  const [bulkResult, setBulkResult] = useState<any>(null);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const h = getAuthHeaders();
 
+  // Next employee number, derived from the employee numbers already in use.
+  const nextEmployeeNumber = (recs: any[]) =>
+    nextSequentialId(
+      "EMP",
+      recs.map((f: any) => f?.data?.employeeNumber).filter(Boolean),
+      3,
+    );
+
   useEffect(() => {
-    fetch("/api/forms/dept/HR", { headers: h })
+    const editId = new URLSearchParams(window.location.search).get("edit");
+
+    fetch("/api/company", { headers: h })
+      .then((r) => r.json())
+      .then((d) => setCompany(d || {}))
+      .catch(() => {});
+
+    fetch("/api/forms/dept/HRT", { headers: h })
       .then(r => r.json())
-      .then(data => setRecords(Array.isArray(data) ? data.filter((f: any) => f.form_id === "F-HR-002") : []))
-      .catch(console.error);
+      .then(data => {
+        const rows = Array.isArray(data) ? data : [];
+        const hr002 = rows.filter((f: any) => f.form_id === "F-HR-002");
+        setRecords(hr002);
+        setAllHrIds(rows.map((f: any) => f.record_id).filter(Boolean));
+        // Pre-fill a fresh employee number only when creating a new file.
+        if (!editId) {
+          setFormData((prev) =>
+            prev.employeeNumber ? prev : { ...prev, employeeNumber: nextEmployeeNumber(hr002) },
+          );
+        }
+      })
+      .catch(() => {});
 
     // Support URL param edit (from HRIndex edit button)
-    const editId = new URLSearchParams(window.location.search).get("edit");
     if (editId) {
       fetch(`/api/forms/record/${editId}`, { headers: h })
         .then(r => r.json())
@@ -41,7 +99,7 @@ export default function FormHR002() {
             setEditingRecordId(editId);
           }
         })
-        .catch(console.error);
+        .catch(() => {});
     }
   }, []);
 
@@ -53,7 +111,7 @@ export default function FormHR002() {
 
   const cancelEdit = () => {
     setEditingRecordId(null);
-    setFormData({ ...emptyForm, employeeNumber: `EMP-${Math.floor(Math.random() * 900 + 100)}` });
+    setFormData({ ...BASE_FORM, employeeNumber: nextEmployeeNumber(records) });
   };
 
   const handleSubmit = async (e: React.FormEvent, status: any) => {
@@ -61,8 +119,8 @@ export default function FormHR002() {
     setLoading(true);
     try {
       const isEdit = editingRecordId !== null;
-      const recordId = isEdit ? editingRecordId! : generateSerialNumber("HR", Math.floor(Math.random() * 1000));
-      const payload = { recordId, formId: "F-HR-002", department: "HR", creatorId: user?.id, status, data: formData };
+      const recordId = isEdit ? editingRecordId! : nextSequentialId("HR", allHrIds);
+      const payload = { recordId, formId: "F-HR-002", department: "HRT", creatorId: user?.id, status, data: formData };
       const res = await fetch(
         isEdit ? `/api/forms/record/${editingRecordId}` : "/api/forms",
         { method: isEdit ? "PUT" : "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify(payload) }
@@ -79,24 +137,136 @@ export default function FormHR002() {
         const errData = await res.json().catch(() => ({ error: "حدث خطأ أثناء الحفظ" }));
         alert(errData.error || "حدث خطأ أثناء الحفظ");
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      alert("تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مرة أخرى.");
+    }
     setLoading(false);
+  };
+
+  // ── Excel template download ──
+  const downloadTemplate = () => {
+    const headers = BULK_COLUMNS.map((c) => c.header);
+    const keys = BULK_COLUMNS.map((c) => c.key);
+    const example = [
+      "محمد أحمد العتيبي", "Mohammed A. Alotaibi", "1012345678", "2027-05-01",
+      "1990-03-15", "سعودي", "أعزب", "0501234567", "m@example.com", "الرياض - حي النخيل",
+      "2026-01-01", "الإنتاج", "فني تشغيل", "خالد الزهراني", "دوام كامل", "2028-01-01",
+      "5000", "بدل سكن 1000",
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, keys, example]);
+    ws["!cols"] = headers.map(() => ({ wch: 22 }));
+    XLSX.utils.book_append_sheet(wb, ws, "نموذج الموظفين");
+
+    const instructions = [
+      ["تعليمات تعبئة نموذج الموظفين"],
+      [""],
+      ["1. لا تحذف أول صفّين (العناوين + المفاتيح) — ابدأ إدخال البيانات من الصف الثالث."],
+      ["2. الحقول الإلزامية (*):", "الاسم بالعربي، الاسم بالإنجليزي، الهوية/الإقامة، الجنسية، الهاتف، تاريخ الالتحاق، القسم، المسمى الوظيفي"],
+      ["3. صيغة التواريخ:", "YYYY-MM-DD (مثال: 2027-05-01)"],
+      ["4. نوع العقد:", "دوام كامل | دوام جزئي | تدريب"],
+      ["5. الحالة الاجتماعية:", "أعزب | متزوج | مطلق | أرمل"],
+      ["6. رقم الموظف:", "يُولّد تلقائياً عند الاستيراد — لا تُدرجه هنا"],
+    ];
+    const wsInst = XLSX.utils.aoa_to_sheet(instructions);
+    wsInst["!cols"] = [{ wch: 28 }, { wch: 70 }];
+    XLSX.utils.book_append_sheet(wb, wsInst, "التعليمات");
+
+    XLSX.writeFile(wb, "نموذج_استيراد_الموظفين.xlsx");
+  };
+
+  // ── Parse uploaded Excel ──
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkErrors([]);
+    setBulkResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        if (raw.length < 3) {
+          setBulkErrors(["الملف لا يحتوي على بيانات كافية. استخدم النموذج المحمّل."]);
+          return;
+        }
+        const keyRow: string[] = (raw[1] as string[]).map((k) => String(k).trim());
+        const dataRows = raw.slice(2).filter((row) => row.some((v) => v !== ""));
+        const errs: string[] = [];
+        const parsed = dataRows.map((row, idx) => {
+          const obj: Record<string, string> = {};
+          keyRow.forEach((k, ci) => { obj[k] = String(row[ci] ?? "").trim(); });
+          if (!obj.fullNameAr) errs.push(`الصف ${idx + 3}: الاسم بالعربي مفقود`);
+          if (!obj.fullNameEn) errs.push(`الصف ${idx + 3}: الاسم بالإنجليزي مفقود`);
+          if (!obj.idNumber) errs.push(`الصف ${idx + 3}: رقم الهوية/الإقامة مفقود`);
+          if (!obj.department) errs.push(`الصف ${idx + 3}: القسم مفقود`);
+          if (!obj.jobTitle) errs.push(`الصف ${idx + 3}: المسمى الوظيفي مفقود`);
+          return obj;
+        });
+        setBulkErrors(errs);
+        setBulkRows(parsed);
+      } catch {
+        setBulkErrors(["فشل في قراءة الملف. تأكد أنه ملف Excel صالح (.xlsx)"]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleBulkImport = async () => {
+    if (bulkRows.length === 0) return;
+    setBulkImporting(true);
+    try {
+      const res = await fetch("/api/employees/bulk", {
+        method: "POST",
+        headers: getJsonHeaders(),
+        body: JSON.stringify({ rows: bulkRows }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBulkResult(data);
+        setBulkRows([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      } else {
+        setBulkErrors([data.error || "فشل الاستيراد"]);
+      }
+    } catch {
+      setBulkErrors(["خطأ في الاتصال بالخادم"]);
+    }
+    setBulkImporting(false);
   };
 
   return (
     <div className="max-w-4xl mx-auto bg-white border border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.05)] rounded-2xl overflow-hidden">
       <div className="border-b border-slate-200 p-6 flex justify-between items-center bg-slate-50">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">الشركة الحديثة للتجميل</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{company.name_ar || "نظام الجودة"}</h1>
           <p className="text-sm font-semibold text-slate-500 mt-1">ISO 22716 - GMP</p>
         </div>
         <div className="text-left">
           <h2 className="text-xl font-bold text-slate-800 mb-1">ملف الموظف الشخصي</h2>
           <p className="text-sm font-mono text-slate-500">نموذج: F-HR-002</p>
-          <p className="text-sm font-mono text-slate-500">تاريخ الإصدار: 01-01-2025</p>
+          <p className="text-sm font-mono text-slate-500">تاريخ الإصدار: {date}</p>
         </div>
       </div>
 
+      {/* Tab selector */}
+      <div className="border-b border-slate-200 px-6 pt-2 flex gap-1">
+        <button type="button" onClick={() => setActiveTab("single")}
+          className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${activeTab === "single" ? "border-sky-600 text-sky-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+          <Users className="w-4 h-4 inline ml-1" />
+          إضافة موظف واحد
+        </button>
+        <button type="button" onClick={() => setActiveTab("bulk")}
+          className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${activeTab === "bulk" ? "border-sky-600 text-sky-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+          <FileSpreadsheet className="w-4 h-4 inline ml-1" />
+          استيراد جماعي من Excel
+        </button>
+      </div>
+
+      {activeTab === "single" && (
       <form className="p-8">
         {editingRecordId && (
           <div className="flex items-center justify-between mb-4 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
@@ -123,6 +293,10 @@ export default function FormHR002() {
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">الهوية / الإقامة <span className="text-red-500">*</span></label>
             <input type="text" required value={formData.idNumber} onChange={e => setFormData({ ...formData, idNumber: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2" />
+          </div>
+          <div>
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">تاريخ انتهاء الإقامة</label>
+            <input type="date" value={formData.iqamaExpiry} onChange={e => setFormData({ ...formData, iqamaExpiry: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2" />
           </div>
           <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">تاريخ الميلاد <span className="text-red-500">*</span></label>
@@ -181,6 +355,10 @@ export default function FormHR002() {
             </select>
           </div>
           <div>
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">تاريخ انتهاء العقد</label>
+            <input type="date" value={formData.contractExpiry} onChange={e => setFormData({ ...formData, contractExpiry: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2" />
+          </div>
+          <div>
             <label className="block text-[13px] font-semibold text-slate-600 mb-1">الراتب الأساسي</label>
             <input type="number" value={formData.basicSalary} onChange={e => setFormData({ ...formData, basicSalary: e.target.value })} className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2" />
           </div>
@@ -212,6 +390,115 @@ export default function FormHR002() {
           <button type="button" disabled={loading} onClick={() => window.history.length > 1 ? navigate(-1) : navigate("/")} className="text-slate-500 hover:text-slate-700 font-semibold text-[14px]">إغلاق والعودة</button>
         </div>
       </form>
+      )}
+
+      {/* ── BULK IMPORT TAB ── */}
+      {activeTab === "bulk" && (
+        <div className="p-8 space-y-6">
+          {/* Step 1 */}
+          <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+            <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
+              <span className="w-6 h-6 bg-sky-600 text-white text-xs font-bold rounded-full flex items-center justify-center">1</span>
+              تحميل نموذج Excel
+            </h3>
+            <p className="text-sm text-slate-500 mb-4 mr-8">حمّل النموذج الجاهز، عبّئ بيانات الموظفين، ثم ارفعه في الخطوة التالية. رقم الموظف يُولّد تلقائياً.</p>
+            <button type="button" onClick={downloadTemplate} className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-emerald-700 transition-colors text-sm">
+              <Download className="w-4 h-4" />
+              تحميل نموذج Excel الجاهز
+            </button>
+          </div>
+
+          {/* Step 2 */}
+          <div className="bg-slate-50 rounded-xl border border-slate-200 p-5">
+            <h3 className="font-bold text-slate-800 mb-1 flex items-center gap-2">
+              <span className="w-6 h-6 bg-sky-600 text-white text-xs font-bold rounded-full flex items-center justify-center">2</span>
+              رفع ملف Excel المعبّأ
+            </h3>
+            <p className="text-sm text-slate-500 mb-4 mr-8">يجب استخدام النموذج المحمّل في الخطوة السابقة فقط (لا تحذف صفّي العناوين).</p>
+            <label className="flex items-center gap-3 bg-white border-2 border-dashed border-slate-300 rounded-xl p-5 cursor-pointer hover:border-sky-400 transition-colors">
+              <Upload className="w-8 h-8 text-slate-400 flex-shrink-0" />
+              <div>
+                <div className="font-semibold text-slate-700 text-sm">انقر لاختيار ملف Excel</div>
+                <div className="text-xs text-slate-400 mt-0.5">xlsx. فقط</div>
+              </div>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleExcelUpload} />
+            </label>
+          </div>
+
+          {bulkErrors.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2 font-bold text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4" /> أخطاء في الملف
+              </div>
+              <ul className="space-y-1">
+                {bulkErrors.map((e, i) => <li key={i} className="text-xs text-red-600">{e}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {bulkResult && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 font-bold text-emerald-700 text-sm mb-1">
+                <CheckCircle2 className="w-4 h-4" /> تم الاستيراد بنجاح
+              </div>
+              <p className="text-sm text-emerald-700">تمت إضافة <strong>{bulkResult.inserted}</strong> موظف.</p>
+              {bulkResult.errors?.length > 0 && (
+                <ul className="mt-2 space-y-1">{bulkResult.errors.map((e: string, i: number) => <li key={i} className="text-xs text-amber-600">{e}</li>)}</ul>
+              )}
+              <button type="button" onClick={() => navigate("/hr")} className="mt-3 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700">العودة للقسم</button>
+            </div>
+          )}
+
+          {/* Step 3: preview */}
+          {bulkRows.length > 0 && bulkErrors.length === 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+                <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                  <span className="w-6 h-6 bg-sky-600 text-white text-xs font-bold rounded-full flex items-center justify-center">3</span>
+                  معاينة البيانات ({bulkRows.length} موظف)
+                </span>
+                <button type="button" onClick={() => { setBulkRows([]); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold">
+                    <tr>
+                      <th className="px-3 py-2 border-b">#</th>
+                      <th className="px-3 py-2 border-b">الاسم (عربي)</th>
+                      <th className="px-3 py-2 border-b">الهوية/الإقامة</th>
+                      <th className="px-3 py-2 border-b">القسم</th>
+                      <th className="px-3 py-2 border-b">المسمى</th>
+                      <th className="px-3 py-2 border-b">انتهاء الإقامة</th>
+                      <th className="px-3 py-2 border-b">انتهاء العقد</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {bulkRows.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 text-slate-400">{i + 1}</td>
+                        <td className="px-3 py-2 font-medium">{row.fullNameAr}</td>
+                        <td className="px-3 py-2 font-mono">{row.idNumber}</td>
+                        <td className="px-3 py-2">{row.department}</td>
+                        <td className="px-3 py-2">{row.jobTitle}</td>
+                        <td className="px-3 py-2">{row.iqamaExpiry || "—"}</td>
+                        <td className="px-3 py-2">{row.contractExpiry || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 border-t border-slate-200 flex justify-end">
+                <button type="button" disabled={bulkImporting} onClick={handleBulkImport} className="flex items-center gap-2 bg-sky-600 text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-sky-700 disabled:opacity-50 text-sm">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {bulkImporting ? "جارٍ الاستيراد..." : `استيراد ${bulkRows.length} موظف`}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Existing employee records */}
       {records.length > 0 && (

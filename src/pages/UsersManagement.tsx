@@ -11,141 +11,7 @@ import {
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { getJsonHeaders } from "../lib/utils";
-
-const DEPT_PERMISSIONS: Record<
-  string,
-  { category: string; items: { id: string; label: string }[] }[]
-> = {
-  INV: [
-    {
-      category: "نماذج المواد الخام",
-      items: [
-        { id: "F-INV-RMT-001", label: "استلام مادة خام" },
-        { id: "F-INV-MV-001", label: "حركات المخزون" },
-        { id: "F-INV-RM-001", label: "إنشاء مادة جديدة" },
-        { id: "F-INV-BOM", label: "قائمة المكونات BOM" },
-      ],
-    },
-    {
-      category: "نماذج المنتج النهائي",
-      items: [
-        { id: "F-FP-001", label: "إفراج عن منتج" },
-        { id: "F-FP-002", label: "تسجيل تخزين" },
-        { id: "F-FP-003", label: "شحن للعميل" },
-        { id: "F-FP-004", label: "تسجيل مرتجع" },
-        { id: "F-FP-005", label: "إتلاف منتج" },
-        { id: "F-FP-006", label: "إعادة تدوير" },
-      ],
-    },
-    {
-      category: "المشتريات",
-      items: [
-        { id: "F-PRQ-001", label: "طلب شراء PRQ" },
-        { id: "F-PIN-001", label: "فاتورة استلام" },
-      ],
-    },
-    {
-      category: "التقارير",
-      items: [
-        { id: "REP-INV-BAL", label: "تقرير الأرصدة" },
-        { id: "REP-INV-SHP", label: "تقرير الشحنات" },
-        { id: "REP-INV-SUP", label: "تقرير الموردين" },
-        { id: "REP-INV-TRN", label: "تقرير حركات المخزون" },
-        { id: "REP-INV-RET", label: "تقرير المرتجعات والإتلاف" },
-      ],
-    },
-  ],
-  PRD: [
-    {
-      category: "الإنتاج المجسد",
-      items: [
-        { id: "F-PRD-001", label: "أمر إنتاج" },
-        { id: "F-PRD-002", label: "سجل التصنيع والتشغيل" },
-        { id: "F-PRD-003", label: "قائمة مراجعة الإنتاج" },
-        { id: "F-PRD-004", label: "مراقبة العملية" },
-      ],
-    },
-    {
-      category: "التقارير",
-      items: [
-        { id: "prd_orders", label: "تقرير أوامر الإنتاج" },
-        { id: "prd_waste", label: "تقرير الفاقد الإنتاجي" },
-        { id: "prd_monitoring", label: "تقرير رصد المعاملات" },
-        { id: "prd_labor", label: "تقرير كفاءة العمالة" },
-        { id: "prd_bom", label: "تقرير مقارنة BOM بالاستهلاك" },
-      ],
-    },
-  ],
-  QM: [
-    {
-      category: "إدارة الجودة",
-      items: [
-        { id: "F-CMP-001", label: "سجل شكاوى العملاء" },
-        { id: "F-RCL-001", label: "سجل استدعاء المنتجات" },
-        { id: "F-DEV-001", label: "سجل الانحرافات" },
-        { id: "F-QM-005", label: "تقرير عدم المطابقة" },
-        { id: "F-QM-006", label: "إجراء تصحيحي ووقائي" },
-      ],
-    },
-    {
-      category: "التقارير",
-      items: [
-        { id: "qm_ncr", label: "تقرير عدم المطابقة NCR" },
-        { id: "qm_capa", label: "تقرير CAPA" },
-        { id: "qm_risk", label: "تقرير تقييم المخاطر" },
-        { id: "qm_mnt", label: "تقرير الصيانة والأعطال" },
-        { id: "qm_env", label: "مراقبة الحرارة والرطوبة" },
-        { id: "qm_cal", label: "تقرير جدول المعايرة" },
-        { id: "qm_recall", label: "تقرير الاستدعاءات" },
-        { id: "batch_trace", label: "تتبع الدفعة الكامل" },
-      ],
-    },
-  ],
-  LAB: [
-    {
-      category: "المختبر",
-      items: [
-        { id: "F-LAB-001", label: "استلام عينة" },
-        { id: "F-LAB-002", label: "نتائج الاختبار" },
-        { id: "F-LAB-003", label: "سجل عينات الاحتفاظ" },
-        { id: "F-LAB-004", label: "معايرة الأجهزة" },
-        { id: "F-LAB-005", label: "تحضير المواد الكيميائية" },
-        { id: "F-LAB-006", label: "مراقبة صلاحية الكواشف" },
-      ],
-    },
-    {
-      category: "التقارير",
-      items: [{ id: "expiry_watch", label: "تقرير انتهاء الصلاحية" }],
-    },
-  ],
-  HR: [
-    {
-      category: "الموارد البشرية",
-      items: [
-        { id: "F-HR-001", label: "إضافة موظف" },
-        { id: "F-HR-002", label: "تقييم أداء" },
-        { id: "F-HR-003", label: "سجل الإجازات" },
-      ],
-    },
-  ],
-  TRN: [
-    {
-      category: "التدريب",
-      items: [
-        { id: "F-TRN-001", label: "خطة التدريب" },
-        { id: "F-TRN-002", label: "سجل حضور" },
-        { id: "F-TRN-003", label: "شهادة اجتياز" },
-        { id: "F-TRN-004", label: "تقييم مدرب" },
-      ],
-    },
-  ],
-  ALL: [
-    {
-      category: "لوحات القيادة المستقلة",
-      items: [{ id: "exec_dash", label: "لوحة KPI التنفيذية" }],
-    },
-  ],
-};
+import { DEPT_PERMISSIONS, USER_DEPARTMENT_OPTIONS } from "../constants/departments";
 
 export default function UsersManagement() {
   const { user } = useAuth();
@@ -283,7 +149,7 @@ export default function UsersManagement() {
               id: null,
               userId: "",
               name: "",
-              department: "HR",
+              department: "HRT",
               level: 4,
               password: "",
               permissions: {},
@@ -467,16 +333,7 @@ export default function UsersManagement() {
                         }
                         className="w-full border border-slate-300 rounded-lg shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 sm:text-sm"
                       >
-                        {[
-                          "INV",
-                          "PRD",
-                          "QM",
-                          "LAB",
-                          "HR",
-                          "TRN",
-                          "SLA",
-                          "ALL",
-                        ].map((d) => (
+                        {USER_DEPARTMENT_OPTIONS.map((d) => (
                           <option key={d} value={d}>
                             {d}
                           </option>
@@ -527,21 +384,17 @@ export default function UsersManagement() {
                 </div>
               ) : (
                 <div className="space-y-6 max-h-[60vh] overflow-y-auto pl-2">
-                  {(formData.department === "ALL"
-                    ? Object.entries(DEPT_PERMISSIONS)
-                    : [
-                        [
-                          formData.department,
-                          DEPT_PERMISSIONS[formData.department] || [],
-                        ],
-                      ]
-                  ).map(([deptKey, deptCats]) => (
+                  <p className="text-xs text-slate-500 bg-sky-50 border border-sky-100 rounded-lg p-3">
+                    اختر صلاحيات هذا المستخدم من أي قسم. يمكن منح موظف صلاحيات في
+                    أكثر من قسم (مثلاً الجودة والمخزون معاً).
+                  </p>
+                  {/* Always show every department so a user can hold permissions
+                      across multiple departments, regardless of primary dept. */}
+                  {Object.entries(DEPT_PERMISSIONS).map(([deptKey, deptCats]) => (
                     <div key={deptKey as string} className="mb-6">
-                      {formData.department === "ALL" && (
-                        <h3 className="font-bold text-lg text-slate-800 mb-3 border-b border-slate-200 pb-2">
-                          قسم {deptKey as string}
-                        </h3>
-                      )}
+                      <h3 className="font-bold text-lg text-slate-800 mb-3 border-b border-slate-200 pb-2">
+                        قسم {deptKey as string}
+                      </h3>
                       <div className="space-y-4">
                         {(
                           deptCats as {

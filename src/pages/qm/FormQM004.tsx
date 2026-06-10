@@ -135,7 +135,7 @@ export default function FormQM004() {
                 <option value="Maintenance">
                   الصيانة والمرافق (Maintenance)
                 </option>
-                <option value="HR">الموارد البشرية والتدريب (HR)</option>
+                <option value="HRT">الموارد البشرية والتدريب (HRT)</option>
               </select>
             </div>
             <div>

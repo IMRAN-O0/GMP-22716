@@ -23,12 +23,25 @@ import {
   Wrench,
   FileBarChart2,
   Pencil,
+  Sparkles,
 } from "lucide-react";
 import DepartmentNotifications from "../../components/DepartmentNotifications";
 import { getAuthHeaders } from "../../lib/utils";
 
 export default function QMIndex() {
   const [records, setRecords] = useState<any[]>([]);
+
+  // QM forms that support continuing/editing from their own route via ?edit=
+  const editRouteByForm: Record<string, string> = {
+    "F-CLN-001": "/qm/cln-001",
+    "F-PRM-001": "/qm/prm-001",
+    "F-PRM-002": "/qm/prm-002",
+    "F-PRM-003": "/qm/prm-003",
+    "F-PRM-004": "/qm/prm-004",
+    "F-PRM-005": "/qm/prm-005",
+    "F-EQP-001": "/qm/eqp-001",
+    "F-MNT-001": "/qm/mnt-001",
+  };
 
   useEffect(() => {
     fetch("/api/forms/dept/QM", { headers: getAuthHeaders() })
@@ -235,6 +248,30 @@ export default function QMIndex() {
         </div>
       </section>
 
+      {/* Sanitation & Cleaning */}
+      <section>
+        <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
+          <Sparkles className="w-6 h-6 text-cyan-500" />
+          <h2 className="text-xl font-bold text-slate-800">
+            النظافة والتطهير (Sanitation)
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Link
+            to="/qm/cln-001"
+            className="bg-white border border-cyan-200 bg-cyan-50/40 rounded-xl p-6 hover:shadow-md hover:border-cyan-400 transition-all flex flex-col items-center group text-center"
+          >
+            <div className="w-12 h-12 bg-cyan-100 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <Sparkles className="text-cyan-600 w-6 h-6" />
+            </div>
+            <h4 className="font-bold text-slate-800">F-CLN-001</h4>
+            <p className="text-sm text-slate-500 mt-1 font-semibold text-cyan-700">
+              سجل التنظيف الأسبوعي للمرافق
+            </p>
+          </Link>
+        </div>
+      </section>
+
       {/* Facilities & Premises */}
       <section>
         <div className="flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
@@ -371,13 +408,13 @@ export default function QMIndex() {
                       </td>
                       <td className="p-4 text-center">
                         <div className="flex items-center gap-2 justify-center">
-                          {r.form_id === "F-EQP-001" && (
+                          {editRouteByForm[r.form_id] && (
                             <Link
-                              to={`/qm/eqp-001?edit=${r.record_id}`}
+                              to={`${editRouteByForm[r.form_id]}?edit=${r.record_id}`}
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold rounded-lg text-xs border border-amber-200 transition-colors"
                             >
                               <Pencil className="w-3 h-3" />
-                              تعديل
+                              {r.status === "draft" ? "إكمال" : "تعديل"}
                             </Link>
                           )}
                           <Link

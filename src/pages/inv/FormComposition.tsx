@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatMaterialCode, formatProductCode, formatBOMCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
-import { Save, ArrowRight, PlusCircle, Trash2, Beaker } from "lucide-react";
+import { Save, ArrowRight, PlusCircle, Trash2, Beaker, History, Pencil } from "lucide-react";
 import { SearchModal, SearchField } from "../../components/SearchModal";
+import { StatusBadge } from "../../components/StatusBadge";
 
 export default function FormComposition() {
   const { user } = useAuth();
@@ -13,6 +14,7 @@ export default function FormComposition() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
+  const [previousCompositions, setPreviousCompositions] = useState<any[]>([]);
 
   const [formData, setFormData] = useState({
     compositionNo: `AH-${String(Math.floor(Math.random() * 9000) + 1000)}`,
@@ -40,6 +42,38 @@ export default function FormComposition() {
       })
       .catch(console.error);
   }, []);
+
+  // Load previously saved compositions (BOMs) to show below the form.
+  const loadPreviousCompositions = React.useCallback(() => {
+    fetch("/api/forms", { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
+        setPreviousCompositions(
+          rows.filter((f: any) => f.form_id === "F-INV-BOM"),
+        );
+      })
+      .catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    loadPreviousCompositions();
+  }, [loadPreviousCompositions]);
+
+  // Load an existing composition into the form for editing.
+  const loadComposition = (recordId: string) => {
+    fetch(`/api/forms/record/${recordId}`, { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.data) {
+          setFormData((prev) => ({ ...prev, ...data.data }));
+          // Mark the form as editing this record so saving updates it.
+          window.history.replaceState(null, "", `?edit=${recordId}`);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      })
+      .catch(console.error);
+  };
 
   const addMaterial = () => {
     setFormData((prev) => ({
@@ -437,6 +471,94 @@ export default function FormComposition() {
           </button>
         </div>
       </form>
+
+      {/* Previously saved compositions */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <History className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-lg font-bold text-slate-800 m-0">
+              التركيبات السابقة
+            </h2>
+            <span className="bg-slate-100 text-slate-600 text-[12px] font-bold px-2 py-0.5 rounded-full">
+              {previousCompositions.length}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={loadPreviousCompositions}
+            className="text-[13px] font-semibold text-emerald-600 hover:text-emerald-700"
+          >
+            تحديث
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead className="bg-slate-50 text-slate-600 text-sm border-b border-slate-200">
+              <tr>
+                <th className="p-3 font-semibold">رقم التركيبة</th>
+                <th className="p-3 font-semibold">المنتج النهائي</th>
+                <th className="p-3 font-semibold w-20 text-center">الإصدار</th>
+                <th className="p-3 font-semibold w-24 text-center">عدد المواد</th>
+                <th className="p-3 font-semibold w-32 text-center">الحالة</th>
+                <th className="p-3 font-semibold w-28">التاريخ</th>
+                <th className="p-3 font-semibold w-16 text-center">فتح</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {previousCompositions.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-400 text-sm">
+                    لا توجد تركيبات محفوظة بعد.
+                  </td>
+                </tr>
+              ) : (
+                previousCompositions.map((c) => (
+                  <tr key={c.record_id} className="hover:bg-slate-50">
+                    <td className="p-3 font-mono font-bold text-slate-700 text-sm">
+                      {c.record_id}
+                    </td>
+                    <td className="p-3 text-sm text-slate-700">
+                      {c.data?.productName || "—"}
+                      {c.data?.productCode && (
+                        <span className="text-slate-400 font-mono text-[12px] mr-1">
+                          ({c.data.productCode})
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3 text-center text-sm text-slate-600">
+                      {c.data?.version || "—"}
+                    </td>
+                    <td className="p-3 text-center text-sm text-slate-600">
+                      {Array.isArray(c.data?.materials) ? c.data.materials.length : 0}
+                    </td>
+                    <td className="p-3 text-center">
+                      <StatusBadge status={c.status} />
+                    </td>
+                    <td className="p-3 text-[12px] text-slate-500">
+                      {c.created_at
+                        ? new Date(c.created_at).toLocaleDateString("ar-EG")
+                        : "—"}
+                    </td>
+                    <td className="p-3 text-center">
+                      <button
+                        type="button"
+                        title="فتح للتعديل"
+                        onClick={() => loadComposition(c.record_id)}
+                        className="text-sky-500 hover:text-sky-700 p-1.5 rounded-lg hover:bg-sky-50 transition-colors inline-block"
+                      >
+                        <Pencil className="w-4 h-4 mx-auto" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {showProductModal && (
         <SearchModal
           title="بحث عن منتج نهائي (F3)"

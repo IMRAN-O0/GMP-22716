@@ -1,6 +1,6 @@
 {
   "name": "gmp-qms",
-  "productName": "GMP QMS",
+  "productName": "NAXE OS",
   "private": true,
   "version": "1.0.0",
   "description": "GMP Quality Management System",
@@ -61,6 +61,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "@eslint/js": "^10.0.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.25",
@@ -89,7 +90,7 @@
   },
   "build": {
     "appId": "com.moderncosmetics.gmp",
-    "productName": "GMP System",
+    "productName": "NAXE OS",
     "copyright": "Modern Cosmetics Co.",
     "directories": {
       "output": "dist-electron"

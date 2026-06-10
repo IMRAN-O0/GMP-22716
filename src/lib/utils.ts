@@ -45,6 +45,66 @@ export const generateSerialNumber = (departmentCode: string, currentCount: numbe
     return `${departmentCode}-${sequence}-${year}`;
 };
 
+/**
+ * Generate the next sequential record id for a given prefix, based on the ids
+ * already in use. This replaces the old `Math.random()`-based ids, which could
+ * silently collide. e.g. prefix "HR" with ["HR-0001","HR-0003"] → "HR-0004".
+ *
+ * @param prefix      the id prefix (e.g. "HR", "TRN-PLN", "EMP")
+ * @param existingIds ids already issued (numeric suffix is read from each)
+ * @param width       zero-padding width for the numeric part (default 4)
+ */
+export const nextSequentialId = (
+    prefix: string,
+    existingIds: string[] = [],
+    width: number = 4,
+): string => {
+    const escaped = prefix.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const re = new RegExp(`^${escaped}-?(\\d+)$`);
+    let max = 0;
+    for (const id of existingIds) {
+        const m = String(id || '').match(re);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `${prefix}-${String(max + 1).padStart(width, '0')}`;
+};
+
+/**
+ * Build a production batch number from a product's English name and a date.
+ *
+ * Format: <initials><YYYYMMDD>, where the initials are the first letter of
+ * each word in the English name, upper-cased. e.g. "Candy Body Scrub" on
+ * 2026-06-07 → "CBS20260607".
+ *
+ * Collisions (same product, same day) are disambiguated against `existing`
+ * by appending F, then F2, F3, … i.e. base, baseF, baseF2, baseF3, …
+ *
+ * @param nameEn   the product's English name (required — caller must ensure it exists)
+ * @param dateYmd  date in "YYYY-MM-DD" form (defaults to today)
+ * @param existing batch numbers already in use, for collision handling
+ */
+export const buildBatchNumber = (
+    nameEn: string,
+    dateYmd: string = new Date().toISOString().split('T')[0],
+    existing: string[] = [],
+): string => {
+    const initials = (nameEn || '')
+        .trim()
+        .split(/\s+/)
+        .map((word) => word.replace(/[^A-Za-z0-9]/g, '').charAt(0))
+        .join('')
+        .toUpperCase();
+    const datePart = (dateYmd || '').replace(/-/g, '');
+    const base = `${initials}${datePart}`;
+
+    const taken = new Set(existing);
+    if (!taken.has(base)) return base;
+    if (!taken.has(`${base}F`)) return `${base}F`;
+    let n = 2;
+    while (taken.has(`${base}F${n}`)) n++;
+    return `${base}F${n}`;
+};
+
 // Shared auth headers — avoids duplicating localStorage.getItem("token") everywhere
 export const getAuthHeaders = (): HeadersInit => ({
   Authorization: `Bearer ${localStorage.getItem("token") || ""}`,

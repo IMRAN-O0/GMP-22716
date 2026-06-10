@@ -45,12 +45,13 @@ async function startServer() {
     ? process.env.ALLOWED_ORIGINS.split(',')
     : [`http://localhost:${PORT}`];
 
-  // Allow localhost plus any private-LAN address on the same port (192.168.x, 10.x, 172.16-31.x).
+  // Allow localhost plus any private-LAN address on the same port (192.168.x, 10.x, 172.16-31.x),
+  // as well as the Tailscale/CGNAT range 100.64.0.0/10 so VPN-joined devices work like LAN clients.
   // This is a self-hosted LAN app, so requests from other machines on the network are expected.
   const isPrivateLanOrigin = (origin: string) => {
     try {
       const u = new URL(origin);
-      return /^(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/.test(u.hostname);
+      return /^(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|100\.(6[4-9]|[789]\d|1[01]\d|12[0-7])\.\d+\.\d+)$/.test(u.hostname);
     } catch { return false; }
   };
 
@@ -83,8 +84,8 @@ async function startServer() {
 
   app.use('/api/login', loginLimiter);
   app.use('/api/', generalLimiter);
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ limit: '1mb', extended: true }));
+  app.use(express.json({ limit: '5mb' }));
+  app.use(express.urlencoded({ limit: '5mb', extended: true }));
 
   await initDb();
   setupAutomatedBackup();

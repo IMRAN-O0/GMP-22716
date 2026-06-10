@@ -440,7 +440,9 @@ router.get("/company", requireAuth, (req, res) => {
 const companySchema = yup.object({
   name_ar:        yup.string().trim().min(1).max(200).required(),
   name_en:        yup.string().trim().max(200).optional(),
-  logo_url:       yup.string().trim().url().max(500).nullable().optional(),
+  // logo_url may be an uploaded image stored inline as a base64 data URI,
+  // so we can't require a http(s) URL or a small length here.
+  logo_url:       yup.string().trim().max(3_000_000).nullable().optional(),
   address:        yup.string().trim().max(500).optional(),
   phone:          yup.string().trim().max(30).optional(),
   email:          yup.string().trim().email().max(200).nullable().optional(),
@@ -564,6 +566,97 @@ router.get("/employees", requireAuth, (req, res) => {
     res.json(rows || []);
   });
 });
+
+// HRT: Bulk-import employee files (F-HR-002) from an Excel upload.
+// Each row becomes an approved forms_record + a row in the employees table.
+router.post("/employees/bulk", requireAuth, (req: any, res) => {
+  const user = req.user;
+  if (!user || user.level > 2) return res.status(403).json({ error: "غير مصرح" });
+
+  const { rows } = req.body;
+  if (!Array.isArray(rows) || rows.length === 0)
+    return res.status(400).json({ error: "لا توجد بيانات للاستيراد" });
+
+  const db = getDb();
+  const timestamp = new Date().toISOString();
+
+  const nextNum = (ids: string[], prefix: string) => {
+    let max = 0;
+    ids.forEach((id) => {
+      const m = String(id).match(new RegExp(`^${prefix}-?(\\d+)$`));
+      if (m) { const n = parseInt(m[1], 10); if (n > max) max = n; }
+    });
+    return max;
+  };
+
+  // Pre-load existing record_ids (HR-####) and employee numbers (EMP-###).
+  db.all(
+    "SELECT record_id, data_json FROM forms_records WHERE form_id = 'F-HR-002'",
+    [],
+    (e1, hr002Rows: any[]) => {
+      if (e1) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+      db.all(
+        "SELECT record_id FROM forms_records WHERE record_id LIKE 'HR-%'",
+        [],
+        (e2, hrIdRows: any[]) => {
+          if (e2) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
+
+          let recSeq = nextNum((hrIdRows || []).map((r) => r.record_id), "HR");
+          const empNumbers = (hr002Rows || [])
+            .map((r) => { try { return JSON.parse(r.data_json)?.employeeNumber; } catch { return null; } })
+            .filter(Boolean);
+          let empSeq = nextNum(empNumbers, "EMP");
+
+          const errors: string[] = [];
+          let inserted = 0;
+
+          const insertNext = (i: number) => {
+            if (i >= rows.length) {
+              return res.json({ success: true, inserted, skipped: 0, errors });
+            }
+            const r = rows[i] || {};
+            if (!r.fullNameAr || !r.idNumber) {
+              errors.push(`الصف ${i + 3}: الاسم بالعربي ورقم الهوية مطلوبان`);
+              return insertNext(i + 1);
+            }
+            recSeq += 1;
+            empSeq += 1;
+            const recordId = `HR-${String(recSeq).padStart(4, "0")}`;
+            const employeeNumber = `EMP-${String(empSeq).padStart(3, "0")}`;
+            const data = { ...r, employeeNumber };
+
+            db.run(
+              `INSERT INTO forms_records (record_id, form_id, department, creator_id, created_at, status, data_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [recordId, "F-HR-002", "HRT", user.id, timestamp, "approved", JSON.stringify(data)],
+              function (insErr) {
+                if (insErr) {
+                  errors.push(`الصف ${i + 3} (${r.fullNameAr}): ${insErr.message}`);
+                  return insertNext(i + 1);
+                }
+                inserted++;
+                // Sync to employees table
+                db.run(
+                  `INSERT OR REPLACE INTO employees (employee_number, full_name_ar, full_name_en, department, job_title, join_date, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                  [employeeNumber, r.fullNameAr || "", r.fullNameEn || "", r.department || "", r.jobTitle || "", r.joinDate || "", "active"],
+                );
+                db.run(
+                  `INSERT INTO audit_log (user_id, action, form_id, record_id, timestamp, details) VALUES (?, ?, ?, ?, ?, ?)`,
+                  [user.id, "CREATE", "F-HR-002", recordId, timestamp, "Bulk import"],
+                );
+                insertNext(i + 1);
+              },
+            );
+          };
+
+          insertNext(0);
+        },
+      );
+    },
+  );
+});
+
 
 // INV: Get Warehouses
 router.get("/warehouses", requireAuth, (req, res) => {
@@ -1330,6 +1423,61 @@ const FORM_REQUIRED_FIELDS: Record<string, { field: string; label: string }[]> =
     { field: "issueDate",             label: "تاريخ الإصدار" },
     { field: "expiryDate",            label: "تاريخ الانتهاء" },
   ],
+  // ── Merged HR + Training (HRT) new forms ──
+  "F-HRT-001": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "pledgeDate",            label: "تاريخ الإقرار" },
+  ],
+  "F-HRT-002": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "leaveType",             label: "نوع الإجازة" },
+    { field: "startDate",             label: "تاريخ بداية الإجازة" },
+    { field: "endDate",               label: "تاريخ نهاية الإجازة" },
+  ],
+  "F-HRT-003": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "date",                  label: "التاريخ" },
+  ],
+  "F-HRT-004": [
+    { field: "department",            label: "القسم" },
+  ],
+  "F-HRT-005": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "joinDate",              label: "تاريخ الالتحاق" },
+  ],
+  "F-HRT-006": [
+    { field: "candidateName",         label: "اسم المرشح" },
+    { field: "interviewDate",         label: "تاريخ المقابلة" },
+  ],
+  "F-HRT-007": [
+    { field: "candidateName",         label: "اسم المرشح" },
+    { field: "jobTitle",              label: "المسمى الوظيفي" },
+  ],
+  "F-HRT-008": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "noticeDate",            label: "تاريخ الإشعار" },
+    { field: "violationDescription",  label: "وصف المخالفة / التقصير" },
+  ],
+  "F-HRT-009": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "evaluationDate",        label: "تاريخ التقييم" },
+  ],
+  "F-HRT-010": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "reviewDate",            label: "تاريخ التقييم" },
+  ],
+  "F-HRT-011": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "lastWorkingDay",        label: "آخر يوم عمل" },
+  ],
+  "F-HRT-012": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "exitDate",              label: "تاريخ المغادرة" },
+  ],
+  "F-HRT-013": [
+    { field: "employeeName",          label: "اسم الموظف" },
+    { field: "clearanceDate",         label: "تاريخ إخلاء الطرف" },
+  ],
 };
 
 const validateFormData = (formId: string, data: any): string[] => {
@@ -1555,6 +1703,38 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
       );
       }; // end doUpdate
 
+      // Release gate: a finished-product release (F-FP-001) cannot be approved
+      // until packaging is complete — i.e. an approved "finished product delivery
+      // to warehouse" form (F-PKG-009) exists for the same batch number.
+      if (status === "approved" && row.status !== "approved" && row.form_id === "F-FP-001") {
+        const relData = JSON.parse(finalDataJson || "{}");
+        const batch = (relData.batchNumber || "").toString().trim().toLowerCase();
+        if (!batch) {
+          return res.status(400).json({ error: "لا يمكن الإفراج: رقم التشغيلة (Batch) غير محدد في النموذج." });
+        }
+        getDb().all(
+          "SELECT data_json FROM forms_records WHERE form_id = 'F-PKG-009' AND status = 'approved'",
+          [],
+          (pErr: any, pRows: any[]) => {
+            if (pErr) return res.status(500).json({ error: "خطأ في التحقق من اكتمال التعبئة والتغليف" });
+            const packagingDone = (pRows || []).some((r: any) => {
+              try {
+                return (JSON.parse(r.data_json || "{}").batchNumber || "").toString().trim().toLowerCase() === batch;
+              } catch {
+                return false;
+              }
+            });
+            if (!packagingDone) {
+              return res.status(400).json({
+                error: `لا يمكن الإفراج عن التشغيلة ${relData.batchNumber} قبل اكتمال التعبئة والتغليف. يجب اعتماد نموذج «تسليم المنتج النهائي للمستودع» (F-PKG-009) لهذه التشغيلة أولاً.`,
+              });
+            }
+            doUpdate();
+          },
+        );
+        return;
+      }
+
       // For PRD-002 approval: check raw material balances before committing
       if (status === "approved" && row.status !== "approved" && row.form_id === "F-PRD-002") {
         const prdFormData = JSON.parse(finalDataJson || "{}");
@@ -1668,23 +1848,27 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
         }
       });
 
-      // 2. Finished Product Releases needing Storage in Warehouse (FP-002)
-      const approvedReleases = formsByFormId("F-FP-001", "approved");
-      const fpStored = formsByFormId("F-FP-002");
-      approvedReleases.forEach(rel => {
-        const relBatch = (rel.data?.batchNumber || '').toString().trim().toLowerCase();
-        const isStored = fpStored.some(stg =>
-          (stg.data?.batchNumber || '').toString().trim().toLowerCase() === relBatch ||
-          stg.data?.storageId === rel.data?.batchNumber ||
-          stg.data?.reference === rel.record_id
+      // NOTE: The "batch release awaiting a storage order (F-FP-002)" notification was
+      // removed on purpose. Releasing a batch (F-FP-001) now adds the released quantity
+      // directly to the finished-product balance, so a separate storage order is no
+      // longer part of the workflow and the reminder is obsolete.
+
+      // 2b. Batches whose packaging is complete (approved F-PKG-009) but not yet released.
+      const packagingDone = formsByFormId("F-PKG-009", "approved");
+      const releasedForms = formsByFormId("F-FP-001", "approved");
+      packagingDone.forEach(pkg => {
+        const batch = (pkg.data?.batchNumber || "").toString().trim().toLowerCase();
+        if (!batch) return;
+        const released = releasedForms.some(rel =>
+          (rel.data?.batchNumber || "").toString().trim().toLowerCase() === batch
         );
-        if (!isStored) {
+        if (!released) {
           notifications.push({
-            id: `fp-not-stored-${rel.record_id}`,
-            message: `تم الإفراج عن تشغيلة ${rel.data?.batchNumber || ''} بالنموذج ${rel.record_id} بانتظار أمر تخزينه في المستودع.`,
-            type: "info",
+            id: `pkg-ready-for-release-${pkg.record_id}`,
+            message: `اكتملت تعبئة وتغليف التشغيلة ${pkg.data?.batchNumber || ''} وهي جاهزة للإفراج (F-FP-001).`,
+            type: "success",
             link: "/inv",
-            date: rel.created_at
+            date: pkg.created_at
           });
         }
       });
@@ -1761,6 +1945,28 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
       }
     }
 
+    // Packaging & Filling (PKG): batches manufactured but not yet packaged/delivered.
+    if (user.department === "PKG" || user.department === "ALL" || user.level === 1) {
+      const manufacturedBatches = formsByFormId("F-PRD-002", "approved");
+      const packagingDeliveries = formsByFormId("F-PKG-009");
+      manufacturedBatches.forEach(bmr => {
+        const batch = (bmr.data?.batchNumber || "").toString().trim().toLowerCase();
+        if (!batch) return;
+        const packaged = packagingDeliveries.some(pkg =>
+          (pkg.data?.batchNumber || "").toString().trim().toLowerCase() === batch
+        );
+        if (!packaged) {
+          notifications.push({
+            id: `pkg-needs-packaging-${bmr.record_id}`,
+            message: `التشغيلة ${bmr.data?.batchNumber || ''} تم تصنيعها وبانتظار التعبئة والتغليف وتسليمها للمستودع.`,
+            type: "warning",
+            link: "/pkg",
+            date: bmr.created_at
+          });
+        }
+      });
+    }
+
     // Quality (QM)
     if (user.department === "QM" || user.department === "ALL" || user.level === 1) {
       const submittedBMRs = [...formsByFormId("F-PRD-002", "pending"), ...formsByFormId("F-PRD-002", "submitted")];
@@ -1816,13 +2022,13 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
        });
     }
 
-    // Training (TRN)
-    if (user.department === "TRN" || user.department === "ALL" || user.level === 1) {
+    // Human Resources & Training (merged: HRT)
+    if (user.department === "HRT" || user.department === "ALL" || user.level === 1) {
        const newEmployees = formsByFormId("F-HR-002").filter(r => r.status === "approved");
        const trainingPlans = formsByFormId("F-TRN-002");
-       
+
        newEmployees.forEach(emp => {
-         // Check if a training plan exists for this employee 
+         // Check if a training plan exists for this employee
          // Assuming the employee name or ID is linked. We'll use referenceDocument or employee ID
          const hasPlan = trainingPlans.some(plan =>
            plan.data?.employeeId === emp.record_id ||
@@ -1834,7 +2040,7 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
               id: `trn-missing-plan-${emp.record_id}`,
               message: `الموظف الجديد (${emp.data?.fullNameAr || emp.record_id}) يحتاج إلى خطة تدريب وإدراج في السجلات.`,
               type: "info",
-              link: "/trn",
+              link: "/hr",
               date: emp.created_at
             });
          }
@@ -1847,7 +2053,12 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
       if (dept === "ALL") return "/";
       if (dept === "QA" || dept === "QC" || dept === "ENG") return "/qm";
       if (dept === "R&D") return "/lab";
-      return `/${dept.toLowerCase()}`;
+      // Merged HR + Training department uses the /hr hub.
+      if (dept === "HRT" || dept === "HR" || dept === "TRN") return "/hr";
+      // Only departments with a real index route are safe to deep-link to;
+      // anything else falls back to the dashboard to avoid a dead route.
+      const routed = new Set(["PRD", "LAB", "INV", "QM", "PKG"]);
+      return routed.has(dept) ? `/${dept.toLowerCase()}` : "/";
     };
 
     if (myDrafts.length > 0) {
@@ -1862,8 +2073,34 @@ router.get("/notifications/dashboard", requireAuth, (req, res) => {
 
     notifications.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    res.json(notifications);
+    // Filter out notifications this user has dismissed.
+    getDb().all(
+      "SELECT notification_id FROM dismissed_notifications WHERE user_id = ?",
+      [user.id],
+      (dErr, dismissedRows: any[]) => {
+        if (dErr) return res.json(notifications); // On error, fail open (show all).
+        const dismissed = new Set((dismissedRows || []).map((r) => r.notification_id));
+        res.json(notifications.filter((n) => !dismissed.has(n.id)));
+      },
+    );
   });
+});
+
+// Dismiss (hide) a single dashboard notification for the current user.
+router.delete("/notifications/dashboard/:id", requireAuth, (req: any, res) => {
+  const user: any = getAuthUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  const notificationId = req.params.id;
+  if (!notificationId) return res.status(400).json({ error: "Notification id is required" });
+
+  getDb().run(
+    "INSERT OR IGNORE INTO dismissed_notifications (user_id, notification_id) VALUES (?, ?)",
+    [user.id, notificationId],
+    (err) => {
+      if (err) return res.status(500).json({ error: "DB Error" });
+      res.json({ success: true });
+    },
+  );
 });
 
 // Get Forms by Department

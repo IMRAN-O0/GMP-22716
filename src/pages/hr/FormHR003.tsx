@@ -2,13 +2,15 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Save, CheckCircle } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, getJsonHeaders } from "../../lib/utils";
+import { nextSequentialId, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function FormHR003() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [company, setCompany] = useState<any>({});
+  const [existingIds, setExistingIds] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     employeeId: "",
     employeeNumber: "",
@@ -25,10 +27,21 @@ export default function FormHR003() {
   const [date] = useState(new Date().toLocaleDateString("ar-EG"));
 
   useEffect(() => {
-    fetch("/api/employees")
+    fetch("/api/employees", { headers: getAuthHeaders() })
       .then((r) => r.json())
-      .then((data) => setEmployees(data))
-      .catch(console.error);
+      .then((data) => setEmployees(Array.isArray(data) ? data : []))
+      .catch(() => {});
+    fetch("/api/company", { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((d) => setCompany(d || {}))
+      .catch(() => {});
+    fetch("/api/forms/dept/HRT", { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
+        setExistingIds(rows.map((f: any) => f.record_id).filter(Boolean));
+      })
+      .catch(() => {});
   }, []);
 
   const handleEmployeeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -53,24 +66,21 @@ export default function FormHR003() {
 
   const handleSubmit = async (e: React.FormEvent, status: any) => {
     e.preventDefault();
-    const recordId = generateSerialNumber(
-      "HR",
-      Math.floor(Math.random() * 1000),
-    );
+    setLoading(true);
+
+    const editIdPatch = new URLSearchParams(window.location.search).get("edit");
+    const recordId = editIdPatch || nextSequentialId("HR", existingIds);
 
     const payload = {
       recordId,
       formId: "F-HR-003",
-      department: "HR",
+      department: "HRT",
       creatorId: user?.id,
       status,
       data: formData,
     };
 
     try {
-      const editIdPatch = new URLSearchParams(window.location.search).get(
-        "edit",
-      );
       const fetchUrl = editIdPatch
         ? `/api/forms/record/${editIdPatch}`
         : "/api/forms";
@@ -89,6 +99,9 @@ export default function FormHR003() {
       }
     } catch (err) {
       console.error(err);
+      alert("تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مرة أخرى.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -114,7 +127,7 @@ export default function FormHR003() {
       <div className="border-b border-slate-200 p-6 flex justify-between items-center bg-slate-50">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            الشركة الحديثة للتجميل
+            {company.name_ar || "نظام الجودة"}
           </h1>
           <p className="text-sm font-semibold text-slate-500 mt-1">
             ISO 22716 - GMP
@@ -126,7 +139,7 @@ export default function FormHR003() {
           </h2>
           <p className="text-sm font-mono text-slate-500">نموذج: F-HR-003</p>
           <p className="text-sm font-mono text-slate-500">
-            تاريخ الإصدار: 01-01-2025
+            تاريخ الإصدار: {date}
           </p>
         </div>
       </div>

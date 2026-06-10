@@ -5,6 +5,8 @@ import {
   formatBOMCode,
   extractSupplierCode,
   generateSerialNumber,
+  buildBatchNumber,
+  nextSequentialId,
   formatDate,
   cn,
 } from '../src/lib/utils';
@@ -84,5 +86,57 @@ describe('cn', () => {
   it('merges class names and de-duplicates tailwind conflicts', () => {
     expect(cn('p-2', 'p-4')).toBe('p-4');
     expect(cn('text-sm', false && 'hidden', 'font-bold')).toBe('text-sm font-bold');
+  });
+});
+
+describe('buildBatchNumber', () => {
+  it('takes the first letter of each word + YYYYMMDD', () => {
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07')).toBe('CBS20260607');
+  });
+
+  it('uppercases and handles 2-word and 4-word names', () => {
+    expect(buildBatchNumber('aloe gel', '2026-06-07')).toBe('AG20260607');
+    expect(buildBatchNumber('Deep Sea Mud Mask', '2026-06-07')).toBe('DSMM20260607');
+  });
+
+  it('ignores extra whitespace and punctuation when taking initials', () => {
+    expect(buildBatchNumber('  Candy   Body  Scrub ', '2026-06-07')).toBe('CBS20260607');
+    expect(buildBatchNumber('Vitamin-C Serum', '2026-06-07')).toBe('VS20260607');
+  });
+
+  it('appends F, then F2, F3 on collisions', () => {
+    const existing = ['CBS20260607'];
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07', existing)).toBe('CBS20260607F');
+    existing.push('CBS20260607F');
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07', existing)).toBe('CBS20260607F2');
+    existing.push('CBS20260607F2');
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-07', existing)).toBe('CBS20260607F3');
+  });
+
+  it('does not collide across different days', () => {
+    const existing = ['CBS20260607'];
+    expect(buildBatchNumber('Candy Body Scrub', '2026-06-08', existing)).toBe('CBS20260608');
+  });
+});
+
+describe('nextSequentialId', () => {
+  it('starts at 0001 when none exist', () => {
+    expect(nextSequentialId('HR', [])).toBe('HR-0001');
+  });
+
+  it('increments past the highest existing numeric suffix', () => {
+    expect(nextSequentialId('HR', ['HR-0001', 'HR-0003', 'HR-0002'])).toBe('HR-0004');
+  });
+
+  it('handles non-padded and prefix-only ids, ignoring unrelated ones', () => {
+    expect(nextSequentialId('EMP', ['EMP-101', 'EMP-105', 'HR-0009'], 3)).toBe('EMP-106');
+  });
+
+  it('respects custom zero-padding width', () => {
+    expect(nextSequentialId('EMP', [], 3)).toBe('EMP-001');
+  });
+
+  it('works with multi-segment prefixes', () => {
+    expect(nextSequentialId('TRN-PLN', ['TRN-PLN-0007'])).toBe('TRN-PLN-0008');
   });
 });

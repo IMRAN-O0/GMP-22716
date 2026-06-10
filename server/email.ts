@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 export const sendNotificationEmail = async (to: string, subject: string, text: string) => {
   try {
     const info = await transporter.sendMail({
-      from: '"QForm System" <noreply@qform.local>',
+      from: '"NAXE OS" <noreply@naxe.local>',
       to,
       subject,
       text,

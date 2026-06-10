@@ -8,12 +8,14 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { generateSerialNumber, getJsonHeaders } from "../../lib/utils";
+import { nextSequentialId, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
 
 export default function FormHR001() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [company, setCompany] = useState<any>({});
+  const [existingIds, setExistingIds] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     jobTitle: "",
     requestingDept: "",
@@ -30,28 +32,43 @@ export default function FormHR001() {
 
   const [date] = useState(new Date().toLocaleDateString("ar-EG"));
 
+  // Load company info (for the header) and existing record ids (for numbering).
+  React.useEffect(() => {
+    fetch("/api/company", { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((d) => setCompany(d || {}))
+      .catch(() => {});
+    fetch("/api/forms/dept/HRT", { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
+        setExistingIds(
+          rows
+            .filter((f: any) => f.form_id === "F-HR-001")
+            .map((f: any) => f.record_id),
+        );
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent, status: any) => {
     e.preventDefault();
+    setLoading(true);
 
-    // Auto generate mock serial logic (in real app, fetched from server)
-    const recordId = generateSerialNumber(
-      "HR",
-      Math.floor(Math.random() * 100),
-    );
+    const editIdPatch = new URLSearchParams(window.location.search).get("edit");
+    // Keep the existing id when editing; otherwise issue the next sequential id.
+    const recordId = editIdPatch || nextSequentialId("HR", existingIds);
 
     const payload = {
       recordId,
       formId: "F-HR-001",
-      department: "HR",
+      department: "HRT",
       creatorId: user?.id,
       status,
       data: formData,
     };
 
     try {
-      const editIdPatch = new URLSearchParams(window.location.search).get(
-        "edit",
-      );
       const fetchUrl = editIdPatch
         ? `/api/forms/record/${editIdPatch}`
         : "/api/forms";
@@ -70,6 +87,9 @@ export default function FormHR001() {
       }
     } catch (err) {
       console.error(err);
+      alert("تعذّر الاتصال بالخادم. تحقق من اتصالك وحاول مرة أخرى.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -96,7 +116,7 @@ export default function FormHR001() {
       <div className="border-b border-slate-200 p-6 flex justify-between items-center bg-slate-50">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            الشركة الحديثة للتجميل
+            {company.name_ar || "نظام الجودة"}
           </h1>
           <p className="text-sm font-medium text-slate-600 mt-1">
             ISO 22716 - GMP
@@ -110,7 +130,7 @@ export default function FormHR001() {
             نموذج: F-HR-001
           </p>
           <p className="text-sm font-mono text-slate-500 text-left">
-            تاريخ الإصدار: 01-01-2025
+            تاريخ الإصدار: {date}
           </p>
         </div>
       </div>

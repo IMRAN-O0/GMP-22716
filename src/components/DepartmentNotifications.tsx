@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { AlertCircle, Bell, CheckCircle2, ChevronRight, Clock, Info } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, ChevronRight, Clock, Info, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getAuthHeaders } from "../lib/utils";
 
 export default function DepartmentNotifications() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const dismissNotification = (e: React.MouseEvent, id: string) => {
+    // The card is a Link; don't navigate when clicking the dismiss button.
+    e.preventDefault();
+    e.stopPropagation();
+    // Optimistically remove from the list, then persist on the server.
+    setNotifications((prev) => prev.filter((n) => (n.id || "") !== id));
+    fetch(`/api/notifications/dashboard/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    }).catch((err) => console.error("Failed to dismiss notification", err));
+  };
 
   useEffect(() => {
     fetch("/api/notifications/dashboard", {
@@ -69,7 +81,16 @@ export default function DepartmentNotifications() {
                     {new Date(notif.date).toLocaleDateString('ar-SA') || "مؤخراً"}
                   </p>
                 </div>
-                <div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={(e) => dismissNotification(e, notif.id || String(index))}
+                    title="حذف الإشعار"
+                    aria-label="حذف الإشعار"
+                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                   <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-700 transition-colors" />
                 </div>
               </div>

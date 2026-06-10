@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   BookOpen,
   Briefcase,
+  Boxes,
   ArrowLeft,
   PlusCircle,
   Eye,
@@ -68,7 +69,7 @@ interface ApiUser {
 // Department metadata
 // ---------------------------------------------------------------------------
 
-type DeptKey = "INV" | "PRD" | "QM" | "LAB" | "HR" | "TRN";
+type DeptKey = "INV" | "PRD" | "QM" | "LAB" | "HRT" | "PKG";
 
 interface DeptMeta {
   label: string;
@@ -132,8 +133,8 @@ const DEPT_META: Record<DeptKey, DeptMeta> = {
     accentBg: "bg-sky-600",
     accentText: "text-white",
   },
-  HR: {
-    label: "الموارد البشرية",
+  HRT: {
+    label: "الموارد البشرية والتدريب",
     route: "/hr",
     icon: <Briefcase className="w-5 h-5" />,
     iconBg: "bg-amber-50",
@@ -144,21 +145,21 @@ const DEPT_META: Record<DeptKey, DeptMeta> = {
     accentBg: "bg-amber-600",
     accentText: "text-white",
   },
-  TRN: {
-    label: "التدريب",
-    route: "/trn",
-    icon: <BookOpen className="w-5 h-5" />,
-    iconBg: "bg-teal-50",
-    iconColor: "text-teal-600",
-    hoverBorder: "hover:border-teal-300",
-    badgeBg: "bg-teal-50",
-    badgeText: "text-teal-600",
-    accentBg: "bg-teal-600",
+  PKG: {
+    label: "التعبئة والتغليف",
+    route: "/pkg",
+    icon: <Boxes className="w-5 h-5" />,
+    iconBg: "bg-rose-50",
+    iconColor: "text-rose-600",
+    hoverBorder: "hover:border-rose-300",
+    badgeBg: "bg-rose-50",
+    badgeText: "text-rose-600",
+    accentBg: "bg-rose-600",
     accentText: "text-white",
   },
 };
 
-const ALL_DEPTS: DeptKey[] = ["INV", "PRD", "QM", "LAB", "HR", "TRN"];
+const ALL_DEPTS: DeptKey[] = ["INV", "PRD", "QM", "LAB", "HRT", "PKG"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -556,12 +557,11 @@ function DeptManagerDashboard({ department }: { department: string }) {
     LAB: [
       { label: "طلب اختبار مخبري", route: "/lab/lab-001" },
     ],
-    HR: [
-      { label: "طلب توظيف", route: "/hr/new-request" },
+    HRT: [
+      { label: "طلب احتياج وظيفي", route: "/hr/new-request" },
       { label: "ملف موظف", route: "/hr/employee-file" },
-    ],
-    TRN: [
-      { label: "سجل تدريب", route: "/trn" },
+      { label: "طلب إجازة", route: "/hr/leave-request" },
+      { label: "خطة التدريب السنوية", route: "/trn/trn-001" },
     ],
   }[dept] ?? [];
 
@@ -587,7 +587,7 @@ function DeptManagerDashboard({ department }: { department: string }) {
                 ? "linear-gradient(135deg,#7c3aed,#a78bfa)"
                 : dept === "LAB"
                 ? "linear-gradient(135deg,#0284c7,#38bdf8)"
-                : dept === "HR"
+                : dept === "HRT"
                 ? "linear-gradient(135deg,#d97706,#fbbf24)"
                 : "linear-gradient(135deg,#0d9488,#2dd4bf)",
           }}
@@ -811,7 +811,7 @@ function EmployeeDashboard({
   userId: number;
 }) {
   const dept = department as DeptKey;
-  const meta = DEPT_META[dept] ?? DEPT_META["HR"];
+  const meta = DEPT_META[dept] ?? DEPT_META["HRT"];
 
   const [forms, setForms] = useState<FormRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -847,12 +847,11 @@ function EmployeeDashboard({
     LAB: [
       { label: "طلب اختبار مخبري", route: "/lab/lab-001" },
     ],
-    HR: [
-      { label: "طلب توظيف", route: "/hr/new-request" },
+    HRT: [
+      { label: "طلب احتياج وظيفي", route: "/hr/new-request" },
       { label: "ملف موظف جديد", route: "/hr/employee-file" },
-    ],
-    TRN: [
-      { label: "سجل تدريب", route: "/trn" },
+      { label: "طلب إجازة", route: "/hr/leave-request" },
+      { label: "خطة التدريب السنوية", route: "/trn/trn-001" },
     ],
   }[dept] ?? [];
 
@@ -953,7 +952,7 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   const level = user?.level ?? 4;
-  const department = user?.department ?? "HR";
+  const department = user?.department ?? "HRT";
 
   const headerProps: Record<number, { title: string; subtitle: string }> = {
     1: {
