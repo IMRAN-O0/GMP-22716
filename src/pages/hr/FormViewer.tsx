@@ -629,7 +629,7 @@ export default function FormViewer() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    fetch("/api/company")
+    fetch("/api/company", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => setCompany(d || {}))
       .catch(() => {});
@@ -637,7 +637,7 @@ export default function FormViewer() {
 
   useEffect(() => {
     if (!recordId) return;
-    fetch(`/api/forms/record/${recordId}`)
+    fetch(`/api/forms/record/${recordId}`, { headers: getAuthHeaders() })
       .then((r) => { if (!r.ok) throw new Error("Not found"); return r.json(); })
       .then((data) => { setRecord(data); setLoading(false); })
       .catch((err) => { console.error(err); setLoading(false); });

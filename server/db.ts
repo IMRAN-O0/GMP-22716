@@ -140,6 +140,17 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 17,
           name: "merge_hr_trn_users_to_hrt",
           up: `UPDATE users SET department='HRT' WHERE department IN ('HR','TRN');`
+        },
+        {
+          version: 18,
+          name: "add_must_change_password_to_users",
+          up: `ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0;`
+        },
+        {
+          // Force a password change for the default admin on existing installs.
+          version: 19,
+          name: "force_admin_password_change",
+          up: `UPDATE users SET must_change_password = 1 WHERE user_id = 'admin';`
         }
       ];
 
@@ -322,9 +333,9 @@ const createTables = async () => {
 const seedInitialData = async () => {
    const defaultPassword = await bcrypt.hash('admin123', 10);
    db.run(
-       `INSERT INTO users (user_id, name, department, level, password_hash, status) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
-       ['admin', 'مدير النظام', 'IT', 1, defaultPassword, 'active']
+       `INSERT INTO users (user_id, name, department, level, password_hash, status, must_change_password)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       ['admin', 'مدير النظام', 'IT', 1, defaultPassword, 'active', 1]
    );
    db.run(
        `INSERT INTO company_info (name_ar, name_en) VALUES (?, ?)`,

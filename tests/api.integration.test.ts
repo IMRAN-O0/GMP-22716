@@ -252,3 +252,81 @@ describe("Bulk employee import (/employees/bulk)", () => {
     expect(r.status).toBe(403);
   });
 });
+
+// ── Layer 3: security hardening ─────────────────────────────────────────────
+describe("Forced password change", () => {
+  it("flags the seeded admin account with mustChangePassword", async () => {
+    const r = await login("admin", "admin123");
+    expect(r.body.user.mustChangePassword).toBe(true);
+  });
+
+  it("rejects a change with the wrong current password (401)", async () => {
+    await api("/api/users", { method: "POST", token: adminToken, body: {
+      userId: "pw_user", name: "PW", department: "HRT", level: 4, password: "secret123", permissions: {},
+    }});
+    const token = (await login("pw_user", "secret123")).body.token;
+    const r = await api("/api/change-password", { method: "POST", token, body: { currentPassword: "wrong", newPassword: "brandnew123" } });
+    expect(r.status).toBe(401);
+  });
+
+  it("rejects a too-short new password (400)", async () => {
+    const token = (await login("pw_user", "secret123")).body.token;
+    const r = await api("/api/change-password", { method: "POST", token, body: { currentPassword: "secret123", newPassword: "short" } });
+    expect(r.status).toBe(400);
+  });
+
+  it("changes the password and invalidates the old one", async () => {
+    const token = (await login("pw_user", "secret123")).body.token;
+    const r = await api("/api/change-password", { method: "POST", token, body: { currentPassword: "secret123", newPassword: "brandnew123" } });
+    expect(r.status).toBe(200);
+    expect((await login("pw_user", "secret123")).status).toBe(401);
+    expect((await login("pw_user", "brandnew123")).status).toBe(200);
+  });
+});
+
+describe("Sensitive-form authorization (server-enforced)", () => {
+  let noPermToken = "";
+  let grantedToken = "";
+  let sensitiveRecordId = "";
+
+  beforeAll(async () => {
+    await api("/api/users", { method: "POST", token: adminToken, body: {
+      userId: "hr_noperm", name: "بلا صلاحية", department: "HRT", level: 4, password: "secret123", permissions: {},
+    }});
+    noPermToken = (await login("hr_noperm", "secret123")).body.token;
+
+    await api("/api/users", { method: "POST", token: adminToken, body: {
+      userId: "hr_priv", name: "بصلاحية", department: "HRT", level: 4, password: "secret123",
+      permissions: { "F-HRT-007": true },
+    }});
+    grantedToken = (await login("hr_priv", "secret123")).body.token;
+
+    const r = await createForm(adminToken, "F-HRT-007", "HRT", "draft", { candidateName: "سرّي" });
+    sensitiveRecordId = r.body.recordId;
+  });
+
+  it("blocks creating a job-offer without the grant (403)", async () => {
+    const r = await createForm(noPermToken, "F-HRT-007", "HRT", "draft", { candidateName: "x" });
+    expect(r.status).toBe(403);
+  });
+
+  it("allows creating a job-offer with the explicit grant", async () => {
+    const r = await createForm(grantedToken, "F-HRT-007", "HRT", "draft", { candidateName: "x" });
+    expect(r.status).toBe(201);
+  });
+
+  it("allows the admin to create any sensitive form", async () => {
+    const r = await createForm(adminToken, "F-HRT-013", "HRT", "draft", { employeeName: "x" });
+    expect(r.status).toBe(201);
+  });
+
+  it("blocks viewing a sensitive record without the grant (403)", async () => {
+    const r = await api(`/api/forms/record/${sensitiveRecordId}`, { token: noPermToken });
+    expect(r.status).toBe(403);
+  });
+
+  it("allows viewing a sensitive record with the grant", async () => {
+    const r = await api(`/api/forms/record/${sensitiveRecordId}`, { token: grantedToken });
+    expect(r.status).toBe(200);
+  });
+});
