@@ -6,6 +6,8 @@ type User = {
     name: string;
     department: string;
     level: number;
+    permissions?: Record<string, boolean>;
+    mustChangePassword?: boolean;
 };
 
 type AuthContextType = {

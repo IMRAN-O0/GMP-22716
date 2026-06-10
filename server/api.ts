@@ -9,14 +9,36 @@ import { matchesReference, buildTransactionId } from "./helpers.js";
 
 const router = Router();
 
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
-  throw new Error("JWT_SECRET environment variable is missing and is required in production.");
-} else if (!process.env.JWT_SECRET) {
+const DEFAULT_DEV_SECRET = "dev-only-jwt-secret-do-not-use-in-production";
+
+// Resolve the JWT signing secret. In production we REFUSE to start unless a real
+// secret is provided — neither missing nor the insecure built-in default is
+// allowed. The Electron build auto-generates and persists one; server
+// deployments must set the JWT_SECRET environment variable.
+const resolveJwtSecret = (): string => {
+  const fromEnv = process.env.JWT_SECRET;
+  if (fromEnv && fromEnv !== DEFAULT_DEV_SECRET) return fromEnv;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "FATAL: JWT_SECRET is missing (or uses the insecure default) and is required in production. " +
+      "Set a strong JWT_SECRET environment variable.",
+    );
+  }
   console.warn("WARNING: JWT_SECRET is not set. Using a fixed development fallback. Set JWT_SECRET in production.");
-}
-// In production the line above throws, so reaching here without JWT_SECRET is dev-only.
-// We use a fixed dev secret so sessions survive server restarts during development.
-const JWT_SECRET = process.env.JWT_SECRET || "dev-only-jwt-secret-do-not-use-in-production";
+  return DEFAULT_DEV_SECRET; // development / test only
+};
+const JWT_SECRET = resolveJwtSecret();
+
+// Forms holding sensitive financial/personal data — restricted on the server to
+// admins (level 1) or users explicitly granted that form's permission, even if
+// they otherwise belong to the HR department.
+const SENSITIVE_FORMS = new Set(["F-HRT-007", "F-HRT-013"]);
+const canAccessSensitiveForm = (user: any, formId: string): boolean => {
+  if (!SENSITIVE_FORMS.has(formId)) return true;
+  if (!user) return false;
+  if (user.level === 1) return true;
+  return !!(user.permissions && user.permissions[formId] === true);
+};
 
 const getAuthUser = (req: any) => {
   const authHeader = req.headers.authorization;
@@ -418,11 +440,34 @@ router.post("/login", (req, res) => {
           name: user.name,
           level: user.level,
           department: user.department,
-          permissions: user.permissions ? JSON.parse(user.permissions) : {}
+          permissions: user.permissions ? JSON.parse(user.permissions) : {},
+          mustChangePassword: !!user.must_change_password,
         },
       });
     },
   );
+});
+
+// Change own password (also clears the forced-change flag for default accounts).
+router.post("/change-password", requireAuth, (req: any, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: "كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل" });
+  }
+  getDb().get("SELECT * FROM users WHERE id = ?", [req.user.id], async (err, user: any) => {
+    if (err || !user) return res.status(404).json({ error: "المستخدم غير موجود" });
+    const ok = await bcrypt.compare(currentPassword || "", user.password_hash);
+    if (!ok) return res.status(401).json({ error: "كلمة المرور الحالية غير صحيحة" });
+    const hash = await bcrypt.hash(newPassword, 10);
+    getDb().run(
+      "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
+      [hash, req.user.id],
+      (uErr) => {
+        if (uErr) return res.status(500).json({ error: "تعذّر تحديث كلمة المرور" });
+        res.json({ success: true });
+      },
+    );
+  });
 });
 
 // App Info — requireAuth so only logged-in users can read company data
@@ -1543,6 +1588,11 @@ router.post("/forms", requireAuth, (req: any, res) => {
     }
   }
 
+  // Sensitive forms (salary / end-of-service settlement) require an explicit grant.
+  if (!canAccessSensitiveForm(user, formId)) {
+    return res.status(403).json({ error: "هذا النموذج يتطلب صلاحية خاصة" });
+  }
+
   // Enforce status based on user level
   if (user && user.level) {
     if (user.level === 3 && status === "approved") {
@@ -1635,6 +1685,10 @@ router.put("/forms/record/:recordId", requireAuth, (req: any, res) => {
     (err, row: any) => {
       if (err || !row)
         return res.status(404).json({ error: "Record not found" });
+
+      if (!canAccessSensitiveForm(user, row.form_id)) {
+        return res.status(403).json({ error: "هذا النموذج يتطلب صلاحية خاصة" });
+      }
 
       if (user && user.level) {
         if (user.level === 4) {
@@ -1803,6 +1857,9 @@ router.get("/forms/record/:recordId", requireAuth, (req, res) => {
     (err, row: any) => {
       if (err) return res.status(500).json({ error: "DB Error" });
       if (!row) return res.status(404).json({ error: "Not found" });
+      if (!canAccessSensitiveForm(getAuthUser(req), row.form_id)) {
+        return res.status(403).json({ error: "هذا النموذج يتطلب صلاحية خاصة" });
+      }
       res.json({ ...row, data: JSON.parse(row.data_json || "{}") });
     },
   );

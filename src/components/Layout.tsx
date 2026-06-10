@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { getAccessibleDepartments } from '../constants/departments';
 import NaxeLogo from './NaxeLogo';
+import ChangePassword from '../pages/ChangePassword';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -13,6 +14,11 @@ export default function Layout() {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Force the default/flagged account to set a new password before using the app.
+  if (user.mustChangePassword) {
+    return <ChangePassword forced />;
   }
 
   const accessibleDepts = getAccessibleDepartments(user);
