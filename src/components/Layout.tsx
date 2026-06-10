@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Archive, BarChart3, Package, Beaker, Boxes
 } from 'lucide-react';
 import { getAccessibleDepartments } from '../constants/departments';
+import NaxeLogo from './NaxeLogo';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -82,8 +83,7 @@ export default function Layout() {
       {/* Sidebar - Right */}
       <div className="w-[260px] bg-slate-800 text-white min-h-screen flex flex-col flex-shrink-0 p-8 print:hidden">
         <div className="flex items-center mb-12">
-          <div className="w-8 h-8 flex-shrink-0 bg-sky-400 rounded-lg ml-3"></div>
-          <h1 className="text-xl font-black tracking-tight pointer-events-none">QForm Manager</h1>
+          <NaxeLogo size={34} withWordmark />
         </div>
 
         <nav className="flex-1 space-y-2">

@@ -1,6 +1,6 @@
 {
   "name": "gmp-qms",
-  "productName": "Awal Helm GMP",
+  "productName": "NAXE OS",
   "private": true,
   "version": "1.0.0",
   "description": "GMP Quality Management System",
@@ -89,7 +89,7 @@
   },
   "build": {
     "appId": "com.moderncosmetics.gmp",
-    "productName": "Awal Helm GMP",
+    "productName": "NAXE OS",
     "copyright": "Modern Cosmetics Co.",
     "directories": {
       "output": "dist-electron"

@@ -11,7 +11,7 @@ const crypto = require('crypto');
 // repainting until forced (typing not showing until a screenshot/resize/focus
 // change). Falling back to software compositing makes painting reliable.
 app.disableHardwareAcceleration();
-app.setName('Awal Helm GMP');
+app.setName('NAXE OS');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const PORT    = parseInt(process.env.PORT || '3009', 10);
@@ -197,7 +197,7 @@ function createWindow(targetUrl) {
     height:       900,
     minWidth:     1024,
     minHeight:    700,
-    title:        'Awal Helm GMP',
+    title:        'NAXE OS',
     icon:         path.join(APP_DIR, 'electron', 'icon.png'),
     show:         false,
     webPreferences: {
@@ -313,7 +313,7 @@ ipcMain.handle('print-preview', async () => {
       footerTemplate:
         '<div style="width:100%;font-size:8px;color:#888;padding:0 8mm;' +
         'display:flex;justify-content:space-between;direction:rtl;">' +
-        '<span>Awal Helm GMP</span>' +
+        '<span>NAXE OS</span>' +
         '<span>صفحة <span class="pageNumber"></span> من <span class="totalPages"></span></span>' +
         '</div>',
     });
