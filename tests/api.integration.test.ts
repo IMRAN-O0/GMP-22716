@@ -284,6 +284,34 @@ describe("Forced password change", () => {
   });
 });
 
+describe("Cost calculator support (material pricing + cost records)", () => {
+  it("stores and returns a material's purchase price and supplier", async () => {
+    const code = `RM-${Date.now().toString().slice(-6)}`;
+    const c = await api("/api/materials", { method: "POST", token: adminToken, body: {
+      code, name: "جلسرين", category: "مادة خام", unit: "كجم", balance: 0,
+      purchase_price: 120, supplier_name: "شركة المواد", package_size: 1000,
+    }});
+    expect(c.status).toBe(200);
+    const list = await api("/api/materials", { token: adminToken });
+    const m = (list.body as any[]).find((x) => x.code === code);
+    expect(m).toBeTruthy();
+    expect(m.purchase_price).toBe(120);
+    expect(m.supplier_name).toBe("شركة المواد");
+    expect(m.package_size).toBe(1000);
+  });
+
+  it("saves a cost calculation as an F-INV-COST record and lists it", async () => {
+    const r = await createForm(adminToken, "F-INV-COST", "INV", "approved", {
+      productName: "كريم", _summary: { unitCost: 3.61, suggestedPrice: 5.82 },
+    });
+    expect(r.status).toBe(201);
+    const list = await api("/api/forms", { token: adminToken });
+    const rec = (list.body as any[]).find((f) => f.form_id === "F-INV-COST");
+    expect(rec).toBeTruthy();
+    expect(rec.data._summary.suggestedPrice).toBe(5.82);
+  });
+});
+
 describe("Sensitive-form authorization (server-enforced)", () => {
   let noPermToken = "";
   let grantedToken = "";

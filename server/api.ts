@@ -848,12 +848,13 @@ router.post("/materials", requireAuth, async (req, res) => {
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }
-  const { code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit } =
+  const { code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit, supplier_name, purchase_price } =
     req.body;
   getDb().run(
-    `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit, supplier_name, purchase_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [code, name, name_en, category, description, unit, warehouse_id, balance,
-     package_size ? parseFloat(package_size) : null, package_size_unit || null],
+     package_size ? parseFloat(package_size) : null, package_size_unit || null,
+     supplier_name || "", purchase_price ? parseFloat(purchase_price) : 0],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true, id: this.lastID });
@@ -909,8 +910,8 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
           return insertNext(i + 1);
         }
         db.run(
-          `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance, supplier_name)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO materials (code, name, name_en, category, description, unit, warehouse_id, balance, min_balance, supplier_name, purchase_price)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             r.code, r.name, r.name_en || "", r.category || "مادة خام",
             r.description || "", r.unit || "كجم",
@@ -918,6 +919,7 @@ router.post("/materials/bulk", requireAuth, async (req: any, res) => {
             parseFloat(r.balance) || 0,
             parseFloat(r.min_balance) || 0,
             r.supplier_name || "",
+            parseFloat(r.purchase_price) || 0,
           ],
           function (e) {
             if (e) { errors.push(`الصف ${i + 2} (${r.code}): ${e.message}`); return insertNext(i + 1); }
@@ -963,11 +965,14 @@ router.delete("/materials/:id", requireAuth, (req, res) => {
 
 // INV: Update Material
 router.put("/materials/:id", requireAuth, (req, res) => {
-  const { code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit } = req.body;
+  const { code, name, name_en, category, description, unit, warehouse_id, balance, package_size, package_size_unit, supplier_name, purchase_price } = req.body;
   getDb().run(
-    `UPDATE materials SET code=?, name=?, name_en=?, category=?, description=?, unit=?, warehouse_id=?, balance=?, package_size=?, package_size_unit=? WHERE id=?`,
+    `UPDATE materials SET code=?, name=?, name_en=?, category=?, description=?, unit=?, warehouse_id=?, balance=?, package_size=?, package_size_unit=?, supplier_name=COALESCE(?, supplier_name), purchase_price=COALESCE(?, purchase_price) WHERE id=?`,
     [code, name, name_en, category, description, unit, warehouse_id, balance,
-     package_size ? parseFloat(package_size) : null, package_size_unit || null, req.params.id],
+     package_size ? parseFloat(package_size) : null, package_size_unit || null,
+     supplier_name !== undefined ? (supplier_name || "") : null,
+     purchase_price !== undefined && purchase_price !== "" ? parseFloat(purchase_price) : null,
+     req.params.id],
     function (err) {
       if (err) return res.status(500).json({ error: "خطأ في قاعدة البيانات" });
       res.json({ success: true });

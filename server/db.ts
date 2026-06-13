@@ -151,6 +151,11 @@ const runMigrations = (dbParam: sqlite3.Database) => {
           version: 19,
           name: "force_admin_password_change",
           up: `UPDATE users SET must_change_password = 1 WHERE user_id = 'admin';`
+        },
+        {
+          version: 20,
+          name: "add_purchase_price_to_materials",
+          up: `ALTER TABLE materials ADD COLUMN purchase_price REAL DEFAULT 0;`
         }
       ];
 

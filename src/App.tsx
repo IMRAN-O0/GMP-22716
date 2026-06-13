@@ -54,6 +54,7 @@ import FormFP004 from './pages/inv/FormFP004';
 import FormFP005 from './pages/inv/FormFP005';
 import FormFP006 from './pages/inv/FormFP006';
 import FormComposition from './pages/inv/FormComposition';
+import CostCalculator from './pages/inv/CostCalculator';
 
 import QMIndex from './pages/qm/QMIndex';
 import FormQM001 from './pages/qm/FormQM001';
@@ -160,6 +161,7 @@ export default function App() {
             <Route path="inv/fp-005" element={<FormFP005 />} />
             <Route path="inv/fp-006" element={<FormFP006 />} />
             <Route path="inv/composition" element={<FormComposition />} />
+            <Route path="inv/cost-calculator" element={<CostCalculator />} />
             <Route path="inv/view/:recordId" element={<FormViewer />} />
 
             {/* Quality Management Routes */}

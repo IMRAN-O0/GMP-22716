@@ -28,6 +28,8 @@ export default function CreateMaterial() {
     balance: 0,
     packageSize: "" as string | number,
     packageSizeUnit: "جم",
+    purchasePrice: "" as string | number,
+    supplierName: "",
   });
 
   useEffect(() => {
@@ -80,6 +82,10 @@ export default function CreateMaterial() {
         unit: m.unit || "كجم",
         warehouse_id: m.warehouse_id || "",
         balance: m.balance || 0,
+        packageSize: m.package_size || "",
+        packageSizeUnit: m.package_size_unit || "جم",
+        purchasePrice: m.purchase_price || "",
+        supplierName: m.supplier_name || "",
       });
       setEditFormRecordId(null);
     }
@@ -136,6 +142,10 @@ export default function CreateMaterial() {
         ...formData,
         warehouse_id: formData.warehouse_id ? parseInt(formData.warehouse_id) : null,
         balance: formData.balance ? (parseFloat(formData.balance.toString()) || 0) : 0,
+        package_size: formData.packageSize || null,
+        package_size_unit: formData.packageSizeUnit || null,
+        purchase_price: formData.purchasePrice ? (parseFloat(formData.purchasePrice.toString()) || 0) : 0,
+        supplier_name: formData.supplierName || "",
       };
 
       if (user?.level <= 2) {
@@ -368,6 +378,37 @@ export default function CreateMaterial() {
               value={formData.balance}
               onChange={(e) =>
                 setFormData({ ...formData, balance: e.target.value as any })
+              }
+              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+              سعر الشراء (ر.س)
+              <span className="text-slate-400 font-normal mr-1">(يُستخدم في حساب التكاليف)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="مثال: 120.00"
+              value={formData.purchasePrice}
+              onChange={(e) =>
+                setFormData({ ...formData, purchasePrice: e.target.value })
+              }
+              className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
+            />
+          </div>
+          <div>
+            <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+              المورد
+            </label>
+            <input
+              type="text"
+              placeholder="اسم المورد"
+              value={formData.supplierName}
+              onChange={(e) =>
+                setFormData({ ...formData, supplierName: e.target.value })
               }
               className="w-full border-slate-300 rounded-lg shadow-sm focus:border-sky-400 focus:ring-sky-400 text-sm py-2"
             />

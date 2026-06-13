@@ -15,6 +15,7 @@ import {
   Pencil,
   X,
   Check,
+  Calculator,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -91,6 +92,15 @@ export default function INVIndex() {
             >
               <PlusCircle className="w-4 h-4 ml-2 text-emerald-500" />
               إضافة تركيبة منتج (BOM)
+            </Link>
+          )}
+          {hasPerm("F-INV-BOM") && (
+            <Link
+              to="/inv/cost-calculator"
+              className="flex items-center px-4 py-2 bg-white text-slate-700 rounded-lg hover:bg-slate-50 font-semibold text-[13px] transition-colors border border-slate-200 shadow-sm"
+            >
+              <Calculator className="w-4 h-4 ml-2 text-sky-500" />
+              حساب تكاليف المنتج
             </Link>
           )}
           {hasPerm("F-PRQ-001") && (
