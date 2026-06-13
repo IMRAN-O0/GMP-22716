@@ -285,7 +285,7 @@ export default function UsersManagement() {
                 &times;
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-5">
+            <form onSubmit={handleSubmit} className="p-5" autoComplete="off">
               {step === 1 ? (
                 <div className="space-y-4">
                   <div>
@@ -295,6 +295,9 @@ export default function UsersManagement() {
                     <input
                       type="text"
                       required
+                      autoFocus
+                      autoComplete="off"
+                      name="users-mgmt-userid"
                       value={formData.userId}
                       disabled={!!formData.id}
                       onChange={(e) =>
@@ -374,6 +377,8 @@ export default function UsersManagement() {
                     <input
                       type="password"
                       required={!formData.id}
+                      autoComplete="new-password"
+                      name="users-mgmt-password"
                       value={formData.password}
                       onChange={(e) =>
                         setFormData({ ...formData, password: e.target.value })
