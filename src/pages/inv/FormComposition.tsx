@@ -2,9 +2,19 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { formatMaterialCode, formatProductCode, formatBOMCode, getAuthHeaders, getJsonHeaders } from "../../lib/utils";
-import { Save, ArrowRight, PlusCircle, Trash2, Beaker, History, Pencil } from "lucide-react";
+import { Save, ArrowRight, PlusCircle, Trash2, Beaker, History, Pencil, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { SearchModal, SearchField } from "../../components/SearchModal";
 import { StatusBadge } from "../../components/StatusBadge";
+import * as XLSX from "xlsx";
+
+// One formula parsed from the import file (editable before import).
+type ImportFormula = {
+  compositionNo: string;
+  productCode: string;
+  productName: string;
+  version: string;
+  materials: { materialCode: string; materialName: string; percentage: string; unit: string }[];
+};
 
 export default function FormComposition() {
   const { user } = useAuth();
@@ -15,6 +25,15 @@ export default function FormComposition() {
   const [showMaterialModal, setShowMaterialModal] = useState(false);
   const [editingMatIdx, setEditingMatIdx] = useState<number | null>(null);
   const [previousCompositions, setPreviousCompositions] = useState<any[]>([]);
+
+  // ── Excel bulk import ──────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"single" | "bulk">("single");
+  const [importFormulas, setImportFormulas] = useState<ImportFormula[]>([]);
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ inserted: number; errors: string[] } | null>(null);
+  const [importProductIdx, setImportProductIdx] = useState<number | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     compositionNo: `AH-${String(Math.floor(Math.random() * 9000) + 1000)}`,
@@ -166,6 +185,173 @@ export default function FormComposition() {
   }, []);
   // -------------------------
 
+  // ── Excel template download (compositions / BOM) ───────────────────────────
+  const downloadTemplate = () => {
+    const headers = [
+      "رقم التركيبة*", "كود المنتج*", "اسم المنتج", "رقم الإصدار",
+      "كود المادة*", "النسبة/الكمية*", "الوحدة",
+    ];
+    const keys = ["compositionNo", "productCode", "productName", "version", "materialCode", "percentage", "unit"];
+    const example1 = ["AH-0001", "FD-0001", "كريم ترطيب", "1.0", "RM-0001", "70", "%"];
+    const example2 = ["AH-0001", "FD-0001", "كريم ترطيب", "1.0", "RM-0002", "30", "%"];
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, keys, example1, example2]);
+    ws["!cols"] = headers.map(() => ({ wch: 20 }));
+    XLSX.utils.book_append_sheet(wb, ws, "نموذج الاستيراد");
+
+    const instructions = [
+      ["تعليمات استيراد التركيبات (BOM)"],
+      [""],
+      ["1. كل سطر يمثل مادة واحدة داخل التركيبة.", ""],
+      ["2. اجمع مواد التركيبة الواحدة بنفس (رقم التركيبة).", "مثال: AH-0001 له عدة أسطر بنفس الرقم"],
+      ["3. الحقول المطلوبة (*):", "رقم التركيبة، كود المنتج، كود المادة، النسبة/الكمية"],
+      ["4. كود المنتج (FD-XXXX):", "يجب أن يكون منتجاً نهائياً موجوداً. سيُطلب منك تأكيد الربط بعد الرفع."],
+      ["5. الوحدة:", "% | كجم | جرام | لتر | مل | قطعة (افتراضي %)"],
+      [""],
+      ["ملاحظة:", "إذا كان رقم التركيبة موجوداً مسبقاً سيتم تحديثه بالبيانات الجديدة."],
+    ];
+    const wsInst = XLSX.utils.aoa_to_sheet(instructions);
+    wsInst["!cols"] = [{ wch: 38 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, wsInst, "التعليمات");
+
+    XLSX.writeFile(wb, "نموذج_استيراد_التركيبات.xlsx");
+  };
+
+  // ── Parse uploaded Excel into grouped formulas ─────────────────────────────
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkErrors([]);
+    setBulkResult(null);
+    setImportFormulas([]);
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+        if (raw.length < 3) {
+          setBulkErrors(["الملف لا يحتوي على بيانات كافية. تأكد من استخدام النموذج المحدد."]);
+          return;
+        }
+
+        // Row 0 = Arabic headers, Row 1 = keys, Row 2+ = data
+        const keyRow: string[] = (raw[1] as string[]).map((k) => String(k).trim());
+        const dataRows = raw.slice(2).filter((row) => row.some((v) => v !== ""));
+
+        const errs: string[] = [];
+        const groups = new Map<string, ImportFormula>();
+        dataRows.forEach((row, idx) => {
+          const obj: Record<string, string> = {};
+          keyRow.forEach((k, ci) => { obj[k] = String(row[ci] ?? "").trim(); });
+          const rowNo = idx + 3;
+          const compNo = formatBOMCode(obj.compositionNo || "");
+          if (!compNo) { errs.push(`الصف ${rowNo}: رقم التركيبة مفقود`); return; }
+          if (!obj.materialCode) errs.push(`الصف ${rowNo}: كود المادة مفقود`);
+          if (!obj.percentage) errs.push(`الصف ${rowNo}: النسبة/الكمية مفقودة`);
+
+          const found = rawMaterialsList.find((m) => m.code === obj.materialCode);
+          const matLine = {
+            materialCode: obj.materialCode,
+            materialName: found ? found.name : obj.materialName || "",
+            percentage: obj.percentage,
+            unit: obj.unit || "%",
+          };
+
+          if (!groups.has(compNo)) {
+            const prodCode = obj.productCode ? formatProductCode(obj.productCode) : "";
+            const prod = finalProducts.find((p) => p.code === prodCode);
+            groups.set(compNo, {
+              compositionNo: compNo,
+              productCode: prodCode,
+              productName: prod ? prod.name : obj.productName || "",
+              version: obj.version || "1.0",
+              materials: [matLine],
+            });
+          } else {
+            groups.get(compNo)!.materials.push(matLine);
+          }
+        });
+
+        setBulkErrors(errs);
+        setImportFormulas(Array.from(groups.values()));
+      } catch {
+        setBulkErrors(["فشل في قراءة الملف. تأكد أنه ملف Excel صالح (.xlsx)"]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Link a parsed formula to a product (the required step after upload).
+  const setImportProduct = (idx: number, code: string) => {
+    const formatted = formatProductCode(code);
+    const prod = finalProducts.find((p) => p.code === formatted);
+    setImportFormulas((prev) => {
+      const arr = [...prev];
+      arr[idx] = { ...arr[idx], productCode: formatted, productName: prod ? prod.name : arr[idx].productName };
+      return arr;
+    });
+  };
+
+  const importStatus =
+    user && user.level <= 2 ? "approved" : user?.level === 3 ? "pending_approval" : "pending_review";
+
+  const handleBulkImport = async () => {
+    if (importFormulas.length === 0) return;
+    // Require every formula to be linked to a product before importing.
+    const unlinked = importFormulas.filter((f) => !f.productCode);
+    if (unlinked.length > 0) {
+      setBulkErrors([
+        `يجب ربط كل تركيبة بمنتج قبل الاستيراد. تركيبات بدون منتج: ${unlinked.map((u) => u.compositionNo).join("، ")}`,
+      ]);
+      return;
+    }
+    setBulkImporting(true);
+    setBulkResult(null);
+    let inserted = 0;
+    const errors: string[] = [];
+    for (const f of importFormulas) {
+      const payload = {
+        recordId: f.compositionNo,
+        formId: "F-INV-BOM",
+        department: "INV",
+        creatorId: user?.id,
+        status: importStatus,
+        data: {
+          compositionNo: f.compositionNo,
+          productCode: f.productCode,
+          productName: f.productName,
+          version: f.version,
+          notes: "",
+          materials: f.materials,
+          preparedBy: user?.name || "",
+        },
+      };
+      try {
+        const res = await fetch("/api/forms", {
+          method: "POST",
+          headers: getJsonHeaders(),
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          inserted++;
+        } else {
+          const err = await res.json().catch(() => ({ error: "خطأ" }));
+          errors.push(`${f.compositionNo}: ${err.error || "فشل الحفظ"}`);
+        }
+      } catch {
+        errors.push(`${f.compositionNo}: خطأ في الاتصال`);
+      }
+    }
+    setBulkResult({ inserted, errors });
+    setImportFormulas([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    loadPreviousCompositions();
+    setBulkImporting(false);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -206,6 +392,27 @@ export default function FormComposition() {
         </div>
       </div>
 
+      {/* Tabs: manual entry vs Excel import */}
+      <div className="flex gap-1 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab("single")}
+          className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${activeTab === "single" ? "border-emerald-600 text-emerald-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+        >
+          <Pencil className="w-4 h-4 inline ml-1" />
+          إدخال يدوي
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("bulk")}
+          className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${activeTab === "bulk" ? "border-emerald-600 text-emerald-700 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+        >
+          <FileSpreadsheet className="w-4 h-4 inline ml-1" />
+          استيراد من Excel
+        </button>
+      </div>
+
+      {activeTab === "single" && (
       <form
         onSubmit={(e) => handleSubmit(e, "approved")}
         className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm"
@@ -471,6 +678,156 @@ export default function FormComposition() {
           </button>
         </div>
       </form>
+      )}
+
+      {activeTab === "bulk" && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="p-6 space-y-6">
+            {/* Step 1: template */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">1</span>
+                <h3 className="font-bold text-slate-800">تحميل نموذج Excel</h3>
+              </div>
+              <p className="text-sm text-slate-500 mb-3 mr-8">
+                حمّل النموذج الجاهز، اجمع مواد كل تركيبة بنفس «رقم التركيبة»، ثم ارفع الملف في الخطوة التالية.
+              </p>
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold text-sm mr-8"
+              >
+                <Download className="w-4 h-4" />
+                تحميل نموذج Excel الجاهز
+              </button>
+            </div>
+
+            {/* Step 2: upload */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">2</span>
+                <h3 className="font-bold text-slate-800">رفع الملف بعد تعبئته</h3>
+              </div>
+              <p className="text-sm text-slate-500 mb-3 mr-8">يجب استخدام النموذج المحمّل في الخطوة السابقة فقط.</p>
+              <label className="mr-8 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl p-6 cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/40 transition-colors">
+                <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                <div className="text-sm font-semibold text-slate-600">اضغط لاختيار ملف Excel</div>
+                <div className="text-xs text-slate-400 mt-0.5">xlsx. فقط</div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleExcelUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* Errors */}
+            {bulkErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mr-8">
+                <div className="flex items-center gap-2 text-red-700 font-bold text-sm mb-2">
+                  <AlertCircle className="w-4 h-4" />
+                  يوجد ملاحظات على الملف ({bulkErrors.length})
+                </div>
+                <ul className="list-disc pr-5 space-y-0.5 text-[13px] text-red-600 max-h-40 overflow-y-auto">
+                  {bulkErrors.map((e, i) => <li key={i}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {/* Result */}
+            {bulkResult && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mr-8">
+                <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+                  <CheckCircle2 className="w-4 h-4" />
+                  تم استيراد {bulkResult.inserted} تركيبة بنجاح.
+                </div>
+                {bulkResult.errors.length > 0 && (
+                  <ul className="list-disc pr-5 mt-2 space-y-0.5 text-[13px] text-red-600">
+                    {bulkResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: link each formula to a product + preview */}
+            {importFormulas.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">3</span>
+                  <h3 className="font-bold text-slate-800">ربط كل تركيبة بمنتج نهائي</h3>
+                </div>
+                <p className="text-sm text-slate-500 mb-3 mr-8">
+                  راجع التركيبات المكتشفة، وتأكد من ربط كل تركيبة بمنتجها النهائي (FD) قبل الاستيراد.
+                </p>
+                <div className="space-y-3 mr-8">
+                  {importFormulas.map((f, idx) => (
+                    <div
+                      key={f.compositionNo}
+                      className={`border rounded-xl p-4 ${f.productCode ? "border-slate-200" : "border-amber-300 bg-amber-50/40"}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2">
+                          <Beaker className="w-4 h-4 text-emerald-600" />
+                          <span className="font-mono font-bold text-slate-700 text-sm">{f.compositionNo}</span>
+                          <span className="text-[12px] text-slate-500">({f.materials.length} مادة، إصدار {f.version})</span>
+                        </div>
+                        <div className="w-full md:w-80">
+                          <SearchField
+                            label=""
+                            required
+                            value={f.productCode}
+                            onChange={(v) => setImportProduct(idx, v)}
+                            onF3={() => setImportProductIdx(idx)}
+                            placeholder="FD-0001 أو اضغط F3…"
+                            hint=""
+                          />
+                          {f.productName ? (
+                            <p className="text-xs text-emerald-600 mt-1 font-semibold">{f.productName}</p>
+                          ) : (
+                            <p className="text-xs text-amber-600 mt-1 font-semibold flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> لم يتم ربط هذه التركيبة بمنتج بعد
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {f.materials.map((m, mi) => (
+                          <span key={mi} className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 text-[12px] rounded-full px-2 py-0.5">
+                            <span className="font-mono">{m.materialCode}</span>
+                            {m.materialName && <span className="text-slate-400">— {m.materialName}</span>}
+                            <span className="font-bold text-slate-700">{m.percentage}{m.unit}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3 mt-5 mr-8">
+                  <button
+                    type="button"
+                    disabled={bulkImporting || importFormulas.some((f) => !f.productCode)}
+                    onClick={handleBulkImport}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    {bulkImporting ? "جاري الاستيراد…" : `استيراد ${importFormulas.length} تركيبة`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setImportFormulas([]); setBulkErrors([]); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                    className="flex items-center gap-1.5 text-slate-500 hover:text-slate-700 font-semibold text-sm"
+                  >
+                    <X className="w-4 h-4" /> إلغاء
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Previously saved compositions */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -575,6 +932,21 @@ export default function FormComposition() {
             setShowProductModal(false);
           }}
           onClose={() => setShowProductModal(false)}
+        />
+      )}
+      {importProductIdx !== null && (
+        <SearchModal
+          title="ربط التركيبة بمنتج نهائي (F3)"
+          items={finalProducts}
+          columns={[
+            { key: "code", label: "كود المنتج", className: "font-mono w-28" },
+            { key: "name", label: "اسم المنتج" },
+            { key: "unit", label: "الوحدة", className: "w-20" },
+          ]}
+          searchKeys={["code", "name"]}
+          placeholder="ابحث بالكود أو الاسم…"
+          onSelect={(p) => { setImportProduct(importProductIdx!, p.code); setImportProductIdx(null); }}
+          onClose={() => setImportProductIdx(null)}
         />
       )}
       {showMaterialModal && editingMatIdx !== null && (
