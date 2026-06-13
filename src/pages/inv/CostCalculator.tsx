@@ -289,6 +289,10 @@ export default function CostCalculator() {
   const inputCls =
     "w-full bg-white border border-slate-200 focus:ring-1 focus:ring-sky-500 rounded-lg text-sm py-1.5 px-2";
 
+  // Cell styles for the print-only report.
+  const pCell = "border border-slate-400 px-2 py-1 text-right";
+  const pHead = "border border-slate-400 px-2 py-1 font-bold bg-slate-100 text-right";
+
   const rawForSearch = materialsList.filter((m) => m.category !== "منتج نهائي");
   const pkgForSearch = materialsList.filter(
     (m) => (m.category || "").includes("تغليف") || (m.category || "").includes("تعبئة"),
@@ -449,7 +453,7 @@ export default function CostCalculator() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm print:hidden">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate("/inv")} className="text-slate-400 hover:text-slate-600 bg-slate-50 p-2 rounded-lg">
             <ArrowRight className="w-5 h-5" />
@@ -477,7 +481,7 @@ export default function CostCalculator() {
         </div>
       </div>
 
-      <form onSubmit={(e) => handleSubmit(e, "approved")} className="bg-white border border-slate-200 rounded-2xl shadow-sm">
+      <form onSubmit={(e) => handleSubmit(e, "approved")} className="bg-white border border-slate-200 rounded-2xl shadow-sm print:hidden">
         <div className="p-8">
           {/* Batch info */}
           <h2 className="text-lg font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">أولاً: معلومات الدفعة والعبوة</h2>
@@ -711,7 +715,7 @@ export default function CostCalculator() {
       </form>
 
       {/* Saved costings */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden print:hidden">
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-sky-600" />
@@ -758,6 +762,163 @@ export default function CostCalculator() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── Print-only Arabic report (A4, RTL) ─────────────────────────────── */}
+      <div className="hidden print:block text-black text-[12px]" dir="rtl">
+        <div className="flex items-end justify-between border-b-2 border-slate-800 pb-2 mb-3">
+          <div>
+            <h1 className="text-lg font-bold m-0">الشركة الحديثة للتجميل</h1>
+            <p className="m-0 text-[13px] font-semibold">تقرير حساب تكلفة منتج</p>
+          </div>
+          <div className="text-left text-[12px]">
+            <div><span className="font-bold">رقم الحساب:</span> {formData.costNo}</div>
+            <div><span className="font-bold">التاريخ:</span> {formData.date || "—"}</div>
+          </div>
+        </div>
+
+        {/* Batch info */}
+        <table className="w-full border-collapse mb-3">
+          <tbody>
+            <tr>
+              <td className={pHead} style={{ width: "18%" }}>المنتج</td>
+              <td className={pCell}>{formData.productName || "—"}</td>
+              <td className={pHead} style={{ width: "18%" }}>رقم التركيبة</td>
+              <td className={pCell}>{formData.formulaNo || "—"}</td>
+            </tr>
+            <tr>
+              <td className={pHead}>رقم الدفعة</td>
+              <td className={pCell}>{formData.batchNo || "—"}</td>
+              <td className={pHead}>حجم الدفعة</td>
+              <td className={pCell}>{formData.batchTotal || 0} {formData.batchTotalUnit}</td>
+            </tr>
+            <tr>
+              <td className={pHead}>وزن العبوة</td>
+              <td className={pCell}>{formData.unitWeight || 0} {formData.unitWeightUnit}</td>
+              <td className={pHead}>نسبة الهدر</td>
+              <td className={pCell}>{num(formData.wastePct)}%</td>
+            </tr>
+            <tr>
+              <td className={pHead}>عدد العبوات</td>
+              <td className={pCell}>{Math.round(totalUnits) || 0}</td>
+              <td className={pHead}>الوحدات الصافية</td>
+              <td className={pCell}>{Math.round(netUnits) || 0}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Raw materials */}
+        <h2 className="text-[13px] font-bold mb-1">المواد الخام</h2>
+        <table className="w-full border-collapse mb-3">
+          <thead>
+            <tr>
+              <th className={pHead}>المكوّن</th>
+              <th className={pHead}>المورد</th>
+              <th className={pHead} style={{ width: "12%" }}>النسبة %</th>
+              <th className={pHead} style={{ width: "16%" }}>الكمية المستخدمة</th>
+              <th className={pHead} style={{ width: "14%" }}>سعر الوحدة</th>
+              <th className={pHead} style={{ width: "16%" }}>التكلفة (ر.س)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {formData.rawMaterials.map((r, i) => (
+              <tr key={i}>
+                <td className={pCell}>{r.name || r.code || "—"}</td>
+                <td className={pCell}>{r.supplier || "—"}</td>
+                <td className={pCell}>{num(r.percentage)}%</td>
+                <td className={pCell}>{money(rawUsedQty(r))} {formData.batchTotalUnit}</td>
+                <td className={pCell}>{money(rowUnitPrice(r))}</td>
+                <td className={pCell}>{money(rawCost(r))}</td>
+              </tr>
+            ))}
+            <tr>
+              <td className={pHead} colSpan={5}>إجمالي المواد الخام</td>
+              <td className={pHead}>{money(totalRaw)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Packaging */}
+        <h2 className="text-[13px] font-bold mb-1">مواد التعبئة والتغليف</h2>
+        {formData.customerProvidesPackaging ? (
+          <p className="mb-3 border border-slate-400 px-2 py-1">مواد التغليف من توريد العميل — لا تُحتسب تكلفتها.</p>
+        ) : (
+          <table className="w-full border-collapse mb-3">
+            <thead>
+              <tr>
+                <th className={pHead}>المكوّن</th>
+                <th className={pHead}>المورد</th>
+                <th className={pHead} style={{ width: "16%" }}>الكمية المستخدمة</th>
+                <th className={pHead} style={{ width: "14%" }}>سعر الوحدة</th>
+                <th className={pHead} style={{ width: "16%" }}>التكلفة (ر.س)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {formData.packaging.length === 0 ? (
+                <tr><td className={pCell} colSpan={5}>—</td></tr>
+              ) : (
+                formData.packaging.map((r, i) => (
+                  <tr key={i}>
+                    <td className={pCell}>{r.name || r.code || "—"}</td>
+                    <td className={pCell}>{r.supplier || "—"}</td>
+                    <td className={pCell}>{num(r.usedQty)}</td>
+                    <td className={pCell}>{money(rowUnitPrice(r))}</td>
+                    <td className={pCell}>{money(pkgCost(r))}</td>
+                  </tr>
+                ))
+              )}
+              <tr>
+                <td className={pHead} colSpan={4}>إجمالي التعبئة والتغليف</td>
+                <td className={pHead}>{money(totalPkg)}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+
+        {/* Indirect costs */}
+        <h2 className="text-[13px] font-bold mb-1">العمالة والتكاليف غير المباشرة</h2>
+        <table className="w-full border-collapse mb-3">
+          <tbody>
+            {formData.indirect.filter((x) => x.label || x.amount).map((row, i) => (
+              <tr key={i}>
+                <td className={pCell}>{row.label || "—"}</td>
+                <td className={pCell} style={{ width: "20%" }}>{money(num(row.amount))}</td>
+              </tr>
+            ))}
+            <tr>
+              <td className={pHead}>إجمالي التكاليف غير المباشرة</td>
+              <td className={pHead}>{money(totalIndirect)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {/* Summary + pricing side by side */}
+        <div className="flex gap-3 mb-4">
+          <table className="border-collapse" style={{ width: "50%" }}>
+            <tbody>
+              <tr><td className={pHead} colSpan={2}>ملخص التكاليف</td></tr>
+              <tr><td className={pCell}>إجمالي تكلفة الدفعة</td><td className={pCell}>{money(totalBatchCost)}</td></tr>
+              <tr><td className={pCell}>عدد الوحدات الصافية</td><td className={pCell}>{Math.round(netUnits) || 0}</td></tr>
+              <tr><td className={pHead}>تكلفة الوحدة الواحدة</td><td className={pHead}>{money(unitCost)} ر.س</td></tr>
+            </tbody>
+          </table>
+          <table className="border-collapse" style={{ width: "50%" }}>
+            <tbody>
+              <tr><td className={pHead} colSpan={2}>التسعير المقترح</td></tr>
+              <tr><td className={pCell}>تكلفة تشغيلية ({num(formData.operatingPct)}%)</td><td className={pCell}>{money(operatingValue)}</td></tr>
+              <tr><td className={pCell}>التكلفة الكلية للوحدة</td><td className={pCell}>{money(totalUnitCost)}</td></tr>
+              <tr><td className={pCell}>هامش الربح</td><td className={pCell}>{num(formData.profitPct)}%</td></tr>
+              <tr><td className={pHead}>سعر البيع المقترح</td><td className={pHead}>{money(suggestedPrice)} ر.س</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Signatures */}
+        <div className="flex justify-between mt-8 text-[12px]">
+          <div>أعدّه: {formData.preparedBy || "____________"}</div>
+          <div>راجعه: ____________</div>
+          <div>اعتمده: ____________</div>
         </div>
       </div>
 
