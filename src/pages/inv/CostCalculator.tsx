@@ -22,8 +22,9 @@ type CostRow = {
   name: string;
   supplier: string;
   lastPrice: string; // آخر سعر شراء (للكمية المشتراة)
-  purchasedQty: string; // الكمية المشتراة
-  usedQty: string; // الكمية المستخدمة في الدفعة
+  purchasedQty: string; // الكمية المشتراة (وحدة السعر)
+  percentage: string; // النسبة في التركيبة (للمواد الخام)
+  usedQty: string; // الكمية المستخدمة (للتغليف — تُدخل يدوياً)
   unit: string;
 };
 
@@ -35,6 +36,7 @@ const emptyRow = (): CostRow => ({
   supplier: "",
   lastPrice: "",
   purchasedQty: "1",
+  percentage: "",
   usedQty: "",
   unit: "",
 });
@@ -50,7 +52,6 @@ const normalizeDigits = (v: string) => {
     else if (code >= 0x06f0 && code <= 0x06f9) out += String(code - 0x06f0); // ۰-۹
     else out += ch;
   }
-  // allow digits, decimal point, leading minus only
   return out.replace(/[^\d.-]/g, "");
 };
 
@@ -60,11 +61,10 @@ const num = (v: any) => {
 };
 const money = (n: number) => (isFinite(n) ? n : 0).toFixed(2);
 
-// Convert a weight value to grams for "pieces per kilo" calculation.
+// Convert a weight/volume value to grams (density ≈ 1) for unit-count math.
 const toGrams = (v: number, unit: string) => {
-  if (unit === "كجم") return v * 1000;
-  if (unit === "لتر") return v * 1000; // approximate (density ≈ 1)
-  return v; // جم / مل
+  if (unit === "كجم" || unit === "لتر") return v * 1000;
+  return v; // جم / مل / قطعة
 };
 
 export default function CostCalculator() {
@@ -75,7 +75,6 @@ export default function CostCalculator() {
   const [formulas, setFormulas] = useState<any[]>([]);
   const [previous, setPrevious] = useState<any[]>([]);
 
-  // Search modal state: which table + row is being edited.
   const [search, setSearch] = useState<{ table: "raw" | "pkg"; idx: number } | null>(null);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
 
@@ -86,7 +85,12 @@ export default function CostCalculator() {
     productName: "",
     batchNo: "",
     date: new Date().toISOString().slice(0, 10),
-    expectedUnits: "",
+    // وزن العبوة الواحدة (يُربط تلقائياً من المنتج النهائي، قابل للتعديل)
+    unitWeight: "",
+    unitWeightUnit: "جم",
+    // حجم/وزن الدفعة الإجمالي
+    batchTotal: "1",
+    batchTotalUnit: "كجم",
     wastePct: "",
     rawMaterials: [] as CostRow[],
     packaging: [] as CostRow[],
@@ -98,8 +102,6 @@ export default function CostCalculator() {
       { label: "ماء", amount: "" },
       { label: "إهلاك ومصاريف أخرى", amount: "" },
     ] as IndirectRow[],
-    unitWeight: "",
-    unitWeightUnit: "جم",
     operatingPct: "15",
     profitPct: "40",
     notes: "",
@@ -128,7 +130,6 @@ export default function CostCalculator() {
     loadFormulasAndPrevious();
   }, [loadFormulasAndPrevious]);
 
-  // Load an existing costing for editing (or via ?edit=)
   const loadCosting = React.useCallback((recordId: string) => {
     fetch(`/api/forms/record/${recordId}`, { headers: getAuthHeaders() })
       .then((r) => r.json())
@@ -148,17 +149,20 @@ export default function CostCalculator() {
   }, [loadCosting]);
 
   // Build a cost row from a material record (auto-fills price + supplier).
-  const rowFromMaterial = (m: any, usedQty = ""): CostRow => ({
+  const rowFromMaterial = (m: any, base: Partial<CostRow> = {}): CostRow => ({
+    ...emptyRow(),
     code: m.code || "",
     name: m.name || "",
     supplier: m.supplier_name || "",
     lastPrice: m.purchase_price ? String(m.purchase_price) : "",
     purchasedQty: m.package_size ? String(m.package_size) : "1",
-    usedQty,
     unit: m.unit || "",
+    ...base,
   });
 
-  // When a formula (BOM) is selected: pull its materials into the raw table.
+  // Look up a final product (has package_size = unit weight) by code.
+
+  // When a formula (BOM) is selected: load materials + auto-link the unit weight.
   const applyFormula = (recordId: string) => {
     fetch(`/api/forms/record/${recordId}`, { headers: getAuthHeaders() })
       .then((r) => r.json())
@@ -167,22 +171,24 @@ export default function CostCalculator() {
         if (!d) return;
         const rows: CostRow[] = (d.materials || []).map((mat: any) => {
           const found = materialsList.find((x) => x.code === mat.materialCode);
-          if (found) return rowFromMaterial(found, mat.percentage || "");
+          if (found) return rowFromMaterial(found, { percentage: mat.percentage || "" });
           return {
+            ...emptyRow(),
             code: mat.materialCode || "",
             name: mat.materialName || "",
-            supplier: "",
-            lastPrice: "",
-            purchasedQty: "1",
-            usedQty: mat.percentage || "",
+            percentage: mat.percentage || "",
             unit: mat.unit || "",
           };
         });
+        // Auto-link the unit weight from the linked final product's package size.
+        const prod = materialsList.find((m) => m.code === d.productCode);
         setFormData((prev) => ({
           ...prev,
           formulaNo: d.compositionNo || recordId,
           productCode: d.productCode || "",
-          productName: d.productName || "",
+          productName: d.productName || (prod ? prod.name : ""),
+          unitWeight: prod?.package_size ? String(prod.package_size) : prev.unitWeight,
+          unitWeightUnit: prod?.package_size_unit || prev.unitWeightUnit,
           rawMaterials: rows,
         }));
       })
@@ -207,38 +213,42 @@ export default function CostCalculator() {
     const table = search.table === "raw" ? "rawMaterials" : "packaging";
     setFormData((prev) => {
       const rows = [...prev[table]];
-      const keepUsed = rows[search.idx]?.usedQty || "";
-      rows[search.idx] = rowFromMaterial(m, keepUsed);
+      const old = rows[search.idx] || emptyRow();
+      rows[search.idx] = rowFromMaterial(m, { percentage: old.percentage, usedQty: old.usedQty });
       return { ...prev, [table]: rows };
     });
     setSearch(null);
   };
 
   // ── Calculations ─────────────────────────────────────────────────────────
+  const batchTotal = num(formData.batchTotal);
   const rowUnitPrice = (r: CostRow) => {
     const pq = num(r.purchasedQty);
     return pq > 0 ? num(r.lastPrice) / pq : 0;
   };
-  const rowCost = (r: CostRow) => rowUnitPrice(r) * num(r.usedQty);
+  // Raw material quantity in the batch = percentage % × total batch size.
+  const rawUsedQty = (r: CostRow) => (num(r.percentage) / 100) * batchTotal;
+  const rawCost = (r: CostRow) => rowUnitPrice(r) * rawUsedQty(r);
+  // Packaging quantity is entered directly (e.g. number of bottles).
+  const pkgCost = (r: CostRow) => rowUnitPrice(r) * num(r.usedQty);
 
-  const totalRaw = formData.rawMaterials.reduce((s, r) => s + rowCost(r), 0);
-  // Packaging is optional — when the customer supplies their own, its cost is excluded.
+  const totalRaw = formData.rawMaterials.reduce((s, r) => s + rawCost(r), 0);
   const totalPkg = formData.customerProvidesPackaging
     ? 0
-    : formData.packaging.reduce((s, r) => s + rowCost(r), 0);
+    : formData.packaging.reduce((s, r) => s + pkgCost(r), 0);
   const totalIndirect = formData.indirect.reduce((s, i) => s + num(i.amount), 0);
   const totalBatchCost = totalRaw + totalPkg + totalIndirect;
 
-  const expectedUnits = num(formData.expectedUnits);
-  const netUnits = expectedUnits * (1 - num(formData.wastePct) / 100);
+  const unitWeightG = toGrams(num(formData.unitWeight), formData.unitWeightUnit);
+  const batchTotalG = toGrams(batchTotal, formData.batchTotalUnit);
+  const totalUnits = unitWeightG > 0 ? batchTotalG / unitWeightG : 0;
+  const netUnits = totalUnits * (1 - num(formData.wastePct) / 100);
   const unitCost = netUnits > 0 ? totalBatchCost / netUnits : 0;
 
   const operatingValue = unitCost * (num(formData.operatingPct) / 100);
   const totalUnitCost = unitCost + operatingValue;
   const suggestedPrice = totalUnitCost * (1 + num(formData.profitPct) / 100);
   const unitProfit = suggestedPrice - totalUnitCost;
-
-  const unitWeightG = toGrams(num(formData.unitWeight), formData.unitWeightUnit);
   const piecesPerKilo = unitWeightG > 0 ? 1000 / unitWeightG : 0;
 
   // ── Save ─────────────────────────────────────────────────────────────────
@@ -252,10 +262,9 @@ export default function CostCalculator() {
       status,
       data: {
         ...formData,
-        // store computed snapshot for listing/printing without recompute
         _summary: {
           totalRaw, totalPkg, totalIndirect, totalBatchCost,
-          netUnits, unitCost, totalUnitCost, suggestedPrice, unitProfit,
+          totalUnits, netUnits, unitCost, totalUnitCost, suggestedPrice, unitProfit,
         },
       },
     };
@@ -285,132 +294,150 @@ export default function CostCalculator() {
     (m) => (m.category || "").includes("تغليف") || (m.category || "").includes("تعبئة"),
   );
 
+  // ── Material table (raw uses % → qty, packaging uses entered qty) ───────────
   const renderMaterialTable = (
-    table: "rawMaterials" | "packaging",
-    rows: CostRow[],
+    mode: "raw" | "pkg",
     title: string,
     color: string,
     total: number,
     icon: React.ReactNode,
-  ) => (
-    <div className="mb-8">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
-        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">{icon}{title}</h2>
-        <button
-          type="button"
-          onClick={() => addRow(table)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 ${color} font-bold rounded-lg text-sm transition-colors`}
-        >
-          <PlusCircle className="w-4 h-4" />
-          إضافة صف
-        </button>
-      </div>
-      <div className="border border-slate-200 rounded-xl overflow-x-auto">
-        <table className="w-full text-right min-w-[820px]">
-          <thead className="bg-slate-50 text-slate-600 text-[13px] border-b border-slate-200">
-            <tr>
-              <th className="p-2 font-semibold w-[24%]">المكوّن</th>
-              <th className="p-2 font-semibold">المورد</th>
-              <th className="p-2 font-semibold w-24">آخر سعر شراء</th>
-              <th className="p-2 font-semibold w-24">الكمية المشتراة</th>
-              <th className="p-2 font-semibold w-24">سعر الوحدة</th>
-              <th className="p-2 font-semibold w-24">الكمية المستخدمة</th>
-              <th className="p-2 font-semibold w-24">التكلفة</th>
-              <th className="p-2 font-semibold w-10 text-center">حذف</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {rows.length === 0 ? (
+  ) => {
+    const table = mode === "raw" ? "rawMaterials" : "packaging";
+    const rows = formData[table];
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-4">
+          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">{icon}{title}</h2>
+          <button
+            type="button"
+            onClick={() => addRow(table)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 ${color} font-bold rounded-lg text-sm transition-colors`}
+          >
+            <PlusCircle className="w-4 h-4" />
+            إضافة صف
+          </button>
+        </div>
+        <div className="border border-slate-200 rounded-xl overflow-x-auto">
+          <table className="w-full text-right min-w-[900px]">
+            <thead className="bg-slate-50 text-slate-600 text-[13px] border-b border-slate-200">
               <tr>
-                <td colSpan={8} className="p-6 text-center text-slate-400 text-sm">
-                  {table === "rawMaterials"
-                    ? "اختر تركيبة أعلاه أو أضف المواد يدوياً"
-                    : "أضف مواد التعبئة والتغليف (عبوة، غطاء، ملصق...)"}
-                </td>
+                <th className="p-2 font-semibold w-[22%]">المكوّن</th>
+                <th className="p-2 font-semibold">المورد</th>
+                <th className="p-2 font-semibold w-24">آخر سعر شراء</th>
+                <th className="p-2 font-semibold w-24">الكمية المشتراة</th>
+                <th className="p-2 font-semibold w-24">سعر الوحدة</th>
+                {mode === "raw" ? (
+                  <th className="p-2 font-semibold w-20">النسبة %</th>
+                ) : null}
+                <th className="p-2 font-semibold w-28">الكمية المستخدمة</th>
+                <th className="p-2 font-semibold w-24">التكلفة</th>
+                <th className="p-2 font-semibold w-10 text-center">حذف</th>
               </tr>
-            ) : (
-              rows.map((r, i) => (
-                <tr key={i} className="hover:bg-slate-50 align-top">
-                  <td className="p-2 border-l border-slate-100">
-                    <div className="flex gap-1">
-                      <input
-                        type="text"
-                        placeholder="الكود…"
-                        value={r.code}
-                        onChange={(e) => {
-                          const code = e.target.value;
-                          const found = materialsList.find((m) => m.code === code);
-                          if (found) {
-                            setFormData((prev) => {
-                              const arr = [...prev[table]];
-                              arr[i] = rowFromMaterial(found, arr[i].usedQty);
-                              return { ...prev, [table]: arr };
-                            });
-                          } else {
-                            updateRow(table, i, "code", code);
-                          }
-                        }}
-                        className={inputCls}
-                      />
-                      <button
-                        type="button"
-                        title="بحث عن مادة"
-                        onClick={() => setSearch({ table: table === "rawMaterials" ? "raw" : "pkg", idx: i })}
-                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
-                      >
-                        F3
-                      </button>
-                    </div>
-                    {r.name && <p className="text-[11px] text-emerald-600 mt-1 font-semibold">{r.name}</p>}
-                  </td>
-                  <td className="p-2 border-l border-slate-100">
-                    <input
-                      type="text"
-                      value={r.supplier}
-                      onChange={(e) => updateRow(table, i, "supplier", e.target.value)}
-                      placeholder="المورد"
-                      className={inputCls}
-                    />
-                  </td>
-                  <td className="p-2 border-l border-slate-100">
-                    <input type="text" inputMode="decimal" value={r.lastPrice}
-                      onChange={(e) => updateRow(table, i, "lastPrice", normalizeDigits(e.target.value))} className={inputCls} placeholder="0.00" />
-                  </td>
-                  <td className="p-2 border-l border-slate-100">
-                    <input type="text" inputMode="decimal" value={r.purchasedQty}
-                      onChange={(e) => updateRow(table, i, "purchasedQty", normalizeDigits(e.target.value))} className={inputCls} placeholder="1" />
-                  </td>
-                  <td className="p-2 border-l border-slate-100 text-sm text-slate-600 font-mono">
-                    {money(rowUnitPrice(r))}
-                  </td>
-                  <td className="p-2 border-l border-slate-100">
-                    <input type="text" inputMode="decimal" value={r.usedQty}
-                      onChange={(e) => updateRow(table, i, "usedQty", normalizeDigits(e.target.value))} className={inputCls} placeholder="0.00" />
-                  </td>
-                  <td className="p-2 border-l border-slate-100 text-sm font-bold text-slate-700 font-mono">
-                    {money(rowCost(r))}
-                  </td>
-                  <td className="p-2 text-center">
-                    <button type="button" onClick={() => removeRow(table, i)}
-                      className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 inline-block">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={mode === "raw" ? 9 : 8} className="p-6 text-center text-slate-400 text-sm">
+                    {mode === "raw"
+                      ? "اختر تركيبة أعلاه أو أضف المواد يدوياً"
+                      : "أضف مواد التعبئة والتغليف (عبوة، غطاء، ملصق...)"}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-          <tfoot className="bg-slate-50 border-t border-slate-200">
-            <tr>
-              <td colSpan={6} className="p-3 text-left font-bold text-slate-700">الإجمالي:</td>
-              <td className="p-3 font-bold text-slate-900 font-mono">ر.س {money(total)}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+              ) : (
+                rows.map((r, i) => (
+                  <tr key={i} className="hover:bg-slate-50 align-top">
+                    <td className="p-2 border-l border-slate-100">
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          placeholder="الكود…"
+                          value={r.code}
+                          onChange={(e) => {
+                            const code = e.target.value;
+                            const found = materialsList.find((m) => m.code === code);
+                            if (found) {
+                              setFormData((prev) => {
+                                const arr = [...prev[table]];
+                                arr[i] = rowFromMaterial(found, { percentage: arr[i].percentage, usedQty: arr[i].usedQty });
+                                return { ...prev, [table]: arr };
+                              });
+                            } else {
+                              updateRow(table, i, "code", code);
+                            }
+                          }}
+                          className={inputCls}
+                        />
+                        <button
+                          type="button"
+                          title="بحث عن مادة"
+                          onClick={() => setSearch({ table: mode, idx: i })}
+                          className="px-2 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold text-slate-500 flex-shrink-0"
+                        >
+                          F3
+                        </button>
+                      </div>
+                      {r.name && <p className="text-[11px] text-emerald-600 mt-1 font-semibold">{r.name}</p>}
+                    </td>
+                    <td className="p-2 border-l border-slate-100">
+                      <input type="text" value={r.supplier} onChange={(e) => updateRow(table, i, "supplier", e.target.value)} placeholder="المورد" className={inputCls} />
+                    </td>
+                    <td className="p-2 border-l border-slate-100">
+                      <input type="text" inputMode="decimal" value={r.lastPrice}
+                        onChange={(e) => updateRow(table, i, "lastPrice", normalizeDigits(e.target.value))} className={inputCls} placeholder="0.00" />
+                    </td>
+                    <td className="p-2 border-l border-slate-100">
+                      <input type="text" inputMode="decimal" value={r.purchasedQty}
+                        onChange={(e) => updateRow(table, i, "purchasedQty", normalizeDigits(e.target.value))} className={inputCls} placeholder="1" />
+                    </td>
+                    <td className="p-2 border-l border-slate-100 text-sm text-slate-600 font-mono">
+                      {money(rowUnitPrice(r))}
+                    </td>
+                    {mode === "raw" ? (
+                      <td className="p-2 border-l border-slate-100">
+                        <input type="text" inputMode="decimal" value={r.percentage}
+                          onChange={(e) => updateRow(table, i, "percentage", normalizeDigits(e.target.value))} className={inputCls} placeholder="0" />
+                      </td>
+                    ) : null}
+                    <td className="p-2 border-l border-slate-100">
+                      {mode === "raw" ? (
+                        <span className="text-sm text-slate-700 font-mono">
+                          {money(rawUsedQty(r))} <span className="text-[11px] text-slate-400">{formData.batchTotalUnit}</span>
+                        </span>
+                      ) : (
+                        <input type="text" inputMode="decimal" value={r.usedQty}
+                          onChange={(e) => updateRow(table, i, "usedQty", normalizeDigits(e.target.value))} className={inputCls} placeholder={String(Math.round(totalUnits) || "")} />
+                      )}
+                    </td>
+                    <td className="p-2 border-l border-slate-100 text-sm font-bold text-slate-700 font-mono">
+                      {money(mode === "raw" ? rawCost(r) : pkgCost(r))}
+                    </td>
+                    <td className="p-2 text-center">
+                      <button type="button" onClick={() => removeRow(table, i)}
+                        className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 inline-block">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot className="bg-slate-50 border-t border-slate-200">
+              <tr>
+                <td colSpan={mode === "raw" ? 7 : 6} className="p-3 text-left font-bold text-slate-700">الإجمالي:</td>
+                <td className="p-3 font-bold text-slate-900 font-mono">ر.س {money(total)}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {mode === "raw" && (
+          <p className="text-[12px] text-slate-500 mt-2">
+            الكمية المستخدمة = النسبة% × حجم الدفعة ({formData.batchTotal || 0} {formData.batchTotalUnit}). تأكد أن «آخر سعر شراء» و«الكمية المشتراة» بنفس وحدة حجم الدفعة.
+          </p>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const SummaryRow = ({ label, value, strong, accent }: { label: string; value: string; strong?: boolean; accent?: string }) => (
     <div className={`flex items-center justify-between py-2 px-4 ${strong ? "bg-slate-50 font-bold" : ""}`}>
@@ -453,8 +480,8 @@ export default function CostCalculator() {
       <form onSubmit={(e) => handleSubmit(e, "approved")} className="bg-white border border-slate-200 rounded-2xl shadow-sm">
         <div className="p-8">
           {/* Batch info */}
-          <h2 className="text-lg font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">أولاً: معلومات الدفعة</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+          <h2 className="text-lg font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">أولاً: معلومات الدفعة والعبوة</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-4">
             <div className="md:col-span-2">
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">التركيبة (BOM)</label>
               <div className="flex gap-2">
@@ -462,7 +489,7 @@ export default function CostCalculator() {
                   type="text"
                   readOnly
                   value={formData.formulaNo ? `${formData.formulaNo} — ${formData.productName}` : ""}
-                  placeholder="اختر تركيبة لجلب موادها تلقائياً…"
+                  placeholder="اختر تركيبة لجلب موادها ووزن عبوتها تلقائياً…"
                   className="flex-1 bg-slate-50 border-slate-300 rounded-lg text-sm py-2 px-3 text-slate-700"
                 />
                 <button type="button" onClick={() => setShowFormulaModal(true)}
@@ -477,6 +504,48 @@ export default function CostCalculator() {
                 onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
                 className="w-full border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="اسم المنتج" />
             </div>
+
+            {/* وزن العبوة — مربوط تلقائياً من المنتج، قابل للتعديل */}
+            <div>
+              <label className="block text-[13px] font-semibold text-slate-600 mb-1">
+                وزن/حجم العبوة الواحدة
+                <span className="text-emerald-600 font-normal mr-1">(تلقائي من المنتج)</span>
+              </label>
+              <div className="flex gap-2">
+                <input type="text" inputMode="decimal" value={formData.unitWeight}
+                  onChange={(e) => setFormData({ ...formData, unitWeight: normalizeDigits(e.target.value) })}
+                  className="flex-1 border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="50" />
+                <select value={formData.unitWeightUnit} onChange={(e) => setFormData({ ...formData, unitWeightUnit: e.target.value })}
+                  className="w-24 border-slate-300 rounded-lg text-sm py-2">
+                  <option value="جم">جم</option>
+                  <option value="كجم">كجم</option>
+                  <option value="مل">مل</option>
+                  <option value="لتر">لتر</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[13px] font-semibold text-slate-600 mb-1">حجم/وزن الدفعة الإجمالي</label>
+              <div className="flex gap-2">
+                <input type="text" inputMode="decimal" value={formData.batchTotal}
+                  onChange={(e) => setFormData({ ...formData, batchTotal: normalizeDigits(e.target.value) })}
+                  className="flex-1 border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="1" />
+                <select value={formData.batchTotalUnit} onChange={(e) => setFormData({ ...formData, batchTotalUnit: e.target.value })}
+                  className="w-24 border-slate-300 rounded-lg text-sm py-2">
+                  <option value="كجم">كجم</option>
+                  <option value="جم">جم</option>
+                  <option value="لتر">لتر</option>
+                  <option value="مل">مل</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[13px] font-semibold text-slate-600 mb-1">نسبة الهدر %</label>
+              <input type="text" inputMode="decimal" value={formData.wastePct}
+                onChange={(e) => setFormData({ ...formData, wastePct: normalizeDigits(e.target.value) })}
+                className="w-full border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="5" />
+            </div>
+
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">رقم الدفعة / التاريخ</label>
               <div className="flex gap-2">
@@ -486,26 +555,21 @@ export default function CostCalculator() {
                   className="w-1/2 border-slate-300 rounded-lg text-sm py-2 px-2" />
               </div>
             </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-slate-600 mb-1">عدد الوحدات المتوقعة</label>
-              <input type="text" inputMode="decimal" value={formData.expectedUnits}
-                onChange={(e) => setFormData({ ...formData, expectedUnits: normalizeDigits(e.target.value) })}
-                className="w-full border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="1000" />
-            </div>
-            <div>
-              <label className="block text-[13px] font-semibold text-slate-600 mb-1">نسبة الهدر %</label>
-              <input type="text" inputMode="decimal" value={formData.wastePct}
-                onChange={(e) => setFormData({ ...formData, wastePct: normalizeDigits(e.target.value) })}
-                className="w-full border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="5" />
+            <div className="bg-sky-50 border border-sky-100 rounded-lg px-3 py-2 flex flex-col justify-center">
+              <span className="text-[12px] font-semibold text-sky-700">عدد العبوات (الدفعة ÷ العبوة)</span>
+              <span className="text-xl font-bold text-sky-800 font-mono">{Math.round(totalUnits) || 0}</span>
             </div>
             <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 flex flex-col justify-center">
-              <span className="text-[12px] font-semibold text-emerald-700">عدد الوحدات الصافية (للبيع)</span>
+              <span className="text-[12px] font-semibold text-emerald-700">الوحدات الصافية (بعد الهدر)</span>
               <span className="text-xl font-bold text-emerald-800 font-mono">{Math.round(netUnits) || 0}</span>
             </div>
           </div>
+          <p className="text-[12px] text-slate-500 mb-8">
+            عدد العبوات يُحسب تلقائياً = حجم الدفعة ÷ وزن العبوة. {piecesPerKilo ? `(كل كيلو ≈ ${piecesPerKilo.toFixed(1)} عبوة)` : ""}
+          </p>
 
           {/* Raw materials */}
-          {renderMaterialTable("rawMaterials", formData.rawMaterials, "ثانياً: المواد الخام",
+          {renderMaterialTable("raw", "ثانياً: المواد الخام",
             "bg-emerald-50 text-emerald-600 hover:bg-emerald-100", totalRaw, <Beaker className="w-5 h-5 text-emerald-600" />)}
 
           {/* Packaging (optional) */}
@@ -524,7 +588,7 @@ export default function CostCalculator() {
               مواد التغليف من توريد العميل — لن تُضاف أي تكلفة تغليف إلى تكلفة الدفعة.
             </div>
           ) : (
-            renderMaterialTable("packaging", formData.packaging, "ثالثاً: مواد التعبئة والتغليف",
+            renderMaterialTable("pkg", "ثالثاً: مواد التعبئة والتغليف",
               "bg-amber-50 text-amber-600 hover:bg-amber-100", totalPkg, <Package className="w-5 h-5 text-amber-600" />)
           )}
 
@@ -580,9 +644,8 @@ export default function CostCalculator() {
             </div>
           </div>
 
-          {/* Summary + pricing + weight */}
+          {/* Summary + pricing */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Cost summary */}
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="bg-slate-100 px-4 py-2 font-bold text-slate-800 text-sm">خامساً: ملخص التكاليف</div>
               <div className="divide-y divide-slate-100">
@@ -595,7 +658,6 @@ export default function CostCalculator() {
               </div>
             </div>
 
-            {/* Pricing */}
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <div className="bg-slate-100 px-4 py-2 font-bold text-slate-800 text-sm">سادساً: التسعير المقترح</div>
               <div className="divide-y divide-slate-100">
@@ -617,35 +679,6 @@ export default function CostCalculator() {
                 <SummaryRow label="سعر البيع المقترح للوحدة" value={`ر.س ${money(suggestedPrice)}`} strong accent="text-sky-700" />
                 <SummaryRow label="ربح الوحدة الواحدة" value={`ر.س ${money(unitProfit)}`} accent="text-emerald-700" />
               </div>
-            </div>
-          </div>
-
-          {/* Weight */}
-          <div className="mt-6 border border-slate-200 rounded-xl overflow-hidden">
-            <div className="bg-slate-100 px-4 py-2 font-bold text-slate-800 text-sm">سابعاً: معلومات الوزن</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 p-4 items-end">
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-600 mb-1">وزن/حجم الوحدة الواحدة</label>
-                <div className="flex gap-2">
-                  <input type="text" inputMode="decimal" value={formData.unitWeight}
-                    onChange={(e) => setFormData({ ...formData, unitWeight: normalizeDigits(e.target.value) })}
-                    className="flex-1 border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="50" />
-                  <select value={formData.unitWeightUnit} onChange={(e) => setFormData({ ...formData, unitWeightUnit: e.target.value })}
-                    className="w-24 border-slate-300 rounded-lg text-sm py-2">
-                    <option value="جم">جم</option>
-                    <option value="كجم">كجم</option>
-                    <option value="مل">مل</option>
-                    <option value="لتر">لتر</option>
-                  </select>
-                </div>
-              </div>
-              <div className="bg-sky-50 border border-sky-100 rounded-lg px-3 py-2">
-                <span className="text-[12px] font-semibold text-sky-700">عدد الحبات في الكيلو الواحد</span>
-                <div className="text-xl font-bold text-sky-800 font-mono">{piecesPerKilo ? piecesPerKilo.toFixed(1) : "—"}</div>
-              </div>
-              <p className="text-[12px] text-slate-500">
-                لو غيّرت وزن الوحدة يتغيّر تلقائياً عدد الحبات في الكيلو (مثال: 50 جم → 20 حبة بالكيلو).
-              </p>
             </div>
           </div>
         </div>
