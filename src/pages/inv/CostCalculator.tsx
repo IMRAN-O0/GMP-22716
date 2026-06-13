@@ -39,8 +39,23 @@ const emptyRow = (): CostRow => ({
   unit: "",
 });
 
+// Normalize Arabic-Indic (٠-٩) and Persian (۰-۹) digits to Latin so number
+// fields accept typing from an Arabic keyboard, and keep only valid numeric chars.
+const normalizeDigits = (v: string) => {
+  if (!v) return v;
+  let out = "";
+  for (const ch of v) {
+    const code = ch.charCodeAt(0);
+    if (code >= 0x0660 && code <= 0x0669) out += String(code - 0x0660); // ٠-٩
+    else if (code >= 0x06f0 && code <= 0x06f9) out += String(code - 0x06f0); // ۰-۹
+    else out += ch;
+  }
+  // allow digits, decimal point, leading minus only
+  return out.replace(/[^\d.-]/g, "");
+};
+
 const num = (v: any) => {
-  const n = parseFloat(v);
+  const n = parseFloat(normalizeDigits(String(v ?? "")));
   return isFinite(n) ? n : 0;
 };
 const money = (n: number) => (isFinite(n) ? n : 0).toFixed(2);
@@ -75,6 +90,7 @@ export default function CostCalculator() {
     wastePct: "",
     rawMaterials: [] as CostRow[],
     packaging: [] as CostRow[],
+    customerProvidesPackaging: false,
     indirect: [
       { label: "أجور العمالة", amount: "" },
       { label: "إيجار", amount: "" },
@@ -206,7 +222,10 @@ export default function CostCalculator() {
   const rowCost = (r: CostRow) => rowUnitPrice(r) * num(r.usedQty);
 
   const totalRaw = formData.rawMaterials.reduce((s, r) => s + rowCost(r), 0);
-  const totalPkg = formData.packaging.reduce((s, r) => s + rowCost(r), 0);
+  // Packaging is optional — when the customer supplies their own, its cost is excluded.
+  const totalPkg = formData.customerProvidesPackaging
+    ? 0
+    : formData.packaging.reduce((s, r) => s + rowCost(r), 0);
   const totalIndirect = formData.indirect.reduce((s, i) => s + num(i.amount), 0);
   const totalBatchCost = totalRaw + totalPkg + totalIndirect;
 
@@ -354,19 +373,19 @@ export default function CostCalculator() {
                     />
                   </td>
                   <td className="p-2 border-l border-slate-100">
-                    <input type="number" min="0" step="0.01" value={r.lastPrice}
-                      onChange={(e) => updateRow(table, i, "lastPrice", e.target.value)} className={inputCls} placeholder="0.00" />
+                    <input type="text" inputMode="decimal" value={r.lastPrice}
+                      onChange={(e) => updateRow(table, i, "lastPrice", normalizeDigits(e.target.value))} className={inputCls} placeholder="0.00" />
                   </td>
                   <td className="p-2 border-l border-slate-100">
-                    <input type="number" min="0" step="0.001" value={r.purchasedQty}
-                      onChange={(e) => updateRow(table, i, "purchasedQty", e.target.value)} className={inputCls} placeholder="1" />
+                    <input type="text" inputMode="decimal" value={r.purchasedQty}
+                      onChange={(e) => updateRow(table, i, "purchasedQty", normalizeDigits(e.target.value))} className={inputCls} placeholder="1" />
                   </td>
                   <td className="p-2 border-l border-slate-100 text-sm text-slate-600 font-mono">
                     {money(rowUnitPrice(r))}
                   </td>
                   <td className="p-2 border-l border-slate-100">
-                    <input type="number" min="0" step="0.001" value={r.usedQty}
-                      onChange={(e) => updateRow(table, i, "usedQty", e.target.value)} className={inputCls} placeholder="0.00" />
+                    <input type="text" inputMode="decimal" value={r.usedQty}
+                      onChange={(e) => updateRow(table, i, "usedQty", normalizeDigits(e.target.value))} className={inputCls} placeholder="0.00" />
                   </td>
                   <td className="p-2 border-l border-slate-100 text-sm font-bold text-slate-700 font-mono">
                     {money(rowCost(r))}
@@ -469,14 +488,14 @@ export default function CostCalculator() {
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">عدد الوحدات المتوقعة</label>
-              <input type="number" min="0" value={formData.expectedUnits}
-                onChange={(e) => setFormData({ ...formData, expectedUnits: e.target.value })}
+              <input type="text" inputMode="decimal" value={formData.expectedUnits}
+                onChange={(e) => setFormData({ ...formData, expectedUnits: normalizeDigits(e.target.value) })}
                 className="w-full border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="1000" />
             </div>
             <div>
               <label className="block text-[13px] font-semibold text-slate-600 mb-1">نسبة الهدر %</label>
-              <input type="number" min="0" max="100" step="0.1" value={formData.wastePct}
-                onChange={(e) => setFormData({ ...formData, wastePct: e.target.value })}
+              <input type="text" inputMode="decimal" value={formData.wastePct}
+                onChange={(e) => setFormData({ ...formData, wastePct: normalizeDigits(e.target.value) })}
                 className="w-full border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="5" />
             </div>
             <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 flex flex-col justify-center">
@@ -489,9 +508,25 @@ export default function CostCalculator() {
           {renderMaterialTable("rawMaterials", formData.rawMaterials, "ثانياً: المواد الخام",
             "bg-emerald-50 text-emerald-600 hover:bg-emerald-100", totalRaw, <Beaker className="w-5 h-5 text-emerald-600" />)}
 
-          {/* Packaging */}
-          {renderMaterialTable("packaging", formData.packaging, "ثالثاً: مواد التعبئة والتغليف",
-            "bg-amber-50 text-amber-600 hover:bg-amber-100", totalPkg, <Package className="w-5 h-5 text-amber-600" />)}
+          {/* Packaging (optional) */}
+          <label className="flex items-center gap-2 mb-3 cursor-pointer select-none w-fit">
+            <input
+              type="checkbox"
+              checked={formData.customerProvidesPackaging}
+              onChange={(e) => setFormData({ ...formData, customerProvidesPackaging: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+            />
+            <span className="text-sm font-semibold text-slate-700">العميل يوفّر مواد التغليف (لا تُحتسب تكلفتها)</span>
+          </label>
+          {formData.customerProvidesPackaging ? (
+            <div className="mb-8 border border-dashed border-amber-300 bg-amber-50/50 rounded-xl p-5 flex items-center gap-2 text-amber-700 text-sm font-semibold">
+              <Package className="w-5 h-5" />
+              مواد التغليف من توريد العميل — لن تُضاف أي تكلفة تغليف إلى تكلفة الدفعة.
+            </div>
+          ) : (
+            renderMaterialTable("packaging", formData.packaging, "ثالثاً: مواد التعبئة والتغليف",
+              "bg-amber-50 text-amber-600 hover:bg-amber-100", totalPkg, <Package className="w-5 h-5 text-amber-600" />)
+          )}
 
           {/* Indirect costs */}
           <div className="mb-8">
@@ -521,8 +556,8 @@ export default function CostCalculator() {
                           className={inputCls} placeholder="اسم البند" />
                       </td>
                       <td className="p-2 border-l border-slate-100">
-                        <input type="number" min="0" step="0.01" value={row.amount}
-                          onChange={(e) => setFormData((p) => { const a = [...p.indirect]; a[i] = { ...a[i], amount: e.target.value }; return { ...p, indirect: a }; })}
+                        <input type="text" inputMode="decimal" value={row.amount}
+                          onChange={(e) => setFormData((p) => { const a = [...p.indirect]; a[i] = { ...a[i], amount: normalizeDigits(e.target.value) }; return { ...p, indirect: a }; })}
                           className={inputCls} placeholder="0.00" />
                       </td>
                       <td className="p-2 text-center">
@@ -567,16 +602,16 @@ export default function CostCalculator() {
                 <SummaryRow label="تكلفة الوحدة" value={`ر.س ${money(unitCost)}`} />
                 <div className="flex items-center justify-between py-1.5 px-4">
                   <span className="text-sm text-slate-600">% التكاليف التشغيلية (تسويق/إداري/توزيع)</span>
-                  <input type="number" min="0" step="0.1" value={formData.operatingPct}
-                    onChange={(e) => setFormData({ ...formData, operatingPct: e.target.value })}
+                  <input type="text" inputMode="decimal" value={formData.operatingPct}
+                    onChange={(e) => setFormData({ ...formData, operatingPct: normalizeDigits(e.target.value) })}
                     className="w-20 border border-slate-200 rounded-lg text-sm py-1 px-2 text-center" />
                 </div>
                 <SummaryRow label="قيمة التكاليف التشغيلية" value={`ر.س ${money(operatingValue)}`} />
                 <SummaryRow label="التكلفة الكلية للوحدة" value={`ر.س ${money(totalUnitCost)}`} strong />
                 <div className="flex items-center justify-between py-1.5 px-4">
                   <span className="text-sm text-slate-600">% هامش الربح</span>
-                  <input type="number" min="0" step="0.1" value={formData.profitPct}
-                    onChange={(e) => setFormData({ ...formData, profitPct: e.target.value })}
+                  <input type="text" inputMode="decimal" value={formData.profitPct}
+                    onChange={(e) => setFormData({ ...formData, profitPct: normalizeDigits(e.target.value) })}
                     className="w-20 border border-slate-200 rounded-lg text-sm py-1 px-2 text-center" />
                 </div>
                 <SummaryRow label="سعر البيع المقترح للوحدة" value={`ر.س ${money(suggestedPrice)}`} strong accent="text-sky-700" />
@@ -592,8 +627,8 @@ export default function CostCalculator() {
               <div>
                 <label className="block text-[13px] font-semibold text-slate-600 mb-1">وزن/حجم الوحدة الواحدة</label>
                 <div className="flex gap-2">
-                  <input type="number" min="0" step="0.01" value={formData.unitWeight}
-                    onChange={(e) => setFormData({ ...formData, unitWeight: e.target.value })}
+                  <input type="text" inputMode="decimal" value={formData.unitWeight}
+                    onChange={(e) => setFormData({ ...formData, unitWeight: normalizeDigits(e.target.value) })}
                     className="flex-1 border-slate-300 rounded-lg text-sm py-2 px-3" placeholder="50" />
                   <select value={formData.unitWeightUnit} onChange={(e) => setFormData({ ...formData, unitWeightUnit: e.target.value })}
                     className="w-24 border-slate-300 rounded-lg text-sm py-2">
